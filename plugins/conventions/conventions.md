@@ -37,7 +37,7 @@ not here.
   tests rather than paper over them.
 - **Adversarial review before committing.** When a plan/spec is finalized or a
   PR/diff is ready, run independent skeptical review — find what's wrong, not
-  rubber-stamp. (See the `review` plugin's `adversarial-review` skill.)
+  rubber-stamp. (See the `dev` plugin's `adversarial-review` skill.)
 - **Never push or commit to `main` without explicit approval.** Gate irreversible or
   outward-facing actions — pushes, merges, branch/tag/worktree deletion — on an
   explicit go-ahead. Treat terse or ambiguous confirmations as needing clarification,
