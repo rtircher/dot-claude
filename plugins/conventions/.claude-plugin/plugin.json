@@ -1,0 +1,8 @@
+{
+  "name": "conventions",
+  "description": "Always-on personal working-style conventions injected at session start.",
+  "author": {
+    "name": "Renaud Tircher",
+    "email": "327881+rtircher@users.noreply.github.com"
+  }
+}

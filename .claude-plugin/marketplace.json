@@ -1,0 +1,22 @@
+{
+  "name": "dot-claude",
+  "owner": {
+    "name": "Renaud Tircher",
+    "email": "327881+rtircher@users.noreply.github.com"
+  },
+  "metadata": {
+    "description": "Renaud's personal Claude Code conventions and workflow skills."
+  },
+  "plugins": [
+    {
+      "name": "conventions",
+      "source": "./plugins/conventions",
+      "description": "Always-on working-style conventions (TDD, git hygiene, review gates) injected at session start."
+    },
+    {
+      "name": "dev",
+      "source": "./plugins/dev",
+      "description": "Personal software-development skills: adversarial-review and the autonomous-feature pipeline."
+    }
+  ]
+}
