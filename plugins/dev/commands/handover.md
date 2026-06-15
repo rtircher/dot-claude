@@ -4,14 +4,16 @@ allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git b
 ---
 
 Write a handover that lets a fresh session resume this work with no other context.
-Pairs with `/dev:takeover`. State is **scoped per repository**, so handovers from
-different repos never overwrite each other, and a previous handover is archived
-rather than lost.
+Pairs with `/dev:takeover`. State is **scoped per repository** — keyed by the *main*
+repo, so all worktrees of a project share one handover, and handovers from different
+repos never overwrite each other. A previous handover is archived rather than lost.
 
 ## 1. Identify the repo and gather state
 
-- Repo key: run `git rev-parse --show-toplevel`; the handover key is its basename
-  (use `default` if you are not in a git repo). Note the full root path too.
+- Repo key: the basename of the **main** repo, so every worktree of a project shares
+  one handover. Derive it from the shared git dir, not the current worktree:
+  `` basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")" ``.
+  Use `default` if you are not in a git repo. Note that main root path too.
 - Ground the handover in fact with read-only commands you need — `git status`,
   `git branch --show-current`, `git diff --stat`, `git log --oneline -5`,
   `git worktree list`. Do not guess; if you didn't observe it, leave it out.
@@ -50,5 +52,6 @@ Concrete actions to resume, in order.
 What's unresolved or waiting on input.
 ```
 
-Record the repo root and branch verbatim — `/dev:takeover` checks them before it
-resumes or switches branches. After writing, report the path and a one-line summary.
+Record the **main repo root** (the same one used for the key) and branch verbatim —
+`/dev:takeover` checks them before it resumes or switches branches. After writing,
+report the path and a one-line summary.

@@ -9,7 +9,8 @@ anything, so it works any time, as many times as you like.
 
 ## 1. Find this repo's handover
 
-- Repo key: basename of `git rev-parse --show-toplevel` (`default` if not in a repo).
+- Repo key: basename of the **main** repo, shared across worktrees:
+  `` basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")" `` (`default` if not in a repo).
 - Prefer `~/.claude/state/handover/<repo-key>.md`. If absent, fall back to the newest
   `~/.claude/state/handover-archive/<repo-key>-*.md` (timestamped names sort
   lexically, so the last one is newest).
@@ -19,9 +20,10 @@ anything, so it works any time, as many times as you like.
 
 `Read` the chosen file, then guard against stale / cross-repo state:
 
-- **Repo match:** confirm the `Repo:` line matches the current
-  `git rev-parse --show-toplevel`. If it doesn't, warn, summarise what you found,
-  and do NOT switch branches — ask the user how to proceed.
+- **Repo match:** confirm the `Repo:` line matches the current main repo root
+  (`` dirname "$(git rev-parse --path-format=absolute --git-common-dir)" ``). If it
+  doesn't, warn, summarise what you found, and do NOT switch branches — ask the user
+  how to proceed.
 - **Staleness:** note the handover's timestamp and branch; if the branch is already
   merged or gone, flag that rather than blindly resuming.
 
