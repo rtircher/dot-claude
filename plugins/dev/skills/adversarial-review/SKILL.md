@@ -65,7 +65,11 @@ concurrently with fresh, independent context. Each reviewer gets:
 - Its assigned lens, and only that lens.
 - The adversarial framing (below).
 - A request to return structured findings:
-  `{ objection, severity (blocker | major | minor), location, suggested_fix }`.
+  `{ objection, severity (blocker | major | minor), confidence (verified | speculative), location, suggested_fix }`.
+  **verified** = the reviewer opened the artifact / traced the code and confirmed
+  the problem; **speculative** = inferred from a smell or a partial read, not
+  confirmed. Reviewers must label every finding — a confident-sounding hunch that
+  was never checked is the panel's main failure mode.
 
 **Adversarial framing to give each reviewer (paraphrase into the prompt):**
 
@@ -86,16 +90,18 @@ Once reviewers return:
 
 1. **Dedup** objections that overlap across lenses into one entry (note which
    lenses raised it — agreement across lenses is signal).
-2. **Rank** by severity (blocker → major → minor).
+2. **Rank** by severity (blocker → major → minor), and within a severity put
+   **verified before speculative** — a confirmed major outranks an unchecked hunch.
 3. Produce **one prioritized list**: each entry = objection · severity ·
-   location · suggested fix · which lens(es) raised it.
+   confidence · location · suggested fix · which lens(es) raised it.
 4. Report **each lens's ship / don't-ship verdict** alongside the list.
 
 ## Output
 
 Present to the user:
 
-- The deduped, severity-ranked objection list.
+- The deduped, severity-ranked objection list, leading with verified findings;
+  group speculative ones after so the user can skim them separately.
 - The per-lens verdicts.
 
 Then stop. Do not edit the artifact, do not block any next step, do not

@@ -16,7 +16,7 @@
     {
       "name": "dev",
       "source": "./plugins/dev",
-      "description": "Personal software-development skills: adversarial-review and the autonomous-feature pipeline."
+      "description": "Personal software-development tooling: adversarial-review + autonomous-feature skills, handover/takeover commands, and coder/researcher subagents."
     }
   ]
 }
