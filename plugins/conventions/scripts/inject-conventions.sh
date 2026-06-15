@@ -11,4 +11,11 @@
 # run from a cache location, so relative paths would not resolve.
 set -euo pipefail
 
-cat "${CLAUDE_PLUGIN_ROOT}/conventions.md"
+conventions="${CLAUDE_PLUGIN_ROOT}/conventions.md"
+if [ -f "$conventions" ]; then
+  cat "$conventions"
+else
+  # Don't hard-fail SessionStart if the plugin cache is incomplete — warn on
+  # stderr (not injected) and exit clean so the session still starts.
+  echo "WARN: conventions.md not found at ${conventions}; conventions not injected." >&2
+fi
