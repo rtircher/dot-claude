@@ -6,11 +6,26 @@ source of truth — edit here, and every project that enables the plugin picks i
 up on its next session. Project-specific facts belong in that repo's `AGENTS.md`,
 not here.
 
+## Load project context files
+
+At the start of work in any repository, before making changes or answering
+non-trivial questions about the code:
+
+- If an `AGENTS.md` exists at the repo root, **read it first.** It holds project
+  conventions (package boundaries, command quirks, supply-chain rules, do/don't
+  lists) that are not otherwise auto-loaded into context.
+- When working inside a specific package or subdirectory, also read the nearest
+  `AGENTS.md` in that subtree if one exists — it refines the root conventions for
+  that area.
+- Treat these `AGENTS.md` files as authoritative project instructions, at the
+  same priority you would give a `CLAUDE.md`.
+
 ## Model selection
 
 - Refer to models by **unversioned alias** — `opus`, `sonnet`, `haiku` — never a
-  version-pinned id. The alias always resolves to the latest release of that tier,
-  so nothing needs editing when a new version ships.
+  version-pinned id (including when naming a model in config or docs). The alias
+  always resolves to the latest release of that tier, so nothing needs editing
+  when a new version ships.
 - **Pick the model per task.** Assess each subagent task's difficulty before
   dispatch rather than defaulting one tier across a whole plan. Subtle reasoning
   (feasibility, security, cross-cutting review) warrants a stronger tier than
@@ -33,8 +48,8 @@ not here.
 ## Working preferences
 
 - **TDD-first.** Write a failing test before the implementation, make it pass, then
-  verify the full suite is green before committing. Instrument and debug brittle
-  tests rather than paper over them.
+  verify the full suite is green before committing. Default for features and
+  bugfixes; instrument and debug brittle tests rather than paper over them.
 - **Adversarial review before committing.** When a plan/spec is finalized or a
   PR/diff is ready, run independent skeptical review — find what's wrong, not
   rubber-stamp. (See the `dev` plugin's `adversarial-review` skill.)
@@ -48,6 +63,11 @@ not here.
   reverts into their target. Never cite commit short-hashes in docs or PR bodies
   (rebases churn them). Before deleting branches/worktrees, verify merge status
   (including squash-merges); never remove the worktree the session runs inside.
+- **Autonomous pipeline for low-risk features.** For a feature you flag as
+  low-risk, the `dev` plugin's `/autonomous-feature` skill runs spec →
+  adversarial-review → plan → adversarial-review → implement → adversarial-review
+  of the code hands-off, pinging only on its contract. Explicitly invoked only —
+  never auto-launch it.
 - **Multi-task plans get a final cross-implementation review** — one symmetry pass
   over the full branch diff after per-task work, to catch type asymmetry between
   paired classes, parallel-structure drift, and cross-package coupling.
@@ -61,5 +81,7 @@ not here.
 - **Evidence before theories when diagnosing.** For environment / hardware / network
   issues, gather concrete evidence first (logs, exit codes, env diffs), then rank
   hypotheses by likelihood with the single cheapest disproving test for each.
+  Distinguish code-vs-environment and hardware-vs-network early rather than
+  cycling through plausible-sounding guesses.
 - **Meaningful PR branch names** — rename to a descriptive `feat/…` / `fix/…` before
   pushing; never push an auto-generated `claude/<slug>` session branch.

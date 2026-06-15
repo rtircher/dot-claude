@@ -87,10 +87,18 @@ landed. A finding is only closed when a fresh review no longer raises it.
 
 Track the phases with TodoWrite so progress is visible. Run them in order.
 
+This pipeline **composes other skills** for the spec, plan, execution, and
+verification steps. The references below name the `superpowers` plugin's skills
+(the common case). In an environment where `superpowers` is not enabled, use that
+environment's equivalent brainstorming / planning / subagent-execution /
+verification skills instead — resolve by capability, not by the exact
+`superpowers:` name. If no equivalent exists for a step (e.g. no verification
+skill), fall back to the inline behavior described for that phase.
+
 ### Phase 1 — Spec
 
-Use the `superpowers:brainstorming` skill to turn the feature request into a spec
-/ design doc. Capture intent, requirements, and the shape of the design. Don't
+Use your brainstorming skill (`superpowers:brainstorming`, or your environment's
+equivalent) to turn the feature request into a spec / design doc. Capture intent, requirements, and the shape of the design. Don't
 over-interview — this skill exists to move with minimal input; fill reasonable
 gaps with stated assumptions and only ping on design-changing ambiguity.
 
@@ -108,8 +116,8 @@ review's ping threshold lower than later phases.
 
 ### Phase 3 — Implementation plan
 
-Use the `superpowers:writing-plans` skill to turn the clean spec into a
-step-by-step implementation plan.
+Use your writing-plans skill (`superpowers:writing-plans`, or your environment's
+equivalent) to turn the clean spec into a step-by-step implementation plan.
 
 **Boundary:** checkpoint with the plan summary. (pause mode: wait for approval.)
 
@@ -122,14 +130,17 @@ Address findings to the confidence gate.
 
 ### Phase 5 — Implement
 
-Execute the clean plan. Prefer the `superpowers:subagent-driven-development`
-skill for plans with independent tasks; use `superpowers:executing-plans` or
-inline implementation when that fits better — use judgment, and say which you
-chose and why. Follow the project's own conventions (TDD, verification) as those
-skills direct.
+Execute the clean plan. Prefer your subagent-driven-development skill
+(`superpowers:subagent-driven-development`, or your environment's equivalent) for
+plans with independent tasks; use an executing-plans skill or inline
+implementation when that fits better — use judgment, and say which you chose and
+why. Follow the project's own conventions (TDD, verification) as those skills
+direct.
 
-When implementation is complete, verify before claiming done
-(`superpowers:verification-before-completion`).
+When implementation is complete, verify before claiming done — use your
+verification-before-completion skill (`superpowers:verification-before-completion`)
+if your environment has one; otherwise run the project's full verification
+commands and confirm the output before asserting success.
 
 **Boundary:** checkpoint that implementation is complete and verification passes.
 (pause mode: wait for approval.)
