@@ -56,5 +56,19 @@ claude plugin validate ./plugins/conventions  # plugin.json + hook syntax
 claude plugin validate ./plugins/dev          # plugin.json + skill frontmatter
 ```
 
-`conventions.md` and skill `SKILL.md` edits take effect immediately; changes to
-`hooks/` need `/reload-plugins` or a restart.
+## Updating an installed copy
+
+An *installed* plugin is pinned to a marketplace commit (see `claude plugin list`),
+so new commits are **not** picked up automatically — not even from a local
+`directory` source. To pull the latest into an installed copy:
+
+```sh
+claude plugin marketplace update dot-claude     # re-read the marketplace from its source
+claude plugin update conventions@dot-claude     # bump each plugin (the <plugin> arg is required)
+claude plugin update dev@dot-claude
+# then restart Claude Code to apply
+```
+
+`hooks/` changes likewise only take effect after the restart (or `/reload-plugins`).
+Cloud sessions and the GitHub-source consumer pull from `main` on GitHub, so a change
+must be merged + pushed there before `claude plugin update` can fetch it.
