@@ -96,8 +96,13 @@ message drafted on Renaud's behalf. Code comments follow these too, refined by t
   question back. Say the thing.
 - **Diplomatic and collaborative**, especially when raising a concern or
   disagreeing: name the problem, propose the fix, skip the lecture.
-- **No em dashes.** Use a comma, colon, parentheses, or a full stop instead. (This
-  file follows its own rule.)
+- **No em dashes** (or en dashes). Use a comma, colon, parentheses, or a full stop
+  instead. (This file follows its own rule.) A `Stop` hook enforces this. For the
+  rare case where a dash is genuinely warranted, such as quoting text verbatim or
+  writing about dashes themselves, keep it and add a visible override marker rating
+  how strongly it is warranted: `{emdash-ok N/5: brief reason}`, N from 1 (weak) to
+  5 (essential). Use it sparingly; the rating is visible so a weak justification is
+  obvious to the reader.
 - **Exclamation marks only when the tone is genuinely celebratory.** Default to a
   period.
 - **Don't open a message with "I"** as the first word.
