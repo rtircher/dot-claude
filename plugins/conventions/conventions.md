@@ -85,3 +85,26 @@ non-trivial questions about the code:
   cycling through plausible-sounding guesses.
 - **Meaningful PR branch names** — rename to a descriptive `feat/…` / `fix/…` before
   pushing; never push an auto-generated `claude/<slug>` session branch.
+
+## Code comments
+
+Comments describe the **final production state**, not the process that produced it.
+If a comment wouldn't still be true to a fresh contributor reading the file with no
+git history, drop it. Apply this when reviewing your own writes before committing.
+
+- **No process narration.** Don't reference a monkeypatch, a test, "extracted from
+  X", "we used to do Y", or "TODO refactor later" — that's git's job, not the
+  code's.
+- **Prefer self-documenting code.** A clear name beats a comment explaining a vague
+  one; rename rather than annotate.
+- **Reserve comments for non-obvious context** — a tricky invariant, a deliberate
+  departure from convention, or a rationale the code itself can't express. Each line
+  must carry a *why* the code can't.
+- **Terse and direct.** Clarity > brevity, but the comment itself stays concise —
+  sacrifice grammar for clarity where it helps. Skip anything a good name or the
+  code already makes obvious.
+- **No bloat** — no scope-section banners, no PR/branch/host references, no empirical
+  evidence ("tested on H100", "verified against prod") baked into comments.
+- **Doc comments** (dartdoc, docstrings, JSDoc, …) follow the language's idiomatic
+  style, kept minimal and focused on args/returns/raises. Per-project rules (e.g.
+  "all public API members need a doc comment") live in that repo's `AGENTS.md`.
