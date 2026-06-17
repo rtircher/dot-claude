@@ -10,8 +10,42 @@
         ]
       }
     ],
-    "Stop": [
+    "PreToolUse": [
       {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/block-emdash.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/block-emdash.py",
+            "if": "Bash(git commit*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/block-emdash.py",
+            "if": "Bash(gt create*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/block-emdash.py",
+            "if": "Bash(gt modify*)",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*(send|message|post|reply|chat|mail).*",
         "hooks": [
           {
             "type": "command",

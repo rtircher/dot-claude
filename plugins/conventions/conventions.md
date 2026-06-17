@@ -97,12 +97,12 @@ message drafted on Renaud's behalf. Code comments follow these too, refined by t
 - **Diplomatic and collaborative**, especially when raising a concern or
   disagreeing: name the problem, propose the fix, skip the lecture.
 - **No em dashes** (or en dashes). Use a comma, colon, parentheses, or a full stop
-  instead. (This file follows its own rule.) A `Stop` hook enforces this. For the
-  rare case where a dash is genuinely warranted, such as quoting text verbatim or
-  writing about dashes themselves, keep it and add a visible override marker rating
-  how strongly it is warranted: `{emdash-ok N/5: brief reason}`, N from 1 (weak) to
-  5 (essential). Use it sparingly; the rating is visible so a weak justification is
-  obvious to the reader.
+  instead. (This file follows its own rule.) A `PreToolUse` hook enforces this only
+  on text written as the user, the content of a Write/Edit, a commit message, a sent
+  message, denying the call before the dash lands so it gets rewritten. Conversation
+  with Claude is not checked, only deliverables. There is no inline override marker
+  (it would pollute the file or message). For a file that genuinely needs a dash,
+  such as one quoting verbatim, add its path to the `ALLOWLIST` in `block-emdash.py`.
 - **Exclamation marks only when the tone is genuinely celebratory.** Default to a
   period.
 - **Don't open a message with "I"** as the first word.
