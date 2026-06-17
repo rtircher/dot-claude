@@ -12,7 +12,7 @@ holds only what generalizes.
 | Plugin        | What it does                                                                                  |
 | ------------- | -------------------------------------------------------------------------------------------- |
 | `conventions` | Always-on working-style rules (TDD, git hygiene, review gates, no-heredoc, model selection), injected into every session via a `SessionStart` hook. Edit [`conventions.md`](plugins/conventions/conventions.md). |
-| `dev`         | On-demand software-development tooling: the `adversarial-review` and `autonomous-feature` **skills**, the `/dev:babysit`, `/dev:pr-pruner`, and `/dev:post-merge-sweeper` PR-loop **commands** plus the `/dev:handover` + `/dev:takeover` session-continuity ones, and the `coder` (worktree-isolated) + `researcher` (read-only) **agents** for parallel subagent work. |
+| `dev`         | On-demand software-development tooling: the `adversarial-review` and `autonomous-feature` **skills**, the `/dev:babysit`, `/dev:pr-pruner`, and `/dev:post-merge-sweeper` PR-loop **commands** plus the `/dev:handover` + `/dev:takeover` session-continuity ones and the `/dev:init-cloud-parity` **cloud-parity scaffold**, and the `coder` (worktree-isolated) + `researcher` (read-only) **agents** for parallel subagent work. |
 
 ## Enable it
 
@@ -34,6 +34,25 @@ Register the marketplace and turn on the plugins in a `settings.json` —
 
 Cloud sessions fetch this from GitHub, which is on the default Trusted network
 allowlist — no setup script or auth needed while this repo stays public.
+
+## Cloud-parity scaffold
+
+The `dev` plugin carries the canonical **cloud-session-parity seed** (under
+`plugins/dev/scaffold/cloud-parity/`) plus a `/dev:init-cloud-parity` scaffold that
+vendors it into a consumer repo, so cloud (web) sessions behave like local ones:
+apt fixes, a lazy toolchain hook, an in-session plugin rescue, a conventions
+backstop, and a doctor. dot-claude is the scaffold *source*, never a runtime
+dependency: everything on the cold-start path is committed into the consumer's clone.
+
+- Run `/dev:init-cloud-parity` **locally** in a consumer repo to vendor or refresh
+  the seed. It merges `.claude/settings.json` conservatively (owns only
+  `extraKnownMarketplaces` plus a touch-if-absent SessionStart hook) and writes a
+  starter recipe file.
+- `init-cloud-parity.sh --check` is the network-free drift gate: it flags a vendored
+  copy that differs from the canonical seed and warns when `enabledPlugins` names a
+  plugin with no clone recipe.
+- `bash plugins/dev/scaffold/tests/run-tests.sh` is the manual test gate for changes
+  to the seed or scaffold (bash -n, shellcheck, and the fake-harness suites).
 
 ## Versioning
 
