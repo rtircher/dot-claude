@@ -1,0 +1,13 @@
+# cloud-parity clone recipes: one recipe per line, '#' starts a comment.
+# These drive the in-session plugin rescue (ensure-plugins.sh) and the doctor.
+#
+#   marketplace-add <owner/repo>   clone a marketplace; its plugins are enabled
+#                                  via this repo's .claude/settings.json
+#                                  enabledPlugins (no install, no global enable).
+#   install <plugin@marketplace>   update the marketplace index, then install an
+#                                  EXTERNAL plugin (a second-hop clone that
+#                                  'marketplace add' alone will not fetch).
+#
+# A repo that needs no cloud plugins ships no recipe file at all.
+marketplace-add rtircher/dot-claude
+install superpowers@claude-plugins-official
