@@ -1,6 +1,6 @@
 {
   "name": "dev",
-  "description": "Personal software-development tooling: adversarial-review + autonomous-feature skills, handover/takeover session-continuity commands, and coder/researcher subagents.",
+  "description": "Personal software-development tooling: adversarial-review + autonomous-feature skills, handover/takeover session-continuity commands, and coder/researcher/tester subagents.",
   "author": {
     "name": "Renaud Tircher",
     "email": "327881+rtircher@users.noreply.github.com"
