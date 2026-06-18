@@ -12,7 +12,7 @@ holds only what generalizes.
 | Plugin        | What it does                                                                                  |
 | ------------- | -------------------------------------------------------------------------------------------- |
 | `conventions` | Always-on working-style rules (TDD, git hygiene, review gates, no-heredoc, model selection), injected into every session via a `SessionStart` hook. Edit [`conventions.md`](plugins/conventions/conventions.md). |
-| `dev`         | On-demand software-development tooling: the `adversarial-review` and `autonomous-feature` **skills** (the latter hands off between phases through committed `.pipeline/` artifacts, stripped before merge), the `/dev:handover` + `/dev:takeover` session-continuity **commands**, and the `coder` (worktree-isolated), `researcher` (read-only), and `tester` (tests-only) **agents** for parallel subagent work. |
+| `dev`         | On-demand software-development tooling: the `adversarial-review` and `autonomous-feature` **skills** (the latter hands off between phases through committed `.pipeline/` artifacts that graduate a real decision into an ADR and are stripped before merge), the `/dev:handover` + `/dev:takeover` session-continuity **commands**, and the `coder` (worktree-isolated), `researcher` (read-only), and `tester` (tests-only) **agents** for parallel subagent work. |
 
 ## Enable it
 

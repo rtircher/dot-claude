@@ -68,9 +68,12 @@ non-trivial questions about the code:
   adversarial-review → plan → adversarial-review → implement → adversarial-review
   of the code hands-off, pinging only on its contract. Explicitly invoked only;
   never auto-launch it. Each phase hands off through a committed `.pipeline/` file
-  (spec, plan, changes, test-results, review); these are scaffolding, stripped
-  before merge so a squash-merge lands none of them in `main` while their history
-  stays on the branch.
+  (spec, plan, changes, test-results, review). At teardown a real decision is
+  graduated into an ADR and the living current-state doc is curated, then the
+  scaffolding is stripped, so a squash-merge lands none of it in `main` while its
+  history stays on the branch. Targets are per-project (the ADR directory and living
+  doc a repo names in its `AGENTS.md`, else `docs/adr/` and the README); repos with
+  low decision density, like dotfiles, skip ADRs.
 - **Multi-task plans get a final cross-implementation review:** one symmetry pass
   over the full branch diff after per-task work, to catch type asymmetry between
   paired classes, parallel-structure drift, and cross-package coupling.

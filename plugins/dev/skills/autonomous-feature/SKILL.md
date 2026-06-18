@@ -208,25 +208,53 @@ Phase 7 (teardown). (pause mode: wait for approval.)
 
 ### Phase 7: Pipeline teardown
 
-The `.pipeline/` artifacts are build scaffolding, not source. Run this only once
-the Reviewer's verdict is **SHIP**, as the last automated step before hand-back:
+The `.pipeline/` artifacts are build scaffolding, not source, but not all of their
+content is disposable. Run this only once the Reviewer's verdict is **SHIP**, as the
+last automated step before hand-back. Three moves: graduate the durable decision,
+curate the current state, strip the rest.
 
-1. **Promote the durable parts.** Fold a tight spec summary and the Reviewer's
-   final verdict into the PR description (and/or the squash commit message). That
-   is where the "what and why" stays useful and searchable after merge, without
-   bloating the tree.
-2. **Strip the scaffolding.** `git rm -r .pipeline/` and commit the removal. The
-   files keep their per-commit history on the branch (and survived a reclaimed
-   cloud container mid-feature), but because they are added-then-removed within the
-   branch, a squash-merge lands **zero** `.pipeline/` files in `main`: no PR-tree
-   bloat, no plans living in the repo forever. The history is still recoverable
-   from the branch's pre-teardown commits if anyone needs it.
+1. **Graduate the decision (ADR).** If this feature embodied a real decision, record
+   it as a short, immutable ADR: context, the decision, alternatives rejected,
+   consequences. Distill it from `spec.md` and the review verdict; do NOT copy the
+   spec verbatim, the point is a high-signal entry, not retained bloat. Write it
+   where this repo's `AGENTS.md` designates, else `docs/adr/NNNN-<slug>.md`.
 
-Skip the strip only if the user explicitly wants the artifacts retained for this
-feature. Never strip before a SHIP verdict: the artifacts are the review's evidence.
+   Gate it on the decision being worth recording. It is worth an ADR when any of
+   these hold: alternatives were seriously weighed (Phase 2/4 usually surface this);
+   the choice is costly to reverse (schema, public API, data format,
+   dependency/framework, auth/security posture); it sets a convention others will
+   follow; or a constraint was discovered that shaped the design. It is NOT worth one
+   when the change is mechanical, local, reversible, and self-evident from the diff.
 
-**Boundary:** report what was built, where the promoted summary/verdict landed, and
-that the artifacts were stripped. Then hand back. (pause mode: wait for approval.)
+   If the repo has no ADR setup and `AGENTS.md` gives no guidance, do not scaffold one
+   unasked. Self-reflect against the bar above: did this decision clear it, and would
+   a decision log help this repo going forward? If yes, SUGGEST starting one (a ping
+   with the proposed first entry) and let the human opt in. If no, skip silently.
+   Low-decision-density repos (dotfiles, small configs) rarely trip this, which is
+   correct.
+
+2. **Curate the current state.** Update the project's living current-state doc in
+   place so it reflects the new reality: the doc `AGENTS.md` designates, else the
+   README. This is the curated present; the ADR is the append-only history of how it
+   got there. Skip when nothing about the documented current state changed.
+
+3. **Strip the rest.** `git rm -r .pipeline/` and commit the removal. The files keep
+   their per-commit history on the branch (and survived a reclaimed cloud container
+   mid-feature), but because they are added-then-removed within the branch, a
+   squash-merge lands **zero** `.pipeline/` files in `main`: no PR-tree bloat, no
+   plans living in the repo forever. Anything durable was already graduated in steps
+   1 and 2; the raw artifacts stay recoverable from the branch's pre-teardown commits.
+
+The ADR is project-scoped and durable; it is distinct from `/dev:handover`'s "Key
+decisions", which is session-scoped and ephemeral (`~/.claude/state/`). A lasting
+decision belongs in the ADR, not only the handover.
+
+Skip teardown only if the user explicitly wants the raw artifacts retained. Never
+strip before a SHIP verdict: the artifacts are the review's evidence.
+
+**Boundary:** report what was built, whether an ADR was written or suggested, which
+living doc was curated, and that the scaffolding was stripped. Then hand back.
+(pause mode: wait for approval.)
 
 ## Anti-patterns
 
