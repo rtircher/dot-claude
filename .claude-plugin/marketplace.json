@@ -16,7 +16,7 @@
     {
       "name": "dev",
       "source": "./plugins/dev",
-      "description": "Personal software-development tooling: adversarial-review + autonomous-feature skills, handover/takeover commands, and coder/researcher subagents."
+      "description": "Personal software-development tooling: adversarial-review + autonomous-feature skills, babysit/handover/takeover commands, and coder/researcher subagents."
     }
   ]
 }
