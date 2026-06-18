@@ -216,8 +216,8 @@ curate the current state, strip the rest.
 1. **Graduate the decision (ADR).** If this feature embodied a real decision, record
    it as a short, immutable ADR: context, the decision, alternatives rejected,
    consequences. Distill it from `spec.md` and the review verdict; do NOT copy the
-   spec verbatim, the point is a high-signal entry, not retained bloat. Write it
-   where this repo's `AGENTS.md` designates, else `docs/adr/NNNN-<slug>.md`.
+   spec verbatim, the point is a high-signal entry, not retained bloat. Write it to
+   the `adr_dir` this repo's `AGENTS.md` declares, else `docs/adr/NNNN-<slug>.md`.
 
    Gate it on the decision being worth recording. It is worth an ADR when any of
    these hold: alternatives were seriously weighed (Phase 2/4 usually surface this);
@@ -226,17 +226,18 @@ curate the current state, strip the rest.
    follow; or a constraint was discovered that shaped the design. It is NOT worth one
    when the change is mechanical, local, reversible, and self-evident from the diff.
 
-   If the repo has no ADR setup and `AGENTS.md` gives no guidance, do not scaffold one
-   unasked. Self-reflect against the bar above: did this decision clear it, and would
-   a decision log help this repo going forward? If yes, SUGGEST starting one (a ping
-   with the proposed first entry) and let the human opt in. If no, skip silently.
-   Low-decision-density repos (dotfiles, small configs) rarely trip this, which is
-   correct.
+   If `AGENTS.md` sets `adr_dir: none`, the repo has opted out: skip the ADR and do
+   not suggest one. If the repo simply has no ADR setup and no `adr_dir`, do not
+   scaffold one unasked. Self-reflect against the bar above: did this decision clear
+   it, and would a decision log help this repo going forward? If yes, SUGGEST starting
+   one (a ping with the proposed first entry) and let the human opt in. If no, skip
+   silently. Low-decision-density repos (dotfiles, small configs) rarely trip this,
+   which is correct.
 
 2. **Curate the current state.** Update the project's living current-state doc in
-   place so it reflects the new reality: the doc `AGENTS.md` designates, else the
-   README. This is the curated present; the ADR is the append-only history of how it
-   got there. Skip when nothing about the documented current state changed.
+   place so it reflects the new reality: the `living_doc` `AGENTS.md` declares, else
+   the README. This is the curated present; the ADR is the append-only history of how
+   it got there. Skip when nothing about the documented current state changed.
 
 3. **Strip the rest.** `git rm -r .pipeline/` and commit the removal. The files keep
    their per-commit history on the branch (and survived a reclaimed cloud container
