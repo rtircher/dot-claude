@@ -20,6 +20,22 @@ non-trivial questions about the code:
 - Treat these `AGENTS.md` files as authoritative project instructions, at the
   same priority you would give a `CLAUDE.md`.
 
+### Optional `AGENTS.md` keys read by tooling
+
+A repo may declare these as plain `key: value` lines in its `AGENTS.md` (under a
+clear heading) so the `dev` plugin's `autonomous-feature` pipeline targets the right
+places at teardown:
+
+- `adr_dir`: directory for Architecture Decision Records (e.g. `docs/adr/`). Defaults
+  to `docs/adr/`. Set it to `none` to opt the repo out of ADRs entirely, the right
+  call for dotfiles and small configs.
+- `living_doc`: the curated current-state document the pipeline updates in place
+  (e.g. `docs/architecture.md`). Defaults to the repo `README.md`.
+
+Absent these, the defaults apply and a repo with no ADR directory gets a one-time
+suggestion when a genuinely weighty decision lands (see `autonomous-feature`
+Phase 7), instead of silent scaffolding.
+
 ## Model selection
 
 - Refer to models by **unversioned alias** (`opus`, `sonnet`, `haiku`), never a
@@ -67,7 +83,13 @@ non-trivial questions about the code:
   low-risk, the `dev` plugin's `/autonomous-feature` skill runs spec →
   adversarial-review → plan → adversarial-review → implement → adversarial-review
   of the code hands-off, pinging only on its contract. Explicitly invoked only;
-  never auto-launch it.
+  never auto-launch it. Each phase hands off through a committed `.pipeline/` file
+  (spec, plan, changes, test-results, review). At teardown a real decision is
+  graduated into an ADR and the living current-state doc is curated, then the
+  scaffolding is stripped, so a squash-merge lands none of it in `main` while its
+  history stays on the branch. Targets are per-project (the ADR directory and living
+  doc a repo names in its `AGENTS.md`, else `docs/adr/` and the README); repos with
+  low decision density, like dotfiles, skip ADRs.
 - **Multi-task plans get a final cross-implementation review:** one symmetry pass
   over the full branch diff after per-task work, to catch type asymmetry between
   paired classes, parallel-structure drift, and cross-package coupling.

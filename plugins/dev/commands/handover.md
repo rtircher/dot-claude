@@ -17,6 +17,10 @@ repos never overwrite each other. A previous handover is archived rather than lo
 - Ground the handover in fact with read-only commands you need — `git status`,
   `git branch --show-current`, `git diff --stat`, `git log --oneline -5`,
   `git worktree list`. Do not guess; if you didn't observe it, leave it out.
+- Check whether a `.pipeline/` folder exists on the branch (and which artifacts:
+  spec, plan, changes, test-results, review). If it does, an `autonomous-feature`
+  pipeline is mid-flight and already holds the feature's durable state, so the
+  handover points to it instead of restating it (see below).
 
 ## 2. Preserve the previous handover (no data loss)
 
@@ -55,3 +59,10 @@ What's unresolved or waiting on input.
 Record the **main repo root** (the same one used for the key) and branch verbatim —
 `/dev:takeover` checks them before it resumes or switches branches. After writing,
 report the path and a one-line summary.
+
+**When a `.pipeline/` is active**, keep *Task & goal* and *Current state* thin: name
+the feature, the branch, and which phase the pipeline reached, then point at
+`.pipeline/` for the spec/plan/changes/tests/review rather than recopying them. Use
+the handover only for what the files do not hold: uncommitted WIP, the immediate next
+action, open questions, and the local process/tmux context. With no active pipeline,
+write the full summary as usual.

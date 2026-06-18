@@ -83,6 +83,27 @@ converge usually mean a judgment call only the human can make.
 Each fix round must re-run the review on the *revised* artifact, not assume a fix
 landed. A finding is only closed when a fresh review no longer raises it.
 
+## Pipeline artifacts (`.pipeline/`)
+
+Every phase writes its output to a file in a `.pipeline/` folder at the repo root,
+and the next phase reads that file rather than relying only on conversation
+context. These are durable, inspectable handoffs that survive context compaction
+and a reclaimed cloud container:
+
+| Phase | Writes | Reads |
+| ----- | ------ | ----- |
+| Spec | `.pipeline/spec.md` | (the request) |
+| Plan | `.pipeline/plan.md` | `spec.md` |
+| Implement (Coder) | `.pipeline/changes.md` | `spec.md`, `plan.md` |
+| Implement (Tester) | `.pipeline/test-results.md` | `changes.md` |
+| Review | `.pipeline/review.md` | all of the above |
+
+Commit these on the feature branch as the work proceeds: the history is useful
+during development and survives a cloud container being reclaimed mid-feature.
+They are **scaffolding, not source**. Phase 7 strips them before merge so `main`
+never carries them (see there for the mechanism). One folder, a handful of files,
+zero copy-pasting between phases.
+
 ## Pipeline
 
 Track the phases with TodoWrite so progress is visible. Run them in order.
@@ -100,7 +121,9 @@ skill), fall back to the inline behavior described for that phase.
 Use your brainstorming skill (`superpowers:brainstorming`, or your environment's
 equivalent) to turn the feature request into a spec / design doc. Capture intent, requirements, and the shape of the design. Don't
 over-interview — this skill exists to move with minimal input; fill reasonable
-gaps with stated assumptions and only ping on design-changing ambiguity.
+gaps with stated assumptions and only ping on design-changing ambiguity. Write the
+finalized spec to `.pipeline/spec.md` so the later phases (and reviewers) all read
+from one durable artifact.
 
 **Boundary:** checkpoint with the spec summary. (pause mode: wait for approval.)
 
@@ -117,7 +140,8 @@ review's ping threshold lower than later phases.
 ### Phase 3 — Implementation plan
 
 Use your writing-plans skill (`superpowers:writing-plans`, or your environment's
-equivalent) to turn the clean spec into a step-by-step implementation plan.
+equivalent) to turn the clean spec (read from `.pipeline/spec.md`) into a
+step-by-step implementation plan, written to `.pipeline/plan.md`.
 
 **Boundary:** checkpoint with the plan summary. (pause mode: wait for approval.)
 
@@ -137,10 +161,20 @@ implementation when that fits better — use judgment, and say which you chose a
 why. Follow the project's own conventions (TDD, verification) as those skills
 direct.
 
-When implementation is complete, verify before claiming done — use your
+As the Coder finishes, capture a short summary of what changed and why in
+`.pipeline/changes.md` (the next phase reads it, and it feeds the PR description
+later). Keep it to the actual diff: files touched, behavior added, decisions made.
+
+Then dispatch the `tester` agent to prove the work: it writes and runs tests
+(normal, edge, and at least one failure case), records the outcome in
+`.pipeline/test-results.md`, and reports. The tester does NOT fix the code; if it
+finds a failure, loop back into implementation, fix it, and re-run the tester on
+the revised code. A failing or skipped test is not "done."
+
+When tests are green, verify before claiming done with your
 verification-before-completion skill (`superpowers:verification-before-completion`)
-if your environment has one; otherwise run the project's full verification
-commands and confirm the output before asserting success.
+if your environment has one; otherwise run the project's full verification commands
+and confirm the output before asserting success.
 
 **Boundary:** checkpoint that implementation is complete and verification passes.
 (pause mode: wait for approval.)
@@ -164,8 +198,64 @@ unaddressed blocker/major (fixed or deferred-with-rationale), fixes re-verified
 and re-reviewed, 3-round cap before pinging. A security-relevant finding here is a
 ping per the contract, not a silent fix.
 
-**Boundary:** checkpoint with the review outcome, then re-verify, summarize what
-was built, and hand back. (pause mode: wait for approval.)
+Record the synthesized outcome in `.pipeline/review.md`, ending with a single
+overall verdict: **SHIP** (ready to merge), **NEEDS WORK** (exactly what to fix),
+or **BLOCK** (do not merge, and why). The verdict gates Phase 7: only a SHIP
+verdict clears the work to teardown and hand-back.
+
+**Boundary:** checkpoint with the review outcome and the verdict, then proceed to
+Phase 7 (teardown). (pause mode: wait for approval.)
+
+### Phase 7: Pipeline teardown
+
+The `.pipeline/` artifacts are build scaffolding, not source, but not all of their
+content is disposable. Run this only once the Reviewer's verdict is **SHIP**, as the
+last automated step before hand-back. Three moves: graduate the durable decision,
+curate the current state, strip the rest.
+
+1. **Graduate the decision (ADR).** If this feature embodied a real decision, record
+   it as a short, immutable ADR: context, the decision, alternatives rejected,
+   consequences. Distill it from `spec.md` and the review verdict; do NOT copy the
+   spec verbatim, the point is a high-signal entry, not retained bloat. Write it to
+   the `adr_dir` this repo's `AGENTS.md` declares, else `docs/adr/NNNN-<slug>.md`.
+
+   Gate it on the decision being worth recording. It is worth an ADR when any of
+   these hold: alternatives were seriously weighed (Phase 2/4 usually surface this);
+   the choice is costly to reverse (schema, public API, data format,
+   dependency/framework, auth/security posture); it sets a convention others will
+   follow; or a constraint was discovered that shaped the design. It is NOT worth one
+   when the change is mechanical, local, reversible, and self-evident from the diff.
+
+   If `AGENTS.md` sets `adr_dir: none`, the repo has opted out: skip the ADR and do
+   not suggest one. If the repo simply has no ADR setup and no `adr_dir`, do not
+   scaffold one unasked. Self-reflect against the bar above: did this decision clear
+   it, and would a decision log help this repo going forward? If yes, SUGGEST starting
+   one (a ping with the proposed first entry) and let the human opt in. If no, skip
+   silently. Low-decision-density repos (dotfiles, small configs) rarely trip this,
+   which is correct.
+
+2. **Curate the current state.** Update the project's living current-state doc in
+   place so it reflects the new reality: the `living_doc` `AGENTS.md` declares, else
+   the README. This is the curated present; the ADR is the append-only history of how
+   it got there. Skip when nothing about the documented current state changed.
+
+3. **Strip the rest.** `git rm -r .pipeline/` and commit the removal. The files keep
+   their per-commit history on the branch (and survived a reclaimed cloud container
+   mid-feature), but because they are added-then-removed within the branch, a
+   squash-merge lands **zero** `.pipeline/` files in `main`: no PR-tree bloat, no
+   plans living in the repo forever. Anything durable was already graduated in steps
+   1 and 2; the raw artifacts stay recoverable from the branch's pre-teardown commits.
+
+The ADR is project-scoped and durable; it is distinct from `/dev:handover`'s "Key
+decisions", which is session-scoped and ephemeral (`~/.claude/state/`). A lasting
+decision belongs in the ADR, not only the handover.
+
+Skip teardown only if the user explicitly wants the raw artifacts retained. Never
+strip before a SHIP verdict: the artifacts are the review's evidence.
+
+**Boundary:** report what was built, whether an ADR was written or suggested, which
+living doc was curated, and that the scaffolding was stripped. Then hand back.
+(pause mode: wait for approval.)
 
 ## Anti-patterns
 
@@ -184,3 +274,9 @@ was built, and hand back. (pause mode: wait for approval.)
 - **Treating green tests as the code review.** Verification confirms behavior
   matches the plan; it does not surface bad abstractions, security holes, or
   cross-package drift. Phase 6 is not optional just because the build is green.
+- **Skipping the handoff file.** Each phase actually writes its `.pipeline/`
+  artifact; keeping the output only in conversation context defeats the durable
+  handoff and loses it to compaction. Write the file, then read it in the next
+  phase.
+- **The Tester fixing the code.** The tester proves the work and reports failures;
+  patching production code is the implementation phase's job, looped back to.

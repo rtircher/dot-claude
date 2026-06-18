@@ -33,6 +33,10 @@ Open your reply with a short "Resuming from handover:" summary (3-4 lines: what 
 in progress and the immediate next step) and name which file you loaded. Then
 continue the work.
 
+If the handover points to a `.pipeline/` folder, read those artifacts (spec, plan,
+changes, test-results, review) to reconstruct the feature state the handover
+deliberately did not restate, then resume the pipeline from the phase it names.
+
 Only when the repo matches, the named branch exists in this repo, and you are not
 already on it: switch to it using this repo's convention (`git switch <branch>`, or
 `gt co <branch>` where Graphite is in use). If that branch already lives in another
