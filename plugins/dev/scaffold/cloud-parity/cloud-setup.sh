@@ -9,11 +9,14 @@
 #
 # This script is byte-identical across every repo that uses the cloud-parity seed.
 # It does two repo-agnostic things: fix apt so toolchain installs can run, and
-# pre-warm the dot-claude marketplace CLONE (no install, no enable). Everything
-# repo-specific (toolchain, the plugin set, superpowers) is handled in-session by
-# the committed seed (session-start.sh -> ensure-plugins.sh), the only reliable
-# place: a fresh session re-clones the repo, so committed files are always present,
-# whereas this setup phase is best-effort and cached.
+# pre-warm the dot-claude marketplace CLONE (no install, no enable). Userspace
+# repo-specific work (the plugin set, superpowers, a mise toolchain) is handled
+# in-session by the committed seed (session-start.sh -> ensure-plugins.sh), the most
+# reliable place: a fresh session re-clones the repo, so committed files are always
+# present, whereas this setup phase is best-effort and cached. Repo-specific work
+# that needs ROOT at container-build time (apt system packages, a native build
+# toolchain) can't run in those non-root in-session hooks, so it lives in an
+# OPTIONAL committed scripts/cloud-setup-local.sh that this script calls (step 3).
 
 set -euo pipefail
 
@@ -49,6 +52,23 @@ if [ -n "${claude_bin}" ]; then
   ls -1 "${HOME:-}/.claude/plugins/marketplaces" 2>/dev/null | sed 's/^/  marketplace: /' || echo "  (no marketplaces dir)"
 else
   echo "==> 'claude' not on PATH at setup time; skipping pre-warm (the in-session hook will clone)"
+fi
+
+# 3. Repo-specific root setup. Work that needs root at container-build time (apt
+#    system packages, a native build toolchain, frozen installs) CAN'T run in the
+#    non-root in-session hooks, so a repo puts it in an OPTIONAL committed script.
+#    This is the setup-time, root, once-cached counterpart to the in-session
+#    ensure-<tool>.sh convention. The repo is already checked out at $PWD here (the
+#    setup phase runs in the repo root), so a present hook is run by path. A repo
+#    that needs nothing ships none. Not guarded with `|| true`: a real failure in
+#    repo setup (e.g. a missing apt package) should fail loudly, not cache a broken
+#    image; the hook marks its own best-effort steps.
+repo_setup="${PWD}/scripts/cloud-setup-local.sh"
+if [ -f "${repo_setup}" ]; then
+  echo "==> running repo-specific setup: scripts/cloud-setup-local.sh"
+  bash "${repo_setup}"
+else
+  echo "==> no scripts/cloud-setup-local.sh; nothing repo-specific to install"
 fi
 
 echo "==> cloud-parity setup complete"
