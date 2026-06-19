@@ -27,7 +27,19 @@ After running, with the user:
    `enabledPlugins` agree.
 3. If the repo has a toolchain, add `scripts/ensure-<tool>.sh` modeled on
    race_engineer's `scripts/ensure-flutter.sh`, wired as a Makefile prerequisite.
-4. Paste `.claude/cloud-setup.sh` into the cloud environment's Setup script field.
+   That runs in-session as the non-root session user, so it only covers userspace.
+4. If setup needs ROOT at container-build time (apt system packages, a native build
+   toolchain, frozen installs), add an OPTIONAL `scripts/cloud-setup-local.sh`. The
+   generic `cloud-setup.sh` calls it (by path, at `$PWD`) after its apt-fix and
+   marketplace pre-warm; a repo that needs nothing ships none. This keeps the
+   vendored `cloud-setup.sh` byte-identical (so `--check` stays clean) while the
+   repo-specific root work lives in a repo-authored file the scaffold never touches
+   (`cloud-setup-local.sh` is a reserved repo-only name: it is never a `SEED_FILES`
+   destination, so vendoring never stamps or overwrites it and `--check` never flags
+   it). Failures there are NOT swallowed: a real install error fails setup loudly
+   rather than caching a broken image, so mark a genuinely best-effort step (e.g.
+   Chrome) with `|| echo WARN` inside the hook itself.
+5. Paste `.claude/cloud-setup.sh` into the cloud environment's Setup script field.
 
 **Trust boundary:** `scripts/cloud-parity-recipes` drives `claude plugin marketplace add`
 / `install` of whatever it names, on every cold session, detached. Treat it like any
