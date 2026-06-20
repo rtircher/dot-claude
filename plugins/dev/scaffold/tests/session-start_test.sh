@@ -41,4 +41,16 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 done
 assert_eq "${ok:-}" "1" "prewarm log created within 1s"
 
+echo "case: prior prewarm log with a failure -> summary surfaced next session"
+# Disable the rescue so its detached relaunch can't truncate the log we seed here.
+chmod -x "$repo/scripts/ensure-plugins.sh"
+printf "ensure-plugins: 'install superpowers@x' failed\n" > "$work/plugin-prewarm.log"
+out="$(run 2>&1)"
+assert_contains "$out" "prewarm had failures" "failure summary emitted from prior log"
+
+echo "case: prior prewarm log clean -> no failure summary"
+printf "ensure-plugins: done\n" > "$work/plugin-prewarm.log"
+out="$(run 2>&1)"
+assert_not_contains "$out" "prewarm had failures" "no summary when prior log is clean"
+
 finish "session-start"

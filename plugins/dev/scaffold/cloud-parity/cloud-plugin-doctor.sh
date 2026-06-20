@@ -14,6 +14,9 @@ recipes="$repo_root/scripts/cloud-parity-recipes"
 found() { [ -d "$claude_dir" ] && [ -n "$(find "$claude_dir" -maxdepth 8 -path "$1" -type f -print 2>/dev/null | head -1)" ]; }
 marketplace_glob() { printf '*%s*' "${1##*/}"; }
 install_glob() { printf '*%s*%s*' "${1#*@}" "${1%@*}"; }
+# Mirror of ensure-plugins.sh: reject a recipe arg with a glob metachar before it
+# reaches a find -path glob, so the doctor's verdict agrees with what gets cloned.
+valid_token() { case "$1" in ''|*[!A-Za-z0-9._/@-]*) return 1 ;; *) return 0 ;; esac; }
 
 missing=0
 check() { if found "$2"; then printf "  [ok]      %s\n" "$1"; else printf "  [MISSING] %s\n" "$1"; missing=$((missing + 1)); fi; }
@@ -42,6 +45,7 @@ while read -r verb arg _rest || [ -n "$verb" ]; do
   case "$verb" in
     ''|\#*) continue ;;
     marketplace-add)
+      valid_token "$arg" || { echo "  [warn] skipping recipe with invalid token '$arg'"; continue; }
       check "marketplace $arg" "$(marketplace_glob "$arg")"
       # Paired with session-start.sh's conventions backstop, which keys off the same
       # conventions.md path; keep both in sync if the conventions plugin moves it.
@@ -49,7 +53,9 @@ while read -r verb arg _rest || [ -n "$verb" ]; do
         */dot-claude) check "conventions.md (conventions hook can fire; backstop stays silent)" '*conventions*conventions.md' ;;
       esac
       ;;
-    install) check "external $arg" "$(install_glob "$arg")" ;;
+    install)
+      valid_token "$arg" || { echo "  [warn] skipping recipe with invalid token '$arg'"; continue; }
+      check "external $arg" "$(install_glob "$arg")" ;;
   esac
 done < "$recipes"
 echo
