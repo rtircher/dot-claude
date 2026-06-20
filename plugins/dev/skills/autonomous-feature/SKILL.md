@@ -83,6 +83,34 @@ converge usually mean a judgment call only the human can make.
 Each fix round must re-run the review on the *revised* artifact, not assume a fix
 landed. A finding is only closed when a fresh review no longer raises it.
 
+## Coordinator discipline
+
+The main session is a **thin coordinator**, not a worker. Its context should hold
+only what it needs to drive the pipeline and honor the ping contract: the
+TodoWrite phase list, file *paths* to the spec and plan, the compact summary from
+each phase, and any ping-relevant findings. Everything that requires reading a
+lot or producing a lot is delegated. This keeps the main context small enough to
+run the whole pipeline without exhausting it.
+
+- **Delegate by default; read raw material only when a decision needs it.** Don't
+  open files, diffs, or logs in the main session "just to check." Dispatch a
+  sub-agent and let its summary come back. The coordinator reads raw material
+  directly only when a ping decision genuinely turns on a detail a summary can't
+  carry.
+- **Sub-agents persist, the coordinator points.** Bulky artifacts (the spec, the
+  plan, per-review findings) are written to files by the sub-agent that produces
+  them. The coordinator passes *paths* to the next phase, not inline text, so the
+  artifact is never re-pasted into the main context.
+- **Verification runs in a sub-agent.** Run the project's verification commands in
+  a sub-agent that returns pass/fail plus failures only. Full build/test logs
+  should not land in the main session.
+- **Ping signal survives summarization.** Only the main session can stop and ask
+  the human, so a sub-agent's return MUST surface blocker/major findings and any
+  ping-contract trigger verbatim. Compactness never wins over a lost ping signal.
+- **Phase 1 stays in the main session.** Brainstorming is an interactive
+  conversation with the human and can't be delegated. Still write its output to a
+  spec file rather than carrying the spec inline.
+
 ## Pipeline
 
 Track the phases with TodoWrite so progress is visible. Run them in order.
