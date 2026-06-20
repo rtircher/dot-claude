@@ -27,6 +27,12 @@ assert_contains "$out" "[ok]      marketplace rtircher/dot-claude" "dot-claude o
 assert_contains "$out" "[ok]      conventions.md" "conventions sub-check ok"
 assert_contains "$out" "all expected plugin clones are present" "clean verdict"
 
+echo "case: recipe token with a glob metachar is skipped (warned, exits 0)"
+printf '%s\n' 'install superpowers@bad*market' 'marketplace-add rtircher/dot-claude' > "$repo/scripts/cloud-parity-recipes"
+out="$(run 2>&1)"; rc=$?
+assert_eq "$rc" "0" "doctor still exits 0 with a bad token"
+assert_contains "$out" "invalid token" "bad token warned by doctor"
+
 echo "case: no recipe file -> nothing to check"
 rm -f "$repo/scripts/cloud-parity-recipes"
 out="$(run 2>&1)"
