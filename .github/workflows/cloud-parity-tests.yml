@@ -1,0 +1,31 @@
+name: cloud-parity tests
+
+# Run the scaffold's static checks and fake-harness suites on PRs that touch it.
+# Mirrors the local gate: bash plugins/dev/scaffold/tests/run-tests.sh
+on:
+  pull_request:
+    paths:
+      - "plugins/dev/scaffold/**"
+      - ".github/workflows/cloud-parity-tests.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      # run-tests.sh skips shellcheck when it is absent; assert it (and jq) are
+      # present so CI can never silently drop a third of the gate the way a local
+      # run without shellcheck does.
+      - name: Assert gate tools present
+        run: shellcheck --version && jq --version
+
+      - name: Run cloud-parity gate
+        run: bash plugins/dev/scaffold/tests/run-tests.sh
