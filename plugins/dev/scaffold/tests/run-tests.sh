@@ -13,7 +13,9 @@ done
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "== shellcheck =="
-  shellcheck "$seed"/*.sh "$here/../init-cloud-parity.sh" "$here"/*.sh || rc=1
+  # Gate on warning+; info-level is non-blocking (the `A && ok || { FAIL; }` test
+  # idiom is SC2015, sourcing lib.sh is SC1091, the diagnostic `ls` is SC2012).
+  shellcheck --severity=warning "$seed"/*.sh "$here/../init-cloud-parity.sh" "$here"/*.sh || rc=1
 else
   echo "== shellcheck (skipped: not installed) =="
 fi
