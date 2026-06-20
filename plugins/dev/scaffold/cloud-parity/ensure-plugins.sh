@@ -7,9 +7,10 @@
 #
 # The plugin set is data, not code: it reads scripts/cloud-parity-recipes (one
 # recipe per line), so this script is byte-identical across repos and a repo that
-# wants nothing simply ships no recipe file. Idempotent and concurrency-safe without
-# a lock: each recipe runs only when its clone is absent, and claude's marketplace
-# add / install are themselves idempotent.
+# wants nothing simply ships no recipe file. Idempotent: each recipe runs only when
+# its clone is absent. Concurrent sessions are serialized by a coarse advisory flock
+# around the recipe loop where flock exists (Linux); on a host without it (macOS) it
+# falls back to the per-recipe absence check plus claude's own idempotency.
 
 set -uo pipefail
 
@@ -20,6 +21,15 @@ plugins_dir="${HOME:-}/.claude/plugins"
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 recipes="$repo_root/scripts/cloud-parity-recipes"
 [ -f "$recipes" ] || { echo "ensure-plugins: no recipe file ($recipes); nothing to do"; exit 0; }
+
+# Serialize concurrent sessions: present() and the later add/install are a TOCTOU
+# window, so two near-simultaneous runs could both clone the same dir. A coarse
+# advisory lock around the whole loop closes it. flock is Linux-only; without it we
+# accept the lock-free fallback (each recipe still gates on its own absence check).
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$plugins_dir/.ensure-plugins.lock"
+  flock -n 9 || { echo "ensure-plugins: another run holds the lock; skipping"; exit 0; }
+fi
 
 # present <path-glob>: true only if a clone matching the glob holds at least one
 # regular file. An interrupted clone leaves a bare directory; treating that as
@@ -44,16 +54,24 @@ tmo() {
 marketplace_glob() { printf '*%s*' "${1##*/}"; }                     # owner/repo -> *repo*
 install_glob() { printf '*%s*%s*' "${1#*@}" "${1%@*}"; }             # plugin@market -> *market*plugin*
 
+# Reject a recipe arg with characters outside a safe set before it reaches a find
+# -path glob: a glob metachar (* ? [) would build a wrong pattern, yielding a false
+# present() or a never-detected absence. Committed recipes, so this is a correctness
+# guard, not a security boundary.
+valid_token() { case "$1" in ''|*[!A-Za-z0-9._/@-]*) return 1 ;; *) return 0 ;; esac; }
+
 while read -r verb arg _rest || [ -n "$verb" ]; do
   case "$verb" in
     ''|\#*) continue ;;
     marketplace-add)
+      valid_token "$arg" || { echo "ensure-plugins: skipping recipe with invalid token '$arg'"; continue; }
       present "$(marketplace_glob "$arg")" && continue
       echo "ensure-plugins: marketplace $arg absent; adding"
       tmo 180 claude plugin marketplace add "$arg" </dev/null \
         || echo "ensure-plugins: 'marketplace add $arg' failed"
       ;;
     install)
+      valid_token "$arg" || { echo "ensure-plugins: skipping recipe with invalid token '$arg'"; continue; }
       present "$(install_glob "$arg")" && continue
       market="${arg#*@}"
       echo "ensure-plugins: $arg absent; updating $market index then installing"
