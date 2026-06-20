@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# ensure-plugins: in-session clone of the marketplace plugins this repo needs, for
-# environments where the setup-script pre-warm can't run because claude is not on
-# PATH at setup time. Run DETACHED from the SessionStart hook; the harness lazy-
-# registers a plugin mid-session once its clone lands.
+# ensure-plugins: in-session clone of the marketplace plugins this repo needs, the
+# fallback for when the setup-script pre-warm didn't land them. Run DETACHED from the
+# SessionStart hook (which explains when that happens); the harness lazy-registers a
+# plugin mid-session once its clone lands.
 #
 # The plugin set is data, not code: it reads scripts/cloud-parity-recipes (one
 # recipe per line), so this script is byte-identical across repos and a repo that
