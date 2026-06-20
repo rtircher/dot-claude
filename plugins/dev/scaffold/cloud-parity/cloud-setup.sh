@@ -7,16 +7,11 @@
 # here only so the script is versioned and reviewable. It runs ONCE as root on a
 # fresh Ubuntu sandbox before Claude Code launches, and the result is cached.
 #
-# This script is byte-identical across every repo that uses the cloud-parity seed.
-# It does two repo-agnostic things: fix apt so toolchain installs can run, and
-# pre-warm the dot-claude marketplace CLONE (no install, no enable). Userspace
-# repo-specific work (the plugin set, superpowers, a mise toolchain) is handled
-# in-session by the committed seed (session-start.sh -> ensure-plugins.sh), the most
-# reliable place: a fresh session re-clones the repo, so committed files are always
-# present, whereas this setup phase is best-effort and cached. Repo-specific work
-# that needs ROOT at container-build time (apt system packages, a native build
-# toolchain) can't run in those non-root in-session hooks, so it lives in an
-# OPTIONAL committed scripts/cloud-setup-local.sh that this script calls (step 3).
+# Byte-identical across every repo that uses the cloud-parity seed. Two repo-agnostic
+# steps, each with its own rationale below: fix apt, then pre-warm the dot-claude
+# marketplace clone. Userspace and repo-specific work happen elsewhere (in-session via
+# the committed seed; root-at-build-time work in the optional cloud-setup-local.sh,
+# step 3).
 
 set -euo pipefail
 
