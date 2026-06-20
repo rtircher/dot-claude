@@ -83,8 +83,13 @@ non-trivial questions about the code:
   hypotheses by likelihood with the single cheapest disproving test for each.
   Distinguish code-vs-environment and hardware-vs-network early rather than
   cycling through plausible-sounding guesses.
-- **Meaningful PR branch names.** Rename to a descriptive `feat/…` / `fix/…` before
-  pushing; never push an auto-generated `claude/<slug>` session branch.
+- **Meaningful branch and worktree names.** When you create a branch or worktree
+  yourself (via the `using-git-worktrees` skill or `EnterWorktree`), name it from the
+  task as a descriptive `feat/…` / `fix/…` slug, never a random or auto-generated one.
+  The harness names the initial session branch/worktree for you (`claude/<slug>`, e.g.
+  `claude/zealous-wiles-65e0d5`); you can't pick that at creation, so rename the branch
+  to a descriptive `feat/…` / `fix/…` before pushing, and never push an auto-generated
+  `claude/<slug>` session branch.
 
 ## Writing style
 
