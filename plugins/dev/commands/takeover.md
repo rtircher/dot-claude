@@ -27,7 +27,26 @@ anything, so it works any time, as many times as you like.
 - **Staleness:** note the handover's timestamp and branch; if the branch is already
   merged or gone, flag that rather than blindly resuming.
 
-## 3. Resume
+## 3. Rename the session
+
+**Skip this step entirely if** the handover has a `## Respawn` section **and** you
+are already on its `Branch:`. That combination means `/dev:respawn` spawned this
+session and named it at birth, so a rename would only clobber a good title. (A
+generic session manually resuming a respawn handover won't be on that branch yet,
+so it still falls through to the rename below.)
+
+Otherwise: fresh sessions carry a generic auto-generated title (e.g. "general
+coding session"). Retitle this one to reflect the work you're resuming. Pick a
+short, kebab-case name derived from the handover's `Task & goal` (or its `Branch`,
+minus any `feat/` / `fix/` prefix), e.g. `takeover-session-rename`. Do this only on
+a repo match.
+
+The session title is set with `/rename <name>`. If your environment lets you
+invoke slash commands, run it. `/rename` is often user-only, though, so if you
+can't run it, surface the suggestion instead: in your reply, put the command on
+its own line as `` `/rename <name>` `` and ask the user to run it.
+
+## 4. Resume
 
 Open your reply with a short "Resuming from handover:" summary (3-4 lines: what was
 in progress and the immediate next step) and name which file you loaded. Then
