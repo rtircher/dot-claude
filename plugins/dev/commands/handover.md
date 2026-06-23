@@ -40,13 +40,19 @@ Branch: <current branch>
 What this session is doing and why.
 
 ## Current state
-Worktree path, committed vs uncommitted changes, what's done vs in-progress.
+Worktree path, committed vs uncommitted changes, what's done vs in-progress. Note
+what's already **verified** (tests green, build passing) so the resumed session
+doesn't redundantly re-run it.
 
 ## Key decisions
 Non-obvious context: approaches ruled out, paths not to take, constraints learned.
 
+## Key files & pointers
+The specific files (with `path:line` refs), entry points, and commands the next steps
+touch, so the resumed session can act without re-discovering the codebase.
+
 ## Next steps
-Concrete actions to resume, in order.
+Concrete actions to resume, in order. Cite exact `path:line` for each.
 
 ## Open questions / blockers
 What's unresolved or waiting on input.
