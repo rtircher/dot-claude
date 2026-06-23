@@ -94,7 +94,7 @@ non-trivial questions about the code:
 ## Writing style
 
 How to write prose: chat responses, commit messages, PR bodies, docs, and any
-message drafted on Renaud's behalf. Code comments follow these too, refined by the
+message drafted on the user's behalf. Code comments follow these too, refined by the
 *Code comments* section below.
 
 - **Concise and natural.** No corporate filler, no preamble, no restating the
@@ -112,11 +112,11 @@ message drafted on Renaud's behalf. Code comments follow these too, refined by t
   period.
 - **Don't open a message with "I"** as the first word.
 
-When drafting a message for Renaud (Slack, email, a PR description he'll send):
+When drafting a message for the user (Slack, email, a PR description they'll send):
 
 - **Match the channel.** Slack is conversational; email is slightly more
   structured.
-- **Preserve his intent and phrasing.** Polish, don't rewrite: keep his voice and
+- **Preserve their intent and phrasing.** Polish, don't rewrite: keep their voice and
   original wording wherever it already works.
 
 ## Code comments
