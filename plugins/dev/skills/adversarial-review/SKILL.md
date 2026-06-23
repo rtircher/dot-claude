@@ -123,33 +123,62 @@ PATH and `CURSOR_API_KEY` set. Check `command -v cursor-agent` first and skip
 this reviewer if it is absent.
 
 Treat any third-party output as one more independent reviewer: feed it the same
-adversarial framing, then fold its findings into the synthesis labeled by source
-(for example "Codex" or "Cursor"). Agreement between a third-party finding and a
-Claude lens is strong signal; a unique third-party finding is exactly the blind
-spot you enlisted it to catch.
+adversarial framing, then fold its findings into the synthesis. Record which
+source raised each finding as private bookkeeping — you need it to count
+independent sources and detect cross-family agreement — but do **not** carry
+model identity into the scoring step. Synthesize blind to source (see step 6):
+agreement across independent reviewers is strong signal, and a lone finding from
+a different model family is exactly the blind spot you enlisted it to catch — but
+*which* model said it must not move a finding's rank. Naming a prestige source
+during scoring biases the synthesizer (Claude systematically over-weights some
+third-party models); the count and the cross-family-ness are the signal, the
+brand name is not.
 
 ### 6. Synthesize
 
+**Score blind to model identity.** Before synthesizing, strip the reviewers'
+model names from their findings — work from anonymized handles (Reviewer A/B/C…)
+plus each finding's lens. Identity is prestige bias: knowing a finding came from a
+particular third-party model makes the synthesizer over- or under-weight it
+regardless of merit. What you keep is *how many independent reviewers* raised a
+finding and *whether that agreement crosses model families* — those are the real
+signals. Re-attach source names only after ranking is fixed, and only if the user
+asked who said what.
+
 Once reviewers return (including any third-party model you enlisted):
 
-1. **Dedup** objections that overlap across lenses into one entry (note which
-   lenses raised it — agreement across lenses is signal).
-2. **Rank** by severity (blocker → major → minor), and within a severity put
+1. **Account for who actually voted.** State the panel that returned versus the
+   panel you dispatched — e.g. "3 of 4 reviewers returned; the minimax reviewer
+   errored and was dropped." A reviewer whose chain failed silently is not a
+   missing finding, it is a missing *vote*; never let the synthesis imply a fuller
+   panel than actually weighed in.
+2. **Dedup** objections that overlap into one entry, recording **how many
+   independent reviewers** raised it and **whether they span model families**
+   (cross-family agreement is the strongest signal; agreement across lenses within
+   one model is weaker).
+3. **Rank** by severity (blocker → major → minor), and within a severity put
    **verified before speculative** — a confirmed major outranks an unchecked hunch.
-3. Produce **one prioritized list**: each entry = objection · severity ·
-   confidence · location · suggested fix · which lens(es) or model raised it.
-4. Report **each lens's ship / don't-ship verdict** alongside the list.
+   Rank on merit and corroboration count, never on which model spoke.
+4. Produce **one prioritized list**: each entry = objection · severity ·
+   confidence · location · suggested fix · corroboration (how many independent
+   reviewers / lenses, cross-family or not).
+5. Report **each lens's ship / don't-ship verdict** alongside the list.
 
 ## Output
 
 Present to the user:
 
+- **The panel that actually voted**: how many reviewers were dispatched, how many
+  returned, and which (if any) were dropped because a tool was missing,
+  unauthenticated, or errored mid-run. State this up front so the user knows the
+  weight behind the verdict — never imply a fuller panel than voted.
 - The deduped, severity-ranked objection list, leading with verified findings;
-  group speculative ones after so the user can skim them separately.
+  group speculative ones after so the user can skim them separately. Each entry
+  carries its corroboration (how many independent reviewers / lenses, cross-family
+  or not) rather than model names.
 - The per-lens verdicts.
-- Whether a third-party model reviewer ran, and which one. If you skipped it
-  because the tool was not installed or authenticated, say so in one line so the
-  user knows the panel was Claude-only.
+- Source attribution is available on request, but the ranked list stands on
+  merit and corroboration, not on which model raised each point.
 
 Then stop. Do not edit the artifact, do not block any next step, do not
 re-review. The user decides what to act on. If they ask you to address findings,
@@ -168,3 +197,6 @@ that's a separate task.
 - **Phantom third-party review.** Never imply Codex or Cursor weighed in when the
   tool was unavailable or unauthenticated. Report the panel as Claude-only
   instead.
+- **Prestige-weighted scoring.** Don't let a finding's rank ride on which model
+  raised it. Score blind to model identity; the signal is corroboration count and
+  cross-family agreement, not the brand name attached to a finding.
