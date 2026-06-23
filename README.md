@@ -12,7 +12,7 @@ holds only what generalizes.
 | Plugin        | What it does                                                                                  |
 | ------------- | -------------------------------------------------------------------------------------------- |
 | `conventions` | Always-on working-style rules (TDD, git hygiene, review gates, no-heredoc, model selection), injected into every session via a `SessionStart` hook. Edit [`conventions.md`](plugins/conventions/conventions.md). |
-| `dev`         | On-demand software-development tooling: the `adversarial-review` and `autonomous-feature` **skills**, the `/dev:babysit`, `/dev:pr-pruner`, and `/dev:post-merge-sweeper` PR-loop **commands** plus the `/dev:handover` + `/dev:takeover` session-continuity ones and the `/dev:init-cloud-parity` **cloud-parity scaffold**, and the `coder` (worktree-isolated) + `researcher` (read-only) **agents** for parallel subagent work. |
+| `dev`         | On-demand software-development tooling: the `design-doc`, `adversarial-review`, and `autonomous-feature` **skills**, the `/dev:babysit`, `/dev:pr-pruner`, and `/dev:post-merge-sweeper` PR-loop **commands** plus the `/dev:handover` + `/dev:takeover` session-continuity ones and the `/dev:init-cloud-parity` **cloud-parity scaffold**, and the `coder` (worktree-isolated) + `researcher` (read-only) **agents** for parallel subagent work. |
 
 ## Enable it
 
