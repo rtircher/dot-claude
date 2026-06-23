@@ -1,6 +1,6 @@
 {
   "name": "dev",
-  "description": "Personal software-development tooling: design-doc + adversarial-review + autonomous-feature skills, the babysit/pr-pruner/post-merge-sweeper PR-loop commands plus handover/takeover session-continuity commands, and coder/researcher subagents.",
+  "description": "Personal software-development tooling: design-doc + adversarial-review + autonomous-feature skills, the babysit/pr-pruner/post-merge-sweeper PR-loop commands plus handover/takeover/respawn session-continuity commands, and coder/researcher subagents.",
   "author": {
     "name": "Renaud Tircher",
     "email": "327881+rtircher@users.noreply.github.com"
