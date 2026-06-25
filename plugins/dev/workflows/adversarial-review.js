@@ -1,5 +1,5 @@
 /**
- * Adversarial review as a Workflow. PROTOTYPE.
+ * Adversarial review as a Workflow.
  *
  * One faithful review PASS of the `adversarial-review` skill: fan a panel of
  * independent lens reviewers (or /code-review for a diff) at an artifact, force
@@ -24,7 +24,7 @@
  * }
  */
 export const meta = {
-  name: 'adversarial-review',
+  name: 'dev-adversarial-review',
   description:
     'Independent adversarial review of a spec, plan, or diff: lens-panel fan-out, schema-validated findings, blind synthesis into one ranked objection list. Advisory, never edits, never blocks.',
   phases: [
@@ -134,7 +134,7 @@ function gitPrefix(art) {
 function diffReviewPrompt(art) {
   const range = art.diffRange || 'the current branch diff'
   // SEAM: production wiring delegates to the /code-review skill (or its own
-  // workflow form) rather than hand-rolling the pass. Kept inline for the proto.
+  // workflow form) rather than hand-rolling the pass.
   return `${adversarialPreamble(art)}
 
 Perform a rigorous code review of ${range}. Run \`${gitPrefix(art)} diff ${art.diffRange || ''}\` to see the changes, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context. Hunt for correctness bugs, security holes, broken invariants, and cross-package coupling, not style. End with an overall verdict (ship / don't-ship) and one sentence why. Return findings via the structured output tool.`

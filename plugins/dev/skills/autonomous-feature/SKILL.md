@@ -141,13 +141,13 @@ verification skills instead — resolve by capability, not by the exact
 skill), fall back to the inline behavior described for that phase.
 
 **Delegate adversarial review to this plugin's Workflow when the Workflow tool
-is available.** This plugin ships an `adversarial-review` Workflow
+is available.** This plugin ships a `dev-adversarial-review` Workflow
 (`workflows/adversarial-review.js`: independent reviewers, structured findings, an
 adversarial-verify pass that demotes only unanimously-refuted findings), wrapped
-by `gated-review` (`workflows/gated-review.js`), which runs the review/fix/re-review
+by `dev-gated-review` (`workflows/gated-review.js`), which runs the review/fix/re-review
 gate to the confidence cap below. Where the phases below say "the
 `adversarial-review` skill" and the Workflow tool is available, delegate to
-`gated-review` (or `adversarial-review` for a single advisory pass) instead. The
+`dev-gated-review` (or `dev-adversarial-review` for a single advisory pass) instead. The
 coordinator invoking the Workflow is the sanctioned opt-in; it returns one
 consolidated structured result rather than flooding the coordinator with
 per-reviewer chatter, which suits the thin-coordinator discipline above, and its
