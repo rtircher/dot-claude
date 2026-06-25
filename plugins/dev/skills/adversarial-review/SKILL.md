@@ -104,7 +104,10 @@ the user and name where the artifact goes, especially for private repos,
 proprietary code, or diffs that may carry secrets or tenant data. Offer to redact
 sensitive parts or to skip. If the user does not approve, run the Claude panel
 only and report it as Claude-only. Never send an artifact to a third party
-silently.
+silently. Consent can be granted ahead of time: if an orchestrator or invocation
+flag has pre-authorized third-party review for this run, treat that as the
+confirmation, skip the interactive ask, and enlist the available reviewer
+directly, still reporting in the output that it ran and where the artifact went.
 
 **Codex (first-party plugin).** If the `codex` plugin is installed, the
 `/codex:adversarial-review` command runs a challenge review (it questions the
