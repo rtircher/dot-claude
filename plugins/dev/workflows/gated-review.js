@@ -1,8 +1,8 @@
 /**
- * Gated review: drive an artifact to "clean" through adversarial-review. PROTOTYPE.
+ * Gated review: drive an artifact to "clean" through dev-adversarial-review.
  *
  * The concrete form of autonomous-feature's Phase 2/4/6 loop. Each round runs the
- * `adversarial-review` workflow (nested one level), and if surviving blocker/major
+ * `dev-adversarial-review` workflow (nested one level), and if surviving blocker/major
  * findings remain, dispatches a fix agent to address them, then re-reviews the
  * revised artifact. Caps at 3 rounds.
  *
@@ -15,7 +15,7 @@
  * the returned `review.findings` and decides what stops the pipeline. This wrapper
  * owns only the convergence loop and the cap.
  *
- * args: same shape as adversarial-review, plus:
+ * args: same shape as dev-adversarial-review, plus:
  *   maxRounds?: number   // default 3
  *   fixConventions?: string  // optional repo conventions handed to the fix agent
  *
@@ -26,9 +26,9 @@
  * prepared to have edited.
  */
 export const meta = {
-  name: 'gated-review',
+  name: 'dev-gated-review',
   description:
-    'Drive an artifact to clean through adversarial-review: review, fix, re-review, capped at 3 rounds. Returns clean, or the contested findings for a human when it does not converge.',
+    'Drive an artifact to clean through dev-adversarial-review: review, fix, re-review, capped at 3 rounds. Returns clean, or the contested findings for a human when it does not converge.',
   phases: [
     { title: 'Gate', detail: 'review -> fix -> re-review until clean or capped' },
   ],
@@ -60,8 +60,8 @@ let review = null
 while (true) {
   round += 1
   phase(`Round ${round}`)
-  // Nested one level: gated-review is top-level, adversarial-review is the child.
-  review = await workflow('adversarial-review', a)
+  // Nested one level: dev-gated-review is top-level, dev-adversarial-review is the child.
+  review = await workflow('dev-adversarial-review', a)
   history.push({
     round,
     findings: review.findings.length,
