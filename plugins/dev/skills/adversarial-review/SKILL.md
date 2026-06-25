@@ -43,7 +43,9 @@ If the artifact is a **PR or code diff**, do not hand-roll code review. Use the
 higher effort). Surface its findings. If a third-party model is available, also
 enlist it as an independent reviewer (see "Enlist a third-party model" below):
 a different model family is the most independent second read you can get on a
-diff. The lens-based panel in steps 3 and 4 is for documents, not diffs.
+diff. The lens-based panel in steps 3 and 4 is for documents, not diffs; synthesize a
+diff on its own terms (step 6, **Diffs**), where `/code-review` and any
+third-party run are the named reviewers and there are no per-lens verdicts.
 
 ### 3. Pick lenses scaled to the artifact
 
@@ -92,7 +94,17 @@ The panel's value is reviewer independence, and a genuinely different model
 family is the most independent reviewer you can add: it shares none of Claude's
 blind spots. When the artifact matters, enlist one as an extra reviewer
 alongside the Claude panel (for docs) or alongside `/code-review` (for diffs).
-This is optional and gated on availability. Never block on it.
+This is optional, gated on availability and on the user's consent; a missing
+third-party tool never blocks the Claude panel.
+
+**Get consent before any artifact leaves the environment.** Enlisting a
+third-party model sends the reviewed diff or document to an external vendor's API
+(OpenAI for Codex, Cursor for `cursor-agent`). Before running one, confirm with
+the user and name where the artifact goes, especially for private repos,
+proprietary code, or diffs that may carry secrets or tenant data. Offer to redact
+sensitive parts or to skip. If the user does not approve, run the Claude panel
+only and report it as Claude-only. Never send an artifact to a third party
+silently.
 
 **Codex (first-party plugin).** If the `codex` plugin is installed, the
 `/codex:adversarial-review` command runs a challenge review (it questions the
@@ -101,7 +113,11 @@ plainer pass. These are user-invoked commands, so ask the user to run
 `/codex:adversarial-review` (foreground for a tiny diff, `--background` for
 anything larger) and hand back the output, or fold in a run they already have.
 Let the plugin own the Codex invocation and auth; do not hand-roll `codex` CLI
-strings. Codex review is read-only.
+strings. Codex review is read-only. Codex reviews the git diff of the repo it
+runs in (scoped by `--base`/`--scope`), so if the artifact lives in a different
+repo than your session cwd, run the review from that repo (the companion takes
+`--cwd <path>`); otherwise it reviews the wrong tree and returns an empty or
+irrelevant diff.
 
 Availability: the `/codex:*` commands exist only once the codex plugin is
 installed, and they need the `codex` CLI installed and authenticated. If a run
@@ -111,16 +127,28 @@ Codex reviewer; proceed with the Claude panel.
 
 **Cursor.** There is no first-party Cursor plugin or slash command for Claude
 Code. The direct equivalent is to shell out to Cursor's headless CLI, a one-shot
-reviewer:
+reviewer. Keep the artifact out of argv: a diff pasted into a command argument
+leaks through process listings, shell history, and tool logs before it ever
+reaches Cursor. Put only instructions on the command line and feed the artifact
+on stdin (or a mode-600 temp file):
 
 ```bash
-cursor-agent -p --output-format text "Adversarially review the following. Find
-what is wrong, not what is fine. <paste artifact or diff>"
+cursor-agent -p --output-format text "Adversarially review the diff on stdin.
+Find what is wrong, not what is fine." < /path/to/artifact.diff
 ```
 
 Omit `--force` so it can only report, never edit. Requires `cursor-agent` on
 PATH and `CURSOR_API_KEY` set. Check `command -v cursor-agent` first and skip
 this reviewer if it is absent.
+
+**Bind every third-party run to the same artifact.** Give the reviewer the
+identical target the Claude panel is reviewing: the file path or `base...HEAD`
+range (or PR), the same focus and out-of-scope exclusions, and a pinned commit
+SHA or diff digest. Require the returned review to state that same target. A
+review whose scope you cannot confirm matches the panel's does not count as an
+independent vote or as cross-family corroboration in step 6: note it separately
+or drop it. A third-party run against the wrong base or repo (see the cwd caveat
+above) must never be folded in as agreement.
 
 Treat any third-party output as one more independent reviewer: feed it the same
 adversarial framing, then fold its findings into the synthesis. Record which
@@ -145,7 +173,9 @@ finding and *whether that agreement crosses model families* — those are the re
 signals. Re-attach source names only after ranking is fixed, and only if the user
 asked who said what.
 
-Once reviewers return (including any third-party model you enlisted):
+Once reviewers return (including any third-party model you enlisted): for a
+document the reviewers are the lens panel; for a diff they are `/code-review`
+plus any third-party run.
 
 1. **Account for who actually voted.** State the panel that returned versus the
    panel you dispatched — e.g. "3 of 4 reviewers returned; the minimax reviewer
@@ -162,7 +192,10 @@ Once reviewers return (including any third-party model you enlisted):
 4. Produce **one prioritized list**: each entry = objection · severity ·
    confidence · location · suggested fix · corroboration (how many independent
    reviewers / lenses, cross-family or not).
-5. Report **each lens's ship / don't-ship verdict** alongside the list.
+5. **Report verdicts by reviewer.** For a document, report each lens's ship /
+   don't-ship verdict. A diff has no lenses: report `/code-review`'s overall
+   result and each third-party reviewer's verdict instead. Never invent a
+   per-lens verdict for a reviewer that did not produce one.
 
 ## Output
 
@@ -176,7 +209,8 @@ Present to the user:
   group speculative ones after so the user can skim them separately. Each entry
   carries its corroboration (how many independent reviewers / lenses, cross-family
   or not) rather than model names.
-- The per-lens verdicts.
+- The verdicts: per lens for a document panel, or per reviewer (`/code-review`
+  plus any third-party run) for a diff.
 - Source attribution is available on request, but the ranked list stands on
   merit and corroboration, not on which model raised each point.
 
