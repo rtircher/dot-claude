@@ -1,6 +1,6 @@
 ---
 name: autonomous-feature
-description: Use when the user explicitly asks to run a whole feature through the full spec → adversarial-review → plan → adversarial-review → implement → adversarial-review pipeline with minimal supervision — e.g. "run the full pipeline", "spec it, review it, plan it, then build it", "take this all the way through with minimal input from me", "handle it end to end and only ping me if you need a decision", or the /autonomous-feature command. Do NOT trigger on an ordinary "add X" / "build Y" request, or on a request for only a spec, only a plan, only a review, or only the implementation — those belong to the individual skills (brainstorming, writing-plans, adversarial-review, subagent-driven-development). Pass a "pause" argument to gate for approval after each phase instead of running heads-down.
+description: Use when the user explicitly asks to run a whole feature through the full spec → adversarial-review → plan → adversarial-review → implement → adversarial-review pipeline with minimal supervision — e.g. "run the full pipeline", "spec it, review it, plan it, then build it", "take this all the way through with minimal input from me", "handle it end to end and only ping me if you need a decision", or the /autonomous-feature command. Do NOT trigger on an ordinary "add X" / "build Y" request, or on a request for only a spec, only a plan, only a review, or only the implementation — those belong to the individual skills (brainstorming, writing-plans, adversarial-review, subagent-driven-development). Pass a "pause" argument to gate for approval after each phase instead of running heads-down, or an "external-review" argument to pre-authorize a third-party (e.g. Codex) reviewer in the review phases.
 ---
 
 # Autonomous Feature
@@ -41,6 +41,21 @@ pipeline** and honor the **same ping criteria** — the only difference is what 
 A phase boundary is the seam between phases (spec done → review, review done →
 plan, etc.). Mid-phase, both modes behave identically.
 
+## Third-party review (`external-review` argument)
+
+The adversarial-review phases default to Claude-only. Enlisting a third-party
+model (Codex via the `codex` plugin, or Cursor) sends the reviewed artifact to an
+external API, which the ping contract below treats as a stop-and-ask. Pass
+`external-review` to pre-authorize that for the whole run: `/autonomous-feature external-review`,
+or combined with the gate, `/autonomous-feature pause external-review`. Then every
+adversarial-review phase enlists the available third-party model (Codex
+preferred) as an extra independent reviewer with no per-phase consent stop, and
+that reviewer's artifact send is exempt from the external-service ping below. A
+code diff (Phase 6) is the strongest case for a different model family.
+
+Without `external-review`, the run stays Claude-only unless you approve a consent ping
+when a phase offers third-party review.
+
 ## The ping contract — active in BOTH modes
 
 Stop and ask the human — regardless of mode, even mid-phase — when you hit any of
@@ -55,7 +70,9 @@ invalidate the premise you're working from:
   implementations. Resolve trivial ambiguities yourself and note the assumption.
 - **Destructive or irreversible action.** Deleting data, schema/data migrations,
   force-push, rewriting history, publishing to an external service, anything
-  touching production, anything that spends money.
+  touching production, anything that spends money. (A third-party review send
+  pre-authorized by the `external-review` argument is exempt here; every other external
+  publish still stops.)
 - **Scope expansion.** The work is drifting beyond what the agreed spec covers.
   Don't silently grow the feature — surface it and let the human decide.
 - **Security-sensitive decision.** Auth, secrets/credentials, cryptography,
@@ -182,7 +199,9 @@ code does what you told it to, not that what you told it to do is right.
 
 Run the `adversarial-review` skill on the completed work (the branch diff). For a
 code diff it delegates to `/code-review` with effort scaled to diff size/risk —
-let it. For a **multi-task** plan, also run the final cross-implementation
+let it. When third-party review is enabled (the `external-review` flag, or an approved
+consent ping), it also enlists a third-party reviewer, and a code diff is the
+strongest case for a different model family. For a **multi-task** plan, also run the final cross-implementation
 symmetry pass (sonnet+) over the full branch diff to catch type asymmetry,
 parallel-structure drift, undocumented behavior, and cross-package coupling that
 per-task work misses.
