@@ -23,6 +23,12 @@ matters.
 
 ## Procedure
 
+**The Claude review always runs; a third-party model is only ever added on top of
+it.** The lens panel (steps 3 to 4, for documents) or `/code-review` (step 2, for
+diffs) is the baseline and is never skipped. Step 5's third-party reviewer is an
+optional addition, never a replacement, even when the user explicitly asks for
+external review.
+
 ### 1. Identify the artifact
 
 Determine what is under review and its type:
@@ -88,14 +94,20 @@ artifact — do not default one model across the whole panel. (Subtle
 feasibility/assumption reasoning may warrant a stronger model than a
 straightforward scope pass.)
 
-### 5. Enlist a third-party model (optional, when available)
+### 5. Enlist a third-party model (additive, when available)
 
-The panel's value is reviewer independence, and a genuinely different model
-family is the most independent reviewer you can add: it shares none of Claude's
-blind spots. When the artifact matters, enlist one as an extra reviewer
-alongside the Claude panel (for docs) or alongside `/code-review` (for diffs).
-This is optional, gated on availability and on the user's consent; a missing
-third-party tool never blocks the Claude panel.
+**This step is additive and never replaces the Claude review.** The lens panel
+(steps 3 to 4) or `/code-review` (step 2) always runs; a third-party model is an
+*extra* independent reviewer layered on top. Asking to "use external", or the
+`external-review` flag, means **add** a third-party reviewer to the Claude panel,
+not swap the panel out for it. A run that ends with only the third-party's
+findings and no Claude panel is a bug.
+
+A genuinely different model family is the most independent reviewer you can add:
+it shares none of Claude's blind spots, which is exactly why it belongs on top of
+the panel rather than instead of it. Enlisting one is optional, gated on
+availability and on the user's consent; a missing third-party tool never blocks
+the Claude panel.
 
 **Get consent before any artifact leaves the environment.** Enlisting a
 third-party model sends the reviewed diff or document to an external vendor's API
@@ -237,3 +249,8 @@ that's a separate task.
 - **Prestige-weighted scoring.** Don't let a finding's rank ride on which model
   raised it. Score blind to model identity; the signal is corroboration count and
   cross-family agreement, not the brand name attached to a finding.
+- **Third-party instead of the panel.** A third-party reviewer never substitutes
+  for the Claude panel (docs) or `/code-review` (diffs); those always run and the
+  third-party is one more voice on top. "Use external" means add it, not swap it.
+  A run that produced only the external model's findings skipped the panel and is
+  wrong.
