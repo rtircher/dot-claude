@@ -140,6 +140,25 @@ verification skills instead — resolve by capability, not by the exact
 `superpowers:` name. If no equivalent exists for a step (e.g. no verification
 skill), fall back to the inline behavior described for that phase.
 
+**Delegate adversarial review to this plugin's Workflow when the Workflow tool
+is available.** This plugin ships an `adversarial-review` Workflow
+(`workflows/adversarial-review.js`: independent reviewers, structured findings, an
+adversarial-verify pass that demotes only unanimously-refuted findings), wrapped
+by `gated-review` (`workflows/gated-review.js`), which runs the review/fix/re-review
+gate to the confidence cap below. Where the phases below say "the
+`adversarial-review` skill" and the Workflow tool is available, delegate to
+`gated-review` (or `adversarial-review` for a single advisory pass) instead. The
+coordinator invoking the Workflow is the sanctioned opt-in; it returns one
+consolidated structured result rather than flooding the coordinator with
+per-reviewer chatter, which suits the thin-coordinator discipline above, and its
+gate maps onto these confidence gates. A Workflow runs headless and cannot pause
+to disambiguate or to ask consent, so pass the full artifact contract up front:
+type, file path or diff range, repo, focus, out-of-scope, and whether third-party
+review is pre-authorized (the `external-review` argument). The ping contract stays
+with this coordinator: read the Workflow's returned findings and stop per the
+contract above; the Workflow never pings on its own. If the Workflow tool is
+unavailable, use the `adversarial-review` skill as written.
+
 ### Phase 1 — Spec
 
 Use your brainstorming skill (`superpowers:brainstorming`, or your environment's
