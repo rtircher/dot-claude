@@ -15,9 +15,11 @@
  * the returned `review.findings` and decides what stops the pipeline. This wrapper
  * owns only the convergence loop and the cap.
  *
- * args: same shape as dev-adversarial-review, plus:
+ * args: same shape as dev-adversarial-review (tiers included, forwarded to each
+ * review round), plus:
  *   maxRounds?: number   // default 3
  *   fixConventions?: string  // optional repo conventions handed to the fix agent
+ *   tiers?.fix: { model?, effort? }  // re-tier the fix agent; omit to inherit the session model
  *
  * NOTE: the fix step MUTATES the artifact (edits the doc, or code in repoDir). For
  * a diff whose range is two committed branches, the fix agent must commit for the
@@ -85,8 +87,11 @@ while (true) {
   // result; rounds are sequential, so there are no cross-agent file races. The fix
   // agent needs write tools. In autonomous-feature the coordinator runs this whole
   // loop inside one worktree, so isolation is handled there, not per fix agent.
+  const fixTier = (a.tiers || {}).fix || {}
   await agent(fixPrompt(a, blockers, round), {
     label: `fix:round${round}`,
     phase: `Round ${round}`,
+    ...(fixTier.model ? { model: fixTier.model } : {}),
+    ...(fixTier.effort ? { effort: fixTier.effort } : {}),
   })
 }
