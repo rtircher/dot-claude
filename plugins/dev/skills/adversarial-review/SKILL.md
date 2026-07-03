@@ -29,6 +29,19 @@ diffs) is the baseline and is never skipped. Step 5's third-party reviewer is an
 optional addition, never a replacement, even when the user explicitly asks for
 external review.
 
+**Default: run the pass as one Workflow call.** After identifying the artifact
+(step 1), if the `Workflow` tool is available, dispatch the whole review pass as
+`Workflow` with `name: "dev-adversarial-review"` and args
+`{artifactPath, artifactType ('spec'|'plan'|'diff'), diffRange, repoDir, focus,
+outOfScope, externalReview}`. The workflow implements steps 2 to 6
+deterministically: the lens panel (or a code-review pass for a diff),
+schema-validated findings, a skeptic verify pass on uncorroborated blocker/major
+findings, and synthesis blind to model identity. Present its returned
+panel/verdicts/findings exactly per the Output section. Set
+`externalReview: true` only with the consent step 5 requires. Steps 2 to 6 below
+are the manual fallback: use them when the Workflow tool is unavailable or the
+workflow run itself errors, never because the manual path feels quicker.
+
 ### 1. Identify the artifact
 
 Determine what is under review and its type:
@@ -42,7 +55,7 @@ current branch (uncommitted/committed diff) or the most recently written
 spec/plan. If genuinely ambiguous, ask which artifact — one question, then
 proceed.
 
-### 2. PR / diff → delegate
+### 2. PR / diff → delegate (manual fallback)
 
 If the artifact is a **PR or code diff**, do not hand-roll code review. Use the
 `/code-review` skill, with effort scaled to diff size (larger or riskier diffs →
@@ -53,7 +66,7 @@ diff. The lens-based panel in steps 3 and 4 is for documents, not diffs; synthes
 diff on its own terms (step 6, **Diffs**), where `/code-review` and any
 third-party run are the named reviewers and there are no per-lens verdicts.
 
-### 3. Pick lenses scaled to the artifact
+### 3. Pick lenses scaled to the artifact (manual fallback)
 
 Choose independent reviewer lenses by artifact type. Each lens is a distinct
 failure mode, not a redundant copy:
@@ -66,10 +79,13 @@ failure mode, not a redundant copy:
 Use all the lenses for the artifact type. Drop a lens only if it is clearly
 irrelevant to the specific artifact, and say so.
 
-### 4. Dispatch independent reviewers — in parallel
+### 4. Dispatch independent reviewers in parallel (manual fallback)
 
 Dispatch one `Agent` per lens, **all in a single message** so they run
-concurrently with fresh, independent context. Each reviewer gets:
+concurrently with fresh, independent context. Reviewers only read and report, so
+dispatch each as a read-only `dev:researcher` agent (fall back to
+general-purpose only where custom agent types are unavailable). Each reviewer
+gets:
 
 - The full artifact (paste it or give the file path).
 - Its assigned lens, and only that lens.
@@ -94,7 +110,11 @@ artifact — do not default one model across the whole panel. (Subtle
 feasibility/assumption reasoning may warrant a stronger model than a
 straightforward scope pass.)
 
-### 5. Enlist a third-party model (additive, when available)
+### 5. Enlist a third-party model (additive, when available; applies on BOTH paths)
+
+Consent is the calling agent's job on both paths: on the Workflow path, obtain
+it per this step BEFORE setting `externalReview: true`; the workflow only runs
+the reviewer, it never asks.
 
 **This step is additive and never replaces the Claude review.** The lens panel
 (steps 3 to 4) or `/code-review` (step 2) always runs; a third-party model is an
@@ -177,7 +197,7 @@ during scoring biases the synthesizer (Claude systematically over-weights some
 third-party models); the count and the cross-family-ness are the signal, the
 brand name is not.
 
-### 6. Synthesize
+### 6. Synthesize (manual fallback; the Workflow does this internally)
 
 **Score blind to model identity.** Before synthesizing, strip the reviewers'
 model names from their findings — work from anonymized handles (Reviewer A/B/C…)

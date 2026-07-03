@@ -198,8 +198,11 @@ Execute the clean plan. Prefer your subagent-driven-development skill
 (`superpowers:subagent-driven-development`, or your environment's equivalent) for
 plans with independent tasks; use an executing-plans skill or inline
 implementation when that fits better — use judgment, and say which you chose and
-why. Follow the project's own conventions (TDD, verification) as those skills
-direct.
+why. When dispatching subagents, pick the agent type and model tier per task
+rather than defaulting: `dev:coder` (worktree-isolated) for implementer tasks
+that edit files in parallel, `dev:researcher` or `Explore` for read-only
+research and search, and a cheaper model tier for mechanical work. Follow the
+project's own conventions (TDD, verification) as those skills direct.
 
 When implementation is complete, verify before claiming done — use your
 verification-before-completion skill (`superpowers:verification-before-completion`)
