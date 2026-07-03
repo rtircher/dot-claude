@@ -166,7 +166,7 @@ function buildReviewers(art) {
   const thunks = []
   if (art.artifactType === 'diff') {
     thunks.push(() =>
-      agent(diffReviewPrompt(art), { label: 'code-review', phase: 'Review', schema: REVIEW_SCHEMA }).then(tag('code-review', 'claude')),
+      agent(diffReviewPrompt(art), { label: 'code-review', phase: 'Review', schema: REVIEW_SCHEMA, agentType: 'dev:researcher' }).then(tag('code-review', 'claude')),
     )
   } else {
     const lenses = LENS_PANELS[art.artifactType]
@@ -178,6 +178,7 @@ function buildReviewers(art) {
           phase: 'Review',
           schema: REVIEW_SCHEMA,
           model: lens.model || 'opus',
+          agentType: 'dev:researcher',
         }).then(tag(lens.key, 'claude')),
       )
     }
@@ -325,7 +326,7 @@ if (toVerify.length) {
     await parallel(
       toVerify.flatMap((f, i) =>
         Array.from({ length: VERIFY_VOTES }, (_unused, k) => () =>
-          agent(verifyPrompt(f, art), { label: `verify:${i}.${k}`, phase: 'Verify', schema: VERDICT_SCHEMA, model: 'opus' }).then((v) => v && { i, v }),
+          agent(verifyPrompt(f, art), { label: `verify:${i}.${k}`, phase: 'Verify', schema: VERDICT_SCHEMA, model: 'opus', agentType: 'dev:researcher' }).then((v) => v && { i, v }),
         ),
       ),
     )
