@@ -41,6 +41,13 @@
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/block-emdash.py",
             "if": "Bash(gt modify*)",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/require-green-tests.py",
+            "if": "Bash(git *)",
+            "timeout": 60,
+            "statusMessage": "Checking for a green test run on this tree"
           }
         ]
       },

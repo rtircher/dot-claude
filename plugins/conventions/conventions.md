@@ -50,6 +50,15 @@ non-trivial questions about the code:
 - **TDD-first.** Write a failing test before the implementation, make it pass, then
   verify the full suite is green before committing. Default for features and
   bugfixes; instrument and debug brittle tests rather than paper over them.
+- **Green-tests commit gate (opt-in per repo).** A repo opts in by committing a
+  `.claude/require-green-tests` file at its root containing its canonical
+  full-suite command (e.g. `make test`). In opted-in repos, a PreToolUse hook
+  denies `git commit` unless the current worktree matches the fingerprint
+  recorded at the last green run. Record a run by executing the suite through
+  the conventions plugin's `scripts/record-green.sh <command>` from the repo
+  root; in these repos, always run the full suite via that wrapper so the pass
+  is recorded. Staging changes never invalidates a recorded run; editing any
+  file does.
 - **Adversarial review before committing.** When a plan/spec is finalized or a
   PR/diff is ready, run independent skeptical review: find what's wrong, not
   rubber-stamp. (See the `dev` plugin's `adversarial-review` skill.)
