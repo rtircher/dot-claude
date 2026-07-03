@@ -34,8 +34,9 @@ export const meta = {
   ],
 }
 
-// One lens = one distinct failure mode, never a redundant copy. Model defaults
-// to opus (work convention); override per-lens when a lens is unusually easy/hard.
+// One lens = one distinct failure mode, never a redundant copy. Reviewers inherit
+// the session model (never a downgrade when the session runs a stronger tier);
+// set `model` on a lens only to deliberately re-tier an unusually easy/hard one.
 const LENS_PANELS = {
   spec: [
     { key: 'hidden-assumptions', brief: 'what is taken for granted that may not hold' },
@@ -177,7 +178,7 @@ function buildReviewers(art) {
           label: `lens:${lens.key}`,
           phase: 'Review',
           schema: REVIEW_SCHEMA,
-          model: lens.model || 'opus',
+          ...(lens.model ? { model: lens.model } : {}),
           agentType: 'dev:researcher',
         }).then(tag(lens.key, 'claude')),
       )
@@ -326,7 +327,7 @@ if (toVerify.length) {
     await parallel(
       toVerify.flatMap((f, i) =>
         Array.from({ length: VERIFY_VOTES }, (_unused, k) => () =>
-          agent(verifyPrompt(f, art), { label: `verify:${i}.${k}`, phase: 'Verify', schema: VERDICT_SCHEMA, model: 'opus', agentType: 'dev:researcher' }).then((v) => v && { i, v }),
+          agent(verifyPrompt(f, art), { label: `verify:${i}.${k}`, phase: 'Verify', schema: VERDICT_SCHEMA, agentType: 'dev:researcher' }).then((v) => v && { i, v }),
         ),
       ),
     )

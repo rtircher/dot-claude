@@ -88,6 +88,5 @@ while (true) {
   await agent(fixPrompt(a, blockers, round), {
     label: `fix:round${round}`,
     phase: `Round ${round}`,
-    model: 'opus',
   })
 }
