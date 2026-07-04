@@ -58,12 +58,12 @@ fi
 #    that needs nothing ships none. Not guarded with `|| true`: a real failure in
 #    repo setup (e.g. a missing apt package) should fail loudly, not cache a broken
 #    image; the hook marks its own best-effort steps.
-repo_setup="${PWD}/scripts/cloud-setup-local.sh"
+repo_setup="${PWD}/.claude/cloud/cloud-setup-local.sh"
 if [ -f "${repo_setup}" ]; then
-  echo "==> running repo-specific setup: scripts/cloud-setup-local.sh"
+  echo "==> running repo-specific setup: .claude/cloud/cloud-setup-local.sh"
   bash "${repo_setup}"
 else
-  echo "==> no scripts/cloud-setup-local.sh; nothing repo-specific to install"
+  echo "==> no .claude/cloud/cloud-setup-local.sh; nothing repo-specific to install"
 fi
 
 echo "==> cloud-parity setup complete"

@@ -5,7 +5,7 @@
 # SessionStart hook (which explains when that happens); the harness lazy-registers a
 # plugin mid-session once its clone lands.
 #
-# The plugin set is data, not code: it reads scripts/cloud-parity-recipes (one
+# The plugin set is data, not code: it reads .claude/cloud/cloud-parity-recipes (one
 # recipe per line), so this script is byte-identical across repos and a repo that
 # wants nothing simply ships no recipe file. Idempotent: each recipe runs only when
 # its clone is absent. Concurrent sessions are serialized by a coarse advisory flock
@@ -19,7 +19,7 @@ plugins_dir="${HOME:-}/.claude/plugins"
 [ -d "$plugins_dir" ] || exit 0
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-recipes="$repo_root/scripts/cloud-parity-recipes"
+recipes="$repo_root/.claude/cloud/cloud-parity-recipes"
 [ -f "$recipes" ] || { echo "ensure-plugins: no recipe file ($recipes); nothing to do"; exit 0; }
 
 # Serialize concurrent sessions: present() and the later add/install are a TOCTOU

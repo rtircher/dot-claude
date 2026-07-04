@@ -85,7 +85,7 @@ prewarm_log="${TMPDIR:-/tmp}/plugin-prewarm.log"
 # before the rescue below overwrites it. Best-effort; never blocks the session.
 if [ -f "$prewarm_log" ] && grep -q "failed" "$prewarm_log" 2>/dev/null; then
   printf "\n## Cloud-parity prewarm had failures\n\n"
-  printf "The previous session's plugin rescue logged a failure, so some marketplace/plugin clones may be missing. See \`%s\`, or run \`scripts/cloud-plugin-doctor.sh\`.\n\n" "$prewarm_log"
+  printf "The previous session's plugin rescue logged a failure, so some marketplace/plugin clones may be missing. See \`%s\`, or run \`.claude/cloud/cloud-plugin-doctor.sh\`.\n\n" "$prewarm_log"
 fi
 
 # Plugin pre-warm rescue. The setup-script pre-warm only runs if claude is on PATH at
@@ -93,10 +93,10 @@ fi
 # session via the recipe-driven ensure-plugins.sh (idempotent; logs to a file, never
 # our stdout). Run DETACHED so it never blocks session start; setsid gives it a real
 # new session that survives a process-group teardown mid-fetch, with a nohup fallback.
-if command -v claude >/dev/null 2>&1 && [ -x "$repo_root/scripts/ensure-plugins.sh" ]; then
+if command -v claude >/dev/null 2>&1 && [ -x "$repo_root/.claude/cloud/ensure-plugins.sh" ]; then
   if command -v setsid >/dev/null 2>&1; then
-    setsid -f bash "$repo_root/scripts/ensure-plugins.sh" </dev/null >"$prewarm_log" 2>&1 || true
+    setsid -f bash "$repo_root/.claude/cloud/ensure-plugins.sh" </dev/null >"$prewarm_log" 2>&1 || true
   else
-    ( nohup bash "$repo_root/scripts/ensure-plugins.sh" </dev/null >"$prewarm_log" 2>&1 & ) 2>/dev/null || true
+    ( nohup bash "$repo_root/.claude/cloud/ensure-plugins.sh" </dev/null >"$prewarm_log" 2>&1 & ) 2>/dev/null || true
   fi
 fi

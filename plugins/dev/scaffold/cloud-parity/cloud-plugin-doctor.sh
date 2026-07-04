@@ -2,14 +2,14 @@
 #
 # cloud-plugin-doctor: report whether the marketplace plugins this repo relies on
 # are actually present/loadable in the current session. Driven by the same
-# scripts/cloud-parity-recipes file ensure-plugins.sh uses, so the check list never
+# .claude/cloud/cloud-parity-recipes file ensure-plugins.sh uses, so the check list never
 # hardcodes a plugin set. Informational only: always exits 0.
 
 set -uo pipefail
 
 claude_dir="${HOME:-}/.claude/plugins"
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-recipes="$repo_root/scripts/cloud-parity-recipes"
+recipes="$repo_root/.claude/cloud/cloud-parity-recipes"
 
 found() { [ -d "$claude_dir" ] && [ -n "$(find "$claude_dir" -maxdepth 8 -path "$1" -type f -print 2>/dev/null | head -1)" ]; }
 marketplace_glob() { printf '*%s*' "${1##*/}"; }
@@ -73,7 +73,7 @@ if [ "$missing" = 0 ]; then
   echo "         it's an enablement issue, not a missing clone; check the list above."
 else
   echo "Verdict: one or more clones are MISSING. The SessionStart hook runs"
-  echo "         scripts/ensure-plugins.sh (detached) to re-fetch them in-session;"
+  echo "         .claude/cloud/ensure-plugins.sh (detached) to re-fetch them in-session;"
   echo "         check \$TMPDIR/plugin-prewarm.log. On a cold cloud session, also"
   echo "         confirm the setup script was pasted into the environment."
 fi
