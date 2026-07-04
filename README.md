@@ -41,7 +41,7 @@ The `dev` plugin carries the canonical **cloud-session-parity seed** (under
 `plugins/dev/scaffold/cloud-parity/`) plus a `/dev:init-cloud-parity` scaffold that
 vendors it into a consumer repo, so cloud (web) sessions behave like local ones:
 apt fixes, a lazy toolchain hook, an in-session plugin rescue, a conventions
-backstop, and a doctor. The generic `cloud-setup.sh` also calls an OPTIONAL
+backstop, a git-identity warning, and a doctor. The generic `cloud-setup.sh` also calls an OPTIONAL
 repo-authored `scripts/cloud-setup-local.sh` for work that needs root at
 container-build time (apt system packages, a native build toolchain), so the
 vendored setup script stays byte-identical while repo-specific root setup lives in
@@ -53,6 +53,13 @@ consumer's clone.
   the seed. It merges `.claude/settings.json` conservatively (owns only
   `extraKnownMarketplaces` plus a touch-if-absent SessionStart hook) and writes a
   starter recipe file.
+- Set all four of `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_NAME`/
+  `GIT_COMMITTER_EMAIL` in each cloud environment's env vars — cloud containers
+  boot with the harness git identity, and git honors these vars natively, so
+  commits are authored as the human with no scaffolding involved (author vars
+  alone leave the committer field as the harness). The seed's SessionStart hook
+  only warns in the repo pulse when the vars are missing. The identity
+  deliberately lives in the environment settings, never in a repo.
 - `init-cloud-parity.sh --check` is the network-free drift gate: it flags a vendored
   copy that differs from the canonical seed and warns when `enabledPlugins` names a
   plugin with no clone recipe.
