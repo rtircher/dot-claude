@@ -158,6 +158,19 @@ consent stop never applies. The leaderboard churns quarterly — treat these as
 defaults to reach for, not gospel; when a run matters, check what the named
 family's current flagship is rather than assuming this table is fresh.
 
+**Cloud sessions: skip the local-model path.** In a remote session (Claude Code
+on the web), local models are usually impractical: the container is CPU-only
+(a 7-8B model crawls; the table's flagships won't run at all), ephemeral (the
+multi-GB weights re-download every session), and the network policy typically
+blocks the model registries (ollama.com, huggingface.co) outright. Prefer a
+hosted API there — the shipped script plus a key in the environment's env vars,
+with the vendor's domain allowed by the environment's network policy. The
+privacy case for local is also moot in the cloud: the repo already lives in the
+session container, so in-container Ollama keeps the no-egress property but
+protects nothing the session hasn't already seen. Reserve the local-model path
+for sessions on a real machine (GPU or Apple Silicon, persistent disk, code
+that never left home).
+
 **Get consent before any artifact leaves the environment.** Enlisting a
 third-party model sends the reviewed diff or document to an external vendor's API
 (OpenAI for Codex, Cursor for `cursor-agent`, whatever provider OpenCode or the
@@ -268,7 +281,9 @@ name the cheapest paths to a cross-family reviewer next time, drawn from the
 model-family table above. Typically: the shipped script needs only `node` plus
 an API key for any hosted family in the table, or Ollama pulling a local
 open-weight model (no key, no consent stop); `/codex:setup` installs and
-authenticates Codex. One or two sentences, not a tutorial.
+authenticates Codex. Match the hint to the environment: in a cloud session,
+suggest hosted keys, not Ollama (see the cloud-session note above). One or two
+sentences, not a tutorial.
 
 **Bind every third-party run to the same artifact.** Give the reviewer the
 identical target the Claude panel is reviewing: the file path or `base...HEAD`
