@@ -72,6 +72,18 @@ non-trivial questions about the code:
   reverts into their target. Never cite commit short-hashes in docs or PR bodies
   (rebases churn them). Before deleting branches/worktrees, verify merge status
   (including squash-merges); never remove the worktree the session runs inside.
+- **Commits are authored as the human, never the harness.** Cloud containers boot
+  with the harness git identity (`Claude <noreply@anthropic.com>`); the owner's
+  identity is deliberately never written into a repo. Each cloud environment
+  carries it instead, as env vars set once in the environment settings at
+  claude.ai/code: all four of `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
+  `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`. Git honors them natively, so
+  nothing else is needed; author vars alone leave the committer field as the
+  harness. Repos carrying the cloud-parity seed warn in the session-start pulse
+  when the vars are missing and the identity is the harness default; in that case
+  set a repo-local `user.name`/`user.email` before the first commit, asking
+  rather than guessing, and leave any deliberate identity alone. Required commit
+  trailers such as `Co-Authored-By` stay; only the author changes.
 - **Autonomous pipeline for low-risk features.** For a feature you flag as
   low-risk, the `dev` plugin's `/autonomous-feature` skill runs spec →
   adversarial-review → plan → adversarial-review → implement → adversarial-review

@@ -40,6 +40,12 @@ After running, with the user:
    rather than caching a broken image, so mark a genuinely best-effort step (e.g.
    Chrome) with `|| echo WARN` inside the hook itself.
 5. Paste `.claude/cloud-setup.sh` into the cloud environment's Setup script field.
+6. Set all four of `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` and `GIT_COMMITTER_NAME`/
+   `GIT_COMMITTER_EMAIL` in the cloud environment's env vars, so commits are
+   authored as the human, never the harness. Git honors them natively (author
+   vars alone leave the committer field as the harness); the vendored
+   SessionStart hook only warns in the repo pulse when the vars are missing.
+   Remind the user of this step whenever the seed is vendored or re-synced.
 
 **Trust boundary:** `scripts/cloud-parity-recipes` drives `claude plugin marketplace add`
 / `install` of whatever it names, on every cold session, detached. Treat it like any

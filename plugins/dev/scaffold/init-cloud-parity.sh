@@ -74,6 +74,10 @@ vendor() {
   echo "  - If this repo has a toolchain, add scripts/ensure-<tool>.sh modeled on"
   echo "    race_engineer's scripts/ensure-flutter.sh, wired as a Makefile prerequisite."
   echo "  - Paste .claude/cloud-setup.sh into the cloud environment's Setup script field."
+  echo "  - Set all four of GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL and GIT_COMMITTER_NAME/"
+  echo "    GIT_COMMITTER_EMAIL in the cloud environment's env vars so commits are authored"
+  echo "    as you, never the harness. Git honors them natively; the SessionStart hook only"
+  echo "    warns in the repo pulse when they are missing."
 }
 
 merge_settings() {

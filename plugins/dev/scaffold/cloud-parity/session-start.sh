@@ -18,6 +18,19 @@ if [ -x "$repo_root/scripts/git-hooks/pre-commit" ] \
   git -C "$repo_root" config core.hooksPath scripts/git-hooks 2>/dev/null || true
 fi
 
+# Commits are authored as the human, never the harness. The owner's identity is
+# deliberately not written anywhere in the repo: it lives in the cloud
+# environment's env vars (GIT_AUTHOR_*/GIT_COMMITTER_*), which git honors
+# natively, so there is nothing to configure here. Only warn when neither those
+# vars nor a deliberate git identity are present, so mis-attributed commits
+# surface at session start rather than in the log.
+identity_note=""
+effective_email=$(git -C "$repo_root" config --get user.email 2>/dev/null || true)
+if { [ -z "$effective_email" ] || [ "$effective_email" = "noreply@anthropic.com" ]; } \
+   && [ -z "${GIT_AUTHOR_EMAIL:-}" ]; then
+  identity_note="harness default; set GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL and GIT_COMMITTER_NAME/GIT_COMMITTER_EMAIL in the cloud environment's env vars (or a repo-local user.name/user.email) before committing"
+fi
+
 branch=$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
 status=$(git -C "$repo_root" status --short 2>/dev/null | head -20)
 recent=$(git -C "$repo_root" log -5 --oneline --no-decorate 2>/dev/null)
@@ -25,6 +38,9 @@ worktrees=$(git -C "$repo_root" worktree list 2>/dev/null | tail -n +2)
 
 printf "## Repo pulse\n\n"
 printf "Branch: \`%s\`\n\n" "$branch"
+if [ -n "$identity_note" ]; then
+  printf "Git identity: %s\n\n" "$identity_note"
+fi
 if [ -n "$status" ]; then
   printf "Working tree (truncated to 20):\n\`\`\`\n%s\n\`\`\`\n\n" "$status"
 else
