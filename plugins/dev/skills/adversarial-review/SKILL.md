@@ -129,14 +129,48 @@ the panel rather than instead of it. Enlisting one is optional, gated on
 availability and on the user's consent; a missing third-party tool never blocks
 the Claude panel.
 
+**Independence lives in the model family, not the harness.** Codex CLI is
+hardwired to OpenAI models, so running it automatically means a cross-family
+vote. Provider-agnostic harnesses (OpenCode, the shipped reviewer script) add
+independence only through the model they are pointed at: one of them running a
+Claude model is not a third-party reviewer, and must not be counted as
+cross-family corroboration in step 6. Always pin a non-Claude model explicitly,
+and record the *model family* that ran — not the tool name — in the private
+source bookkeeping.
+
+**Picking the model — major non-Claude families (as of mid-2026).** Any of
+these counts as a cross-family vote; prefer whichever the user already has
+access to.
+
+| Family | Cloud | Local (Ollama / vLLM) |
+|--------|-------|------------------------|
+| OpenAI | GPT-5.5 (what Codex runs; also reachable from OpenCode or the reviewer script via the OpenAI API) | — |
+| Google | Gemini 3.1 Pro | — |
+| xAI | Grok 4.3 | — |
+| Zhipu | GLM-5.2 (hosted API) | GLM-5.x open weights |
+| Moonshot | Kimi K2.6 (hosted API) | K2.x open weights |
+| DeepSeek | DeepSeek V4 (hosted API) | V4 open weights |
+| Alibaba | Qwen 3.6 Plus (hosted API) | Qwen3-Coder |
+
+On modest local hardware, a small coder model (e.g. Qwen 3.6 27B or Devstral
+Small 2) is still an independent read: weaker, but fully on-machine, so the
+consent stop never applies. The leaderboard churns quarterly — treat these as
+defaults to reach for, not gospel; when a run matters, check what the named
+family's current flagship is rather than assuming this table is fresh.
+
 **Get consent before any artifact leaves the environment.** Enlisting a
 third-party model sends the reviewed diff or document to an external vendor's API
-(OpenAI for Codex, Cursor for `cursor-agent`). Before running one, confirm with
+(OpenAI for Codex, Cursor for `cursor-agent`, whatever provider OpenCode or the
+reviewer script is configured with — name the actual destination, not the tool).
+Before running one, confirm with
 the user and name where the artifact goes, especially for private repos,
 proprietary code, or diffs that may carry secrets or tenant data. Offer to redact
 sensitive parts or to skip. If the user does not approve, run the Claude panel
 only and report it as Claude-only. Never send an artifact to a third party
-silently. Consent can be granted ahead of time: if an orchestrator or invocation
+silently. Exception: a reviewer bound to a local model (e.g. OpenCode or the
+reviewer script pointed at Ollama on localhost) sends nothing off the machine,
+so the consent stop does not apply — still report which model ran and that it
+was local. Consent can be granted ahead of time: if an orchestrator or invocation
 flag has pre-authorized third-party review for this run, treat that as the
 confirmation, skip the interactive ask, and enlist the available reviewer
 directly, still reporting in the output that it ran and where the artifact went.
@@ -175,6 +209,66 @@ Find what is wrong, not what is fine." < /path/to/artifact.diff
 Omit `--force` so it can only report, never edit. Requires `cursor-agent` on
 PATH and `CURSOR_API_KEY` set. Check `command -v cursor-agent` first and skip
 this reviewer if it is absent.
+
+**OpenCode (open-source, provider-agnostic).** OpenCode's headless mode makes it
+a one-shot reviewer against any provider it is configured with, including local
+models. Because it is provider-agnostic, the model must be pinned explicitly to
+a non-Claude family (see "Independence lives in the model family" above), and it
+must be run read-only — OpenCode is a full editing agent by default, so use its
+read-only plan agent (or a permissions config denying writes). Same stdin rule
+as Cursor: instructions on the command line, artifact on stdin.
+
+```bash
+opencode run --agent plan --model openai/gpt-5 --format json \
+  "Adversarially review the diff on stdin. Find what is wrong, not what is fine." \
+  < /path/to/artifact.diff
+```
+
+Verify flags against `opencode run --help` — the CLI evolves quickly. Requires
+`opencode` on PATH with the target provider authenticated; check
+`command -v opencode` first and skip this reviewer if absent. For consent, name
+the provider the pinned model resolves to, not "OpenCode". Pointed at a local
+model (e.g. `ollama/qwen3-coder`), the artifact never leaves the machine and the
+consent stop does not apply.
+
+**Shipped reviewer script (no harness at all).** This skill ships
+`scripts/external-review.mjs` (resolve it relative to this SKILL.md), a
+dependency-free Node script that sends the artifact on stdin to any
+OpenAI-compatible chat-completions endpoint — hosted or local — with the
+adversarial framing baked in, and prints findings in the exact schema the
+workflow synthesizes. It is read-only by construction (no tools, no filesystem
+access), refuses Claude-family models unless overridden, refuses oversized
+artifacts instead of silently truncating, and echoes back the `--target` binding
+plus a sha256 digest of what it reviewed — which satisfies this step's
+artifact-binding requirement mechanically.
+
+```bash
+git diff main...HEAD | \
+  EXTERNAL_REVIEW_MODEL=gpt-5 EXTERNAL_REVIEW_API_KEY=... \
+  node <skill-dir>/scripts/external-review.mjs \
+    --type diff --target "main...HEAD @ $(git rev-parse --short HEAD)"
+```
+
+Point `EXTERNAL_REVIEW_BASE_URL` at `http://localhost:11434/v1` for Ollama (no
+API key needed for local endpoints). Requires only `node` (≥ 18) and a
+reachable endpoint; prefer it when Codex/OpenCode are absent, when the user
+wants structured output folded straight into synthesis, or when the review must
+stay on-machine via a local model.
+
+When several third-party options are available, prefer Codex (first-party
+plugin, owns its auth), then the shipped script (structured output, mechanical
+artifact binding), then OpenCode/Cursor. One third-party reviewer is enough; a
+second adds little once cross-family corroboration is possible.
+
+**External review requested but no reviewer can run.** When the user asked for
+external review and none of the four options is available (tool missing,
+unauthenticated, or errored), run the Claude panel as always, report it as
+Claude-only — and close with a short setup hint instead of a bare "unavailable":
+name the cheapest paths to a cross-family reviewer next time, drawn from the
+model-family table above. Typically: the shipped script needs only `node` plus
+an API key for any hosted family in the table, or Ollama pulling a local
+open-weight model (no key, no consent stop); `/codex:setup` installs and
+authenticates Codex. One or two sentences, not a tutorial.
 
 **Bind every third-party run to the same artifact.** Give the reviewer the
 identical target the Claude panel is reviewing: the file path or `base...HEAD`
@@ -239,7 +333,10 @@ Present to the user:
 - **The panel that actually voted**: how many reviewers were dispatched, how many
   returned, and which (if any) were dropped because a tool was missing,
   unauthenticated, or errored mid-run. State this up front so the user knows the
-  weight behind the verdict — never imply a fuller panel than voted.
+  weight behind the verdict — never imply a fuller panel than voted. If the user
+  asked for external review and no third-party reviewer could run, append the
+  setup hint from step 5 (the cheapest paths to a cross-family reviewer, per the
+  model-family table there).
 - The deduped, severity-ranked objection list, leading with verified findings;
   group speculative ones after so the user can skim them separately. Each entry
   carries its corroboration (how many independent reviewers / lenses, cross-family
@@ -263,9 +360,12 @@ that's a separate task.
   message, never feed one reviewer's output to the next.
 - **Reinventing code review.** For diffs, delegate to `/code-review`. Don't
   rebuild it here.
-- **Phantom third-party review.** Never imply Codex or Cursor weighed in when the
-  tool was unavailable or unauthenticated. Report the panel as Claude-only
-  instead.
+- **Phantom third-party review.** Never imply a third-party reviewer (Codex,
+  Cursor, OpenCode, the shipped script) weighed in when the tool was unavailable,
+  unauthenticated, or errored. Report the panel as Claude-only instead.
+- **Same-family "third party".** A provider-agnostic harness running a Claude
+  model is not an independent reviewer and never counts as cross-family
+  corroboration. Independence is the model family, not the tool name.
 - **Prestige-weighted scoring.** Don't let a finding's rank ride on which model
   raised it. Score blind to model identity; the signal is corroboration count and
   cross-family agreement, not the brand name attached to a finding.
