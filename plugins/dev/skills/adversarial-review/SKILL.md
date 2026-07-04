@@ -138,6 +138,26 @@ cross-family corroboration in step 6. Always pin a non-Claude model explicitly,
 and record the *model family* that ran — not the tool name — in the private
 source bookkeeping.
 
+**Picking the model — major non-Claude families (as of mid-2026).** Any of
+these counts as a cross-family vote; prefer whichever the user already has
+access to.
+
+| Family | Cloud | Local (Ollama / vLLM) |
+|--------|-------|------------------------|
+| OpenAI | GPT-5.5 (what Codex runs; also reachable from OpenCode or the reviewer script via the OpenAI API) | — |
+| Google | Gemini 3.1 Pro | — |
+| xAI | Grok 4.3 | — |
+| Zhipu | GLM-5.2 (hosted API) | GLM-5.x open weights |
+| Moonshot | Kimi K2.6 (hosted API) | K2.x open weights |
+| DeepSeek | DeepSeek V4 (hosted API) | V4 open weights |
+| Alibaba | Qwen 3.6 Plus (hosted API) | Qwen3-Coder |
+
+On modest local hardware, a small coder model (e.g. Qwen 3.6 27B or Devstral
+Small 2) is still an independent read: weaker, but fully on-machine, so the
+consent stop never applies. The leaderboard churns quarterly — treat these as
+defaults to reach for, not gospel; when a run matters, check what the named
+family's current flagship is rather than assuming this table is fresh.
+
 **Get consent before any artifact leaves the environment.** Enlisting a
 third-party model sends the reviewed diff or document to an external vendor's API
 (OpenAI for Codex, Cursor for `cursor-agent`, whatever provider OpenCode or the
