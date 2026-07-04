@@ -141,8 +141,10 @@ Perform a rigorous code review of ${range}. Run \`${gitPrefix(art)} diff ${art.d
 }
 
 function thirdPartyReviewer(art) {
-  // SEAM: production wiring invokes the codex plugin (/codex:adversarial-review)
-  // or cursor-agent, a genuinely different model family. Consent is the caller's
+  // SEAM: production wiring invokes a genuinely different model family — the
+  // codex plugin (/codex:adversarial-review), the skill's scripts/external-review.mjs
+  // (any OpenAI-compatible endpoint, returns this exact schema), OpenCode pinned
+  // to a non-Claude model, or cursor-agent. Consent is the caller's
   // job (the `external-review` pre-authorization). It runs on the SAME artifact
   // with the SAME framing and returns the SAME schema, so it folds into synthesis
   // as one more independent vote and lights up cross-family corroboration.

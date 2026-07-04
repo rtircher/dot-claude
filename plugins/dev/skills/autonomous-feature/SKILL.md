@@ -44,8 +44,11 @@ plan, etc.). Mid-phase, both modes behave identically.
 ## Third-party review (`external-review` argument)
 
 The adversarial-review phases default to Claude-only. Enlisting a third-party
-model (Codex via the `codex` plugin, or Cursor) sends the reviewed artifact to an
-external API, which the ping contract below treats as a stop-and-ask. Pass
+model (Codex via the `codex` plugin, Cursor, OpenCode, or the adversarial-review
+skill's shipped reviewer script) sends the reviewed artifact to an
+external API, which the ping contract below treats as a stop-and-ask. (A
+reviewer pinned to a local model sends nothing off-machine and needs no
+pre-authorization; the adversarial-review skill covers this.) Pass
 `external-review` to pre-authorize that for the whole run: `/autonomous-feature external-review`,
 or combined with the gate, `/autonomous-feature pause external-review`. Then every
 adversarial-review phase enlists the available third-party model (Codex
