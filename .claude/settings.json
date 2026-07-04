@@ -1,0 +1,26 @@
+{
+  "enabledPlugins": {
+    "conventions@dot-claude": true,
+    "dev@dot-claude": true
+  },
+  "extraKnownMarketplaces": {
+    "dot-claude": {
+      "source": {
+        "source": "github",
+        "repo": "rtircher/dot-claude"
+      }
+    }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/cloud/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
