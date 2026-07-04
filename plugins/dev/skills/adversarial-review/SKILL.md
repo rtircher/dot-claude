@@ -260,6 +260,16 @@ plugin, owns its auth), then the shipped script (structured output, mechanical
 artifact binding), then OpenCode/Cursor. One third-party reviewer is enough; a
 second adds little once cross-family corroboration is possible.
 
+**External review requested but no reviewer can run.** When the user asked for
+external review and none of the four options is available (tool missing,
+unauthenticated, or errored), run the Claude panel as always, report it as
+Claude-only — and close with a short setup hint instead of a bare "unavailable":
+name the cheapest paths to a cross-family reviewer next time, drawn from the
+model-family table above. Typically: the shipped script needs only `node` plus
+an API key for any hosted family in the table, or Ollama pulling a local
+open-weight model (no key, no consent stop); `/codex:setup` installs and
+authenticates Codex. One or two sentences, not a tutorial.
+
 **Bind every third-party run to the same artifact.** Give the reviewer the
 identical target the Claude panel is reviewing: the file path or `base...HEAD`
 range (or PR), the same focus and out-of-scope exclusions, and a pinned commit
@@ -323,7 +333,10 @@ Present to the user:
 - **The panel that actually voted**: how many reviewers were dispatched, how many
   returned, and which (if any) were dropped because a tool was missing,
   unauthenticated, or errored mid-run. State this up front so the user knows the
-  weight behind the verdict — never imply a fuller panel than voted.
+  weight behind the verdict — never imply a fuller panel than voted. If the user
+  asked for external review and no third-party reviewer could run, append the
+  setup hint from step 5 (the cheapest paths to a cross-family reviewer, per the
+  model-family table there).
 - The deduped, severity-ranked objection list, leading with verified findings;
   group speculative ones after so the user can skim them separately. Each entry
   carries its corroboration (how many independent reviewers / lenses, cross-family
