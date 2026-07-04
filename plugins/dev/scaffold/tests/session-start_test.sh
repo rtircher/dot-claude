@@ -53,4 +53,22 @@ printf "ensure-plugins: done\n" > "$work/plugin-prewarm.log"
 out="$(run 2>&1)"
 assert_not_contains "$out" "prewarm had failures" "no summary when prior log is clean"
 
+echo "case: harness-default identity, no GIT_AUTHOR_* -> warning in pulse, config untouched"
+# HOME is the fake home, so no global git config leaks into the hook's reads.
+git -C "$repo" config user.name "Claude"
+git -C "$repo" config user.email "noreply@anthropic.com"
+out="$(run 2>&1)"
+assert_contains "$out" "Git identity: harness default" "warning surfaced in pulse"
+assert_eq "$(git -C "$repo" config --local --get user.email)" "noreply@anthropic.com" "hook never rewrites config"
+
+echo "case: GIT_AUTHOR_* set in the environment -> no warning (git honors the vars natively)"
+out="$(GIT_AUTHOR_NAME="Owner O" GIT_AUTHOR_EMAIL="owner@example.com" run 2>&1)"
+assert_not_contains "$out" "Git identity:" "no warning when the env vars are present"
+
+echo "case: deliberate identity -> no warning"
+git -C "$repo" config user.name "Someone Else"
+git -C "$repo" config user.email "someone@example.com"
+out="$(run 2>&1)"
+assert_not_contains "$out" "Git identity:" "no warning when identity is deliberate"
+
 finish "session-start"
