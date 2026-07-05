@@ -11,8 +11,9 @@
 #
 # The scaffold owns ONLY .claude/settings.json's extraKnownMarketplaces + a
 # touch-if-absent SessionStart hook entry; it never edits enabledPlugins,
-# permissions, or other hooks. The recipe file and any ensure-<tool>.sh are
-# repo-authored: a starter recipe file is written only when absent.
+# permissions, or other hooks. The recipe file, the optional
+# .claude/cloud/ensure-tools.sh toolchain delegator, and the scripts/ensure-*.sh
+# installers it calls are repo-authored: a starter recipe file is written only when absent.
 #
 # Layout: every cloud-parity artifact lives under .claude/cloud/ (the seed scripts,
 # the authored recipe list, and the optional repo hooks). A repo vendored under the
@@ -49,6 +50,17 @@ declare -a LEGACY_AUTHORED=(
   "scripts/cloud-parity-recipes:$RECIPES_REL"
   "scripts/cloud-setup-local.sh:$CLOUD_DIR/cloud-setup-local.sh"
 )
+
+# Reserved repo-only names: repo-authored files that are never SEED_FILES
+# destinations, so vendoring never stamps or overwrites them and --check never
+# flags them. The allowlist design above already leaves anything not in SEED_FILES
+# or LEGACY_* untouched; listed here so the reservation is explicit:
+#   .claude/cloud/cloud-setup-local.sh  optional root-at-build-time setup hook
+#   .claude/cloud/ensure-tools.sh       optional toolchain delegator that calls the
+#                                       repo's own scripts/ensure-*.sh installers
+# The real installers stay in scripts/ (next to the Makefile targets that wire them);
+# .claude/cloud/ holds only the thin delegator, so cloud scaffolding references repo
+# tools, never the reverse.
 
 die() { echo "init-cloud-parity: $*" >&2; exit 1; }
 
@@ -124,8 +136,10 @@ vendor() {
   echo "  - Edit $RECIPES_REL to list this repo's plugins."
   echo "  - Add matching enabledPlugins entries to .claude/settings.json (the scaffold"
   echo "    does not touch enabledPlugins). Run --check to confirm they agree."
-  echo "  - If this repo has a toolchain, add $CLOUD_DIR/ensure-<tool>.sh modeled on"
-  echo "    race_engineer's ensure-flutter.sh, wired as a Makefile prerequisite."
+  echo "  - If this repo has a toolchain, keep each installer in scripts/ (wired as a"
+  echo "    Makefile prerequisite) and add a repo-authored $CLOUD_DIR/ensure-tools.sh that"
+  echo "    delegates to them, one line per tool (race_engineer: $CLOUD_DIR/ensure-tools.sh"
+  echo "    calls scripts/ensure-flutter.sh)."
   echo "  - Paste $CLOUD_DIR/cloud-setup.sh into the cloud environment's Setup script field."
   echo "  - Set all four of GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL and GIT_COMMITTER_NAME/"
   echo "    GIT_COMMITTER_EMAIL in the cloud environment's env vars so commits are authored"

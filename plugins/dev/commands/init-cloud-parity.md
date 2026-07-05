@@ -23,7 +23,7 @@ A repo vendored under the older layout (`scripts/*`, `.claude/cloud-setup.sh`) i
 automatically on the next vendor: authored files (`cloud-parity-recipes`, `cloud-setup-local.sh`)
 move into `.claude/cloud/`, the old seed copies are removed and re-vendored there, and a stale
 SessionStart hook entry is rewritten to `.claude/cloud/session-start.sh`. `--check` reports any
-leftover as `[LEGACY]`. Repos also relocate their `ensure-<tool>.sh` by hand (see step 3).
+leftover as `[LEGACY]`. Toolchain installers stay in `scripts/` and are not migrated (see step 3).
 
 After running, with the user:
 1. Edit `.claude/cloud/cloud-parity-recipes` to list this repo's plugins (`marketplace-add` /
@@ -31,18 +31,23 @@ After running, with the user:
 2. Add matching `enabledPlugins` entries to `.claude/settings.json` (the scaffold
    deliberately does not touch this). Run `--check` to confirm recipes and
    `enabledPlugins` agree.
-3. If the repo has a toolchain, add `.claude/cloud/ensure-<tool>.sh` (a userspace
-   toolchain installer), wired as a Makefile prerequisite. That runs in-session as the
-   non-root session user, so it only covers userspace.
+3. If the repo has a toolchain, keep each real installer in `scripts/` (e.g.
+   `scripts/ensure-flutter.sh`), wired as a Makefile prerequisite, and add a
+   repo-authored `.claude/cloud/ensure-tools.sh` that delegates to them, one line
+   per tool. Repo tooling references repo tooling (the Makefile targets sit next to
+   the installers), while cloud scaffolding references repo tools, never the reverse.
+   `ensure-tools.sh` runs in-session as the non-root session user, so it only covers
+   userspace. Reference: race_engineer's `.claude/cloud/ensure-tools.sh` delegating to
+   `scripts/ensure-flutter.sh`.
 4. If setup needs ROOT at container-build time (apt system packages, a native build
    toolchain, frozen installs), add an OPTIONAL `.claude/cloud/cloud-setup-local.sh`. The
    generic `cloud-setup.sh` calls it (by path, at `$PWD`) after its apt-fix and
    marketplace pre-warm; a repo that needs nothing ships none. This keeps the
    vendored `cloud-setup.sh` byte-identical (so `--check` stays clean) while the
    repo-specific root work lives in a repo-authored file the scaffold never touches
-   (`cloud-setup-local.sh` is a reserved repo-only name: it is never a `SEED_FILES`
-   destination, so vendoring never stamps or overwrites it and `--check` never flags
-   it). Failures there are NOT swallowed: a real install error fails setup loudly
+   (`cloud-setup-local.sh` and `.claude/cloud/ensure-tools.sh` are reserved repo-only
+   names: neither is ever a `SEED_FILES` destination, so vendoring never stamps or
+   overwrites them and `--check` never flags them). Failures there are NOT swallowed: a real install error fails setup loudly
    rather than caching a broken image, so mark a genuinely best-effort step (e.g.
    Chrome) with `|| echo WARN` inside the hook itself.
 5. Paste `.claude/cloud/cloud-setup.sh` into the cloud environment's Setup script field.
