@@ -12,9 +12,9 @@ home="$(make_fake_home "$work/home")"
 bin="$work/bin"; log="$work/claude.log"; : > "$log"
 make_fake_claude "$bin" "$log"
 
-repo="$work/repo"; mkdir -p "$repo/scripts"
+repo="$work/repo"; mkdir -p "$repo/.claude/cloud"
 git -C "$repo" init -q
-printf '%s\n' "marketplace-add rtircher/dot-claude" "install superpowers@claude-plugins-official" > "$repo/scripts/cloud-parity-recipes"
+printf '%s\n' "marketplace-add rtircher/dot-claude" "install superpowers@claude-plugins-official" > "$repo/.claude/cloud/cloud-parity-recipes"
 
 run() { HOME="$home" PATH="$bin:$PATH" bash -c "cd '$repo' && bash '$script'"; }
 
@@ -49,14 +49,14 @@ assert_contains "$(cat "$log")" "plugin install superpowers@claude-plugins-offic
 echo "case: last recipe line without trailing newline still fires"
 : > "$log"
 rm -rf "$home/.claude/plugins/cache"; mkdir -p "$home/.claude/plugins/cache"
-printf 'marketplace-add rtircher/dot-claude' > "$repo/scripts/cloud-parity-recipes"   # no trailing newline
+printf 'marketplace-add rtircher/dot-claude' > "$repo/.claude/cloud/cloud-parity-recipes"   # no trailing newline
 run >/dev/null 2>&1
 assert_contains "$(cat "$log")" "plugin marketplace add rtircher/dot-claude" "last recipe processed without trailing newline"
 
 echo "case: another run holds the lock -> skip without cloning (flock present)"
 if command -v flock >/dev/null 2>&1; then
   : > "$log"; rm -rf "$home/.claude/plugins/cache"; mkdir -p "$home/.claude/plugins/cache"
-  printf 'marketplace-add rtircher/dot-claude\n' > "$repo/scripts/cloud-parity-recipes"
+  printf 'marketplace-add rtircher/dot-claude\n' > "$repo/.claude/cloud/cloud-parity-recipes"
   # Hold the advisory lock from this shell (fd 8); the script's own fd 9 must be denied.
   exec 8>"$home/.claude/plugins/.ensure-plugins.lock"; flock -n 8 || echo "  WARN: test could not pre-acquire lock"
   out="$(run 2>&1)"
@@ -69,7 +69,7 @@ fi
 
 echo "case: recipe token with a glob metachar is skipped; valid recipe still fires"
 : > "$log"; rm -rf "$home/.claude/plugins/cache"; mkdir -p "$home/.claude/plugins/cache"
-printf '%s\n' 'install superpowers@bad*market' 'marketplace-add rtircher/dot-claude' > "$repo/scripts/cloud-parity-recipes"
+printf '%s\n' 'install superpowers@bad*market' 'marketplace-add rtircher/dot-claude' > "$repo/.claude/cloud/cloud-parity-recipes"
 out="$(run 2>&1)"
 assert_contains "$out" "invalid token" "bad token warned"
 assert_not_contains "$(cat "$log")" "bad*market" "bad install not attempted"
@@ -77,7 +77,7 @@ assert_contains "$(cat "$log")" "plugin marketplace add rtircher/dot-claude" "va
 
 echo "case: no recipe file -> no-op"
 : > "$log"
-rm -f "$repo/scripts/cloud-parity-recipes"
+rm -f "$repo/.claude/cloud/cloud-parity-recipes"
 out="$(run 2>&1)"
 assert_contains "$out" "no recipe file" "missing recipe file is a clean no-op"
 assert_eq "$(cat "$log")" "" "no claude calls without recipes"

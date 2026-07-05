@@ -13,19 +13,41 @@
 # touch-if-absent SessionStart hook entry; it never edits enabledPlugins,
 # permissions, or other hooks. The recipe file and any ensure-<tool>.sh are
 # repo-authored: a starter recipe file is written only when absent.
+#
+# Layout: every cloud-parity artifact lives under .claude/cloud/ (the seed scripts,
+# the authored recipe list, and the optional repo hooks). A repo vendored under the
+# pre-.claude/cloud layout (scripts/*, .claude/cloud-setup.sh) is moved on its next
+# vendor by migrate_legacy; --check flags any leftover.
 
 set -euo pipefail
 
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"           # plugins/dev/scaffold
 seed_dir="$source_dir/cloud-parity"
-HOOK_CMD="scripts/claude-hooks/session-start.sh"
+CLOUD_DIR=".claude/cloud"
+RECIPES_REL="$CLOUD_DIR/cloud-parity-recipes"
+HOOK_CMD="$CLOUD_DIR/session-start.sh"
+LEGACY_HOOK_CMD="scripts/claude-hooks/session-start.sh"
 
 # Map a canonical seed file to its destination path inside a consumer repo.
 declare -a SEED_FILES=(
-  "cloud-setup.sh:.claude/cloud-setup.sh"
-  "session-start.sh:scripts/claude-hooks/session-start.sh"
-  "ensure-plugins.sh:scripts/ensure-plugins.sh"
-  "cloud-plugin-doctor.sh:scripts/cloud-plugin-doctor.sh"
+  "cloud-setup.sh:$CLOUD_DIR/cloud-setup.sh"
+  "session-start.sh:$CLOUD_DIR/session-start.sh"
+  "ensure-plugins.sh:$CLOUD_DIR/ensure-plugins.sh"
+  "cloud-plugin-doctor.sh:$CLOUD_DIR/cloud-plugin-doctor.sh"
+)
+
+# Pre-.claude/cloud vendored locations, for one-time migration and --check leftover
+# detection. Two classes: seed copies (deleted; re-vendored under $CLOUD_DIR fresh)
+# and authored data ("legacy:new", moved to preserve repo-authored content).
+declare -a LEGACY_SEED_COPIES=(
+  ".claude/cloud-setup.sh"
+  "scripts/claude-hooks/session-start.sh"
+  "scripts/ensure-plugins.sh"
+  "scripts/cloud-plugin-doctor.sh"
+)
+declare -a LEGACY_AUTHORED=(
+  "scripts/cloud-parity-recipes:$RECIPES_REL"
+  "scripts/cloud-setup-local.sh:$CLOUD_DIR/cloud-setup-local.sh"
 )
 
 die() { echo "init-cloud-parity: $*" >&2; exit 1; }
@@ -47,9 +69,39 @@ stamp_copy() {
   chmod +x "$dst"
 }
 
+# Move a repo off the pre-.claude/cloud layout: authored files are moved (content
+# preserved), seed copies are deleted (re-vendored fresh under $CLOUD_DIR). The stale
+# SessionStart hook entry is rewritten by merge_settings. Idempotent: a repo already
+# on the new layout has no legacy files, so this is a silent no-op.
+migrate_legacy() {
+  local target="$1" pair legacy new did=0
+  mkdir -p "$target/$CLOUD_DIR"
+  for pair in "${LEGACY_AUTHORED[@]}"; do
+    legacy="$target/${pair%%:*}"; new="$target/${pair#*:}"
+    [ -f "$legacy" ] || continue
+    if [ -f "$new" ]; then
+      rm -f "$legacy"; echo "  migrated: removed legacy ${pair%%:*} (kept existing ${pair#*:})"
+    else
+      mkdir -p "$(dirname "$new")"; mv "$legacy" "$new"
+      echo "  migrated: moved ${pair%%:*} -> ${pair#*:}"
+    fi
+    did=1
+  done
+  for legacy in "${LEGACY_SEED_COPIES[@]}"; do
+    if [ -f "$target/$legacy" ]; then
+      rm -f "$target/$legacy"; echo "  migrated: removed legacy $legacy (re-vendored under $CLOUD_DIR/)"; did=1
+    fi
+  done
+  # Prune the now-empty legacy hook dir; leave scripts/ itself (repos use it).
+  rmdir "$target/scripts/claude-hooks" 2>/dev/null || true
+  if [ "$did" -eq 1 ]; then echo "  (migrated pre-.claude/cloud layout into $CLOUD_DIR/)"; fi
+  return 0
+}
+
 vendor() {
   local target="$1" sha; sha="$(dot_claude_sha)"
   local pair src dst
+  migrate_legacy "$target"
   for pair in "${SEED_FILES[@]}"; do
     src="$seed_dir/${pair%%:*}"; dst="$target/${pair#*:}"
     [ -f "$src" ] || die "missing canonical seed file: $src"
@@ -57,23 +109,24 @@ vendor() {
     echo "  vendored ${pair#*:}"
   done
 
-  local recipes="$target/scripts/cloud-parity-recipes"
+  local recipes="$target/$RECIPES_REL"
   if [ -f "$recipes" ]; then
-    echo "  kept existing scripts/cloud-parity-recipes (authored data)"
+    echo "  kept existing $RECIPES_REL (authored data)"
   else
+    mkdir -p "$(dirname "$recipes")"
     cp "$seed_dir/cloud-parity-recipes.template" "$recipes"
-    echo "  wrote starter scripts/cloud-parity-recipes (edit to match this repo's plugins)"
+    echo "  wrote starter $RECIPES_REL (edit to match this repo's plugins)"
   fi
 
   merge_settings "$target"
   echo
   echo "Done. Next:"
-  echo "  - Edit scripts/cloud-parity-recipes to list this repo's plugins."
+  echo "  - Edit $RECIPES_REL to list this repo's plugins."
   echo "  - Add matching enabledPlugins entries to .claude/settings.json (the scaffold"
   echo "    does not touch enabledPlugins). Run --check to confirm they agree."
-  echo "  - If this repo has a toolchain, add scripts/ensure-<tool>.sh modeled on"
-  echo "    race_engineer's scripts/ensure-flutter.sh, wired as a Makefile prerequisite."
-  echo "  - Paste .claude/cloud-setup.sh into the cloud environment's Setup script field."
+  echo "  - If this repo has a toolchain, add $CLOUD_DIR/ensure-<tool>.sh modeled on"
+  echo "    race_engineer's ensure-flutter.sh, wired as a Makefile prerequisite."
+  echo "  - Paste $CLOUD_DIR/cloud-setup.sh into the cloud environment's Setup script field."
   echo "  - Set all four of GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL and GIT_COMMITTER_NAME/"
   echo "    GIT_COMMITTER_EMAIL in the cloud environment's env vars so commits are authored"
   echo "    as you, never the harness. Git honors them natively; the SessionStart hook only"
@@ -89,12 +142,20 @@ merge_settings() {
   tmp="$(mktemp)"
   # The idempotency guard matches BOTH the nested {hooks:[{command}]} form this
   # scaffold writes and a pre-existing FLAT {matcher,command} form a repo may have
-  # hand-authored, so re-runs never double-insert the hook.
-  jq --arg hook "$HOOK_CMD" '
+  # hand-authored, so re-runs never double-insert the hook. It also strips a stale
+  # legacy-path hook, at per-HOOK granularity: a flat legacy entry is dropped whole,
+  # but a nested entry keeps its other hooks and loses only the legacy one (the entry
+  # is dropped only if that empties it). A repo hook co-located with the legacy one in
+  # the same entry is therefore never destroyed.
+  jq --arg hook "$HOOK_CMD" --arg legacy "$LEGACY_HOOK_CMD" '
     .extraKnownMarketplaces = (.extraKnownMarketplaces // {})
     | .extraKnownMarketplaces["dot-claude"] //= {source:{source:"github", repo:"rtircher/dot-claude"}}
     | .hooks = (.hooks // {})
     | .hooks.SessionStart = (.hooks.SessionStart // [])
+    | .hooks.SessionStart = [ .hooks.SessionStart[]
+        | select(.command? != $legacy)
+        | if (.hooks | type) == "array" then .hooks |= map(select(.command? != $legacy)) else . end
+        | select(((.hooks | type) != "array") or ((.hooks | length) > 0)) ]
     | if any(.hooks.SessionStart[]?; (.command? == $hook) or (.hooks[]?.command? == $hook))
       then .
       else .hooks.SessionStart += [{hooks:[{type:"command", command:$hook}]}]
@@ -129,6 +190,15 @@ check_drift() {
       drift=1
     fi
   done
+  # Flag any pre-.claude/cloud leftover so a half-migrated repo can't pass silently.
+  local legacy pair2
+  for legacy in "${LEGACY_SEED_COPIES[@]}"; do
+    [ -e "$target/$legacy" ] && { echo "  [LEGACY]  $legacy still present (pre-.claude/cloud layout); re-run init-cloud-parity to migrate"; drift=1; }
+  done
+  for pair2 in "${LEGACY_AUTHORED[@]}"; do
+    legacy="${pair2%%:*}"
+    [ -e "$target/$legacy" ] && { echo "  [LEGACY]  $legacy still present (pre-.claude/cloud layout); re-run init-cloud-parity to migrate"; drift=1; }
+  done
   [ "$drift" -eq 0 ] || { echo "Drift detected. This is a blocking gate."; return 1; }
   echo "No drift vs the canonical seed."
 }
@@ -139,7 +209,7 @@ check_drift() {
 # or by 'marketplace-add */Y'.
 check_consistency() {
   local target="$1"
-  local f="$target/.claude/settings.json" recipes="$target/scripts/cloud-parity-recipes"
+  local f="$target/.claude/settings.json" recipes="$target/$RECIPES_REL"
   command -v jq >/dev/null 2>&1 || return 0
   [ -f "$f" ] || return 0
   local recipe_markets="" recipe_installs="" verb arg _rest key market issues=0

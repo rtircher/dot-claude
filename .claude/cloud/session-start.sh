@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# vendored from dot-claude @ 3185d0fb465d5024e3caeff5163c39a304e4b883. Re-sync with /dev:init-cloud-parity; do not edit here
 #
 # SessionStart hook: inject a short repo pulse, ensure the pre-commit hook is wired,
 # back-stop the conventions plugin if it didn't load, and detach the plugin rescue.

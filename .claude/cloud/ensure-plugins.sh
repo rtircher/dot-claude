@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# vendored from dot-claude @ 3185d0fb465d5024e3caeff5163c39a304e4b883. Re-sync with /dev:init-cloud-parity; do not edit here
 #
 # ensure-plugins: in-session clone of the marketplace plugins this repo needs, the
 # fallback for when the setup-script pre-warm didn't land them. Run DETACHED from the

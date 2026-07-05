@@ -41,8 +41,9 @@ The `dev` plugin carries the canonical **cloud-session-parity seed** (under
 `plugins/dev/scaffold/cloud-parity/`) plus a `/dev:init-cloud-parity` scaffold that
 vendors it into a consumer repo, so cloud (web) sessions behave like local ones:
 apt fixes, a lazy toolchain hook, an in-session plugin rescue, a conventions
-backstop, a git-identity warning, and a doctor. The generic `cloud-setup.sh` also calls an OPTIONAL
-repo-authored `scripts/cloud-setup-local.sh` for work that needs root at
+backstop, a git-identity warning, and a doctor. Every vendored artifact lives under
+`.claude/cloud/`. The generic `cloud-setup.sh` also calls an OPTIONAL repo-authored
+`.claude/cloud/cloud-setup-local.sh` for work that needs root at
 container-build time (apt system packages, a native build toolchain), so the
 vendored setup script stays byte-identical while repo-specific root setup lives in
 a file the scaffold never overwrites. dot-claude is the scaffold *source*, never a
