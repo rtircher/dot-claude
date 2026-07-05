@@ -8,10 +8,10 @@ script="$here/../cloud-parity/session-start.sh"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 home="$(make_fake_home "$work/home")"
 bin="$work/bin"; make_fake_claude "$bin" "$work/c.log"
-repo="$work/repo"; mkdir -p "$repo/scripts"; git -C "$repo" init -q
+repo="$work/repo"; mkdir -p "$repo/.claude/cloud"; git -C "$repo" init -q
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "init"
 # A no-op ensure-plugins so the detached rescue launches without doing real work.
-printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/scripts/ensure-plugins.sh"; chmod +x "$repo/scripts/ensure-plugins.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$repo/.claude/cloud/ensure-plugins.sh"; chmod +x "$repo/.claude/cloud/ensure-plugins.sh"
 
 run() { HOME="$home" TMPDIR="$work" PATH="$bin:$PATH" bash -c "cd '$repo' && bash '$script'"; }
 
@@ -43,7 +43,7 @@ assert_eq "${ok:-}" "1" "prewarm log created within 1s"
 
 echo "case: prior prewarm log with a failure -> summary surfaced next session"
 # Disable the rescue so its detached relaunch can't truncate the log we seed here.
-chmod -x "$repo/scripts/ensure-plugins.sh"
+chmod -x "$repo/.claude/cloud/ensure-plugins.sh"
 printf "ensure-plugins: 'install superpowers@x' failed\n" > "$work/plugin-prewarm.log"
 out="$(run 2>&1)"
 assert_contains "$out" "prewarm had failures" "failure summary emitted from prior log"

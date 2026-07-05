@@ -7,8 +7,8 @@ script="$here/../cloud-parity/cloud-plugin-doctor.sh"
 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 home="$(make_fake_home "$work/home")"
-repo="$work/repo"; mkdir -p "$repo/scripts"; git -C "$repo" init -q
-printf '%s\n' "marketplace-add rtircher/dot-claude" "install superpowers@claude-plugins-official" > "$repo/scripts/cloud-parity-recipes"
+repo="$work/repo"; mkdir -p "$repo/.claude/cloud"; git -C "$repo" init -q
+printf '%s\n' "marketplace-add rtircher/dot-claude" "install superpowers@claude-plugins-official" > "$repo/.claude/cloud/cloud-parity-recipes"
 
 run() { HOME="$home" bash -c "cd '$repo' && bash '$script'"; }
 
@@ -28,13 +28,13 @@ assert_contains "$out" "[ok]      conventions.md" "conventions sub-check ok"
 assert_contains "$out" "all expected plugin clones are present" "clean verdict"
 
 echo "case: recipe token with a glob metachar is skipped (warned, exits 0)"
-printf '%s\n' 'install superpowers@bad*market' 'marketplace-add rtircher/dot-claude' > "$repo/scripts/cloud-parity-recipes"
+printf '%s\n' 'install superpowers@bad*market' 'marketplace-add rtircher/dot-claude' > "$repo/.claude/cloud/cloud-parity-recipes"
 out="$(run 2>&1)"; rc=$?
 assert_eq "$rc" "0" "doctor still exits 0 with a bad token"
 assert_contains "$out" "invalid token" "bad token warned by doctor"
 
 echo "case: no recipe file -> nothing to check"
-rm -f "$repo/scripts/cloud-parity-recipes"
+rm -f "$repo/.claude/cloud/cloud-parity-recipes"
 out="$(run 2>&1)"
 assert_contains "$out" "declares no cloud plugins" "no-recipe message"
 

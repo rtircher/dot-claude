@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# vendored from dot-claude @ 3185d0fb465d5024e3caeff5163c39a304e4b883. Re-sync with /dev:init-cloud-parity; do not edit here
 #
 # Claude Code on the web: environment setup script (generic, repo-agnostic).
 #
