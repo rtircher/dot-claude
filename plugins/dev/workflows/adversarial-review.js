@@ -21,6 +21,13 @@
  *   focus?: string,                  // optional in-scope note, bound to every reviewer
  *   outOfScope?: string,             // optional exclusions, bound to every reviewer
  *   externalReview?: boolean,        // pre-authorized third-party reviewer (additive)
+ *   tiers?: {                        // optional per-reviewer re-tiering, decided by the
+ *     [key: string]: {               // caller per dispatch ("pick the model per task").
+ *       model?: string,              // unversioned alias ('opus', 'sonnet', 'haiku')
+ *       effort?: string,             // 'low'|'medium'|'high'|'xhigh'|'max'
+ *     },                             // keys: a lens key, 'code-review' (diff reviewer),
+ *   },                               // 'verify' (skeptics). Omit to inherit the session
+ *                                    // model at session effort.
  * }
  */
 export const meta = {
@@ -34,8 +41,9 @@ export const meta = {
   ],
 }
 
-// One lens = one distinct failure mode, never a redundant copy. Model defaults
-// to opus (work convention); override per-lens when a lens is unusually easy/hard.
+// One lens = one distinct failure mode, never a redundant copy. Reviewers inherit
+// the session model (never a downgrade when the session runs a stronger tier);
+// set `model` on a lens only to deliberately re-tier an unusually easy/hard one.
 const LENS_PANELS = {
   spec: [
     { key: 'hidden-assumptions', brief: 'what is taken for granted that may not hold' },
@@ -131,6 +139,14 @@ function gitPrefix(art) {
   return art.repoDir ? `git -C "${art.repoDir}"` : 'git'
 }
 
+// Caller-supplied re-tiering for one reviewer slot. Empty (inherit the session
+// model at session effort) unless args.tiers names this key: re-tiering is
+// always a deliberate per-dispatch choice, never a baked-in default.
+function tierOpts(art, key) {
+  const t = (art.tiers || {})[key] || {}
+  return { ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}) }
+}
+
 function diffReviewPrompt(art) {
   const range = art.diffRange || 'the current branch diff'
   // SEAM: production wiring delegates to the /code-review skill (or its own
@@ -168,7 +184,7 @@ function buildReviewers(art) {
   const thunks = []
   if (art.artifactType === 'diff') {
     thunks.push(() =>
-      agent(diffReviewPrompt(art), { label: 'code-review', phase: 'Review', schema: REVIEW_SCHEMA, agentType: 'dev:researcher' }).then(tag('code-review', 'claude')),
+      agent(diffReviewPrompt(art), { label: 'code-review', phase: 'Review', schema: REVIEW_SCHEMA, agentType: 'dev:researcher', ...tierOpts(art, 'code-review') }).then(tag('code-review', 'claude')),
     )
   } else {
     const lenses = LENS_PANELS[art.artifactType]
@@ -179,7 +195,8 @@ function buildReviewers(art) {
           label: `lens:${lens.key}`,
           phase: 'Review',
           schema: REVIEW_SCHEMA,
-          model: lens.model || 'opus',
+          ...(lens.model ? { model: lens.model } : {}),
+          ...tierOpts(art, lens.key),
           agentType: 'dev:researcher',
         }).then(tag(lens.key, 'claude')),
       )
@@ -328,7 +345,7 @@ if (toVerify.length) {
     await parallel(
       toVerify.flatMap((f, i) =>
         Array.from({ length: VERIFY_VOTES }, (_unused, k) => () =>
-          agent(verifyPrompt(f, art), { label: `verify:${i}.${k}`, phase: 'Verify', schema: VERDICT_SCHEMA, model: 'opus', agentType: 'dev:researcher' }).then((v) => v && { i, v }),
+          agent(verifyPrompt(f, art), { label: `verify:${i}.${k}`, phase: 'Verify', schema: VERDICT_SCHEMA, agentType: 'dev:researcher', ...tierOpts(art, 'verify') }).then((v) => v && { i, v }),
         ),
       ),
     )

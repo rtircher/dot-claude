@@ -33,7 +33,13 @@ external review.
 (step 1), if the `Workflow` tool is available, dispatch the whole review pass as
 `Workflow` with `name: "dev-adversarial-review"` and args
 `{artifactPath, artifactType ('spec'|'plan'|'diff'), diffRange, repoDir, focus,
-outOfScope, externalReview}`. The workflow implements steps 2 to 6
+outOfScope, externalReview, tiers}`. Reviewers inherit the session model by
+default; `tiers` is the per-dispatch re-tiering knob (keys: a lens key,
+`code-review`, `verify`; values `{model, effort}`). Apply step 4's convention
+when setting it: assess this artifact's difficulty per lens, and only re-tier
+where you have a concrete reason (e.g. `{ 'scope-yagni': { model: 'sonnet' } }`
+for a short, simple plan when cost matters). Never downgrade the verify
+skeptics. The workflow implements steps 2 to 6
 deterministically: the lens panel (or a code-review pass for a diff),
 schema-validated findings, a skeptic verify pass on uncorroborated blocker/major
 findings, and synthesis blind to model identity. Present its returned
