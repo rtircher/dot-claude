@@ -133,4 +133,14 @@ assert_contains "$cmds" "scripts/repo-critical-init.sh" "co-located repo hook pr
 assert_contains "$cmds" ".claude/cloud/session-start.sh" "new cloud hook added"
 assert_not_contains "$cmds" "scripts/claude-hooks/session-start.sh" "legacy hook stripped"
 
+echo "case: reserved repo-only toolchain files are never vendored, moved, or flagged"
+res="$work/reserved"; mkdir -p "$res/.claude/cloud" "$res/scripts"; git -C "$res" init -q
+printf '#!/usr/bin/env bash\n# repo delegator\nbash scripts/ensure-flutter.sh\n' > "$res/.claude/cloud/ensure-tools.sh"; chmod +x "$res/.claude/cloud/ensure-tools.sh"
+printf '#!/usr/bin/env bash\n# flutter installer\n' > "$res/scripts/ensure-flutter.sh"; chmod +x "$res/scripts/ensure-flutter.sh"
+tools_before="$(cat "$res/.claude/cloud/ensure-tools.sh")"; flutter_before="$(cat "$res/scripts/ensure-flutter.sh")"
+bash "$scaffold" "$res" >/dev/null 2>&1
+assert_eq "$(cat "$res/.claude/cloud/ensure-tools.sh")" "$tools_before" "ensure-tools.sh not stamped or overwritten by vendoring"
+[ -f "$res/scripts/ensure-flutter.sh" ] && assert_eq "$(cat "$res/scripts/ensure-flutter.sh")" "$flutter_before" "scripts installer left in place (not moved into .claude/cloud)" || { printf "  FAIL: scripts/ensure-flutter.sh moved or removed\n"; failures=$((failures+1)); }
+if bash "$scaffold" --check "$res" >/dev/null 2>&1; then printf "  ok: --check clean, reserved repo files not flagged\n"; else printf "  FAIL: --check flagged a reserved repo file\n"; failures=$((failures+1)); fi
+
 finish "scaffold"
