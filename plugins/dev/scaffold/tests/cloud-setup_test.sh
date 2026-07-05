@@ -2,7 +2,7 @@
 # The generic cloud-setup.sh runs the OPTIONAL repo-defined root hook
 # (.claude/cloud/cloud-setup-local.sh) when a consumer repo ships one, and is a clean
 # no-op when it doesn't. This is the setup-time, root, once-cached counterpart to
-# the in-session ensure-<tool>.sh convention: it's where a repo puts work that
+# the in-session ensure-tools.sh toolchain convention: it's where a repo puts work that
 # needs root at container build (apt system packages, a native build toolchain).
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
