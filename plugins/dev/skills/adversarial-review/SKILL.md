@@ -44,7 +44,12 @@ deterministically: the lens panel (or a code-review pass for a diff),
 schema-validated findings, a skeptic verify pass on uncorroborated blocker/major
 findings, and synthesis blind to model identity. Present its returned
 panel/verdicts/findings exactly per the Output section. Set
-`externalReview: true` only with the consent step 5 requires. Steps 2 to 6 below
+`externalReview: true` only with the consent step 5 requires; the workflow then
+drives the wired external reviewer (`scripts/external-review.mjs`, which needs
+`EXTERNAL_REVIEW_MODEL` and an API key in the environment) as one more independent
+vote. When that reviewer is unwired or unconfigured, the workflow skips it and
+says so in the returned `externalReview` field (`ran` / `unavailable`); report
+that run as Claude-only. Steps 2 to 6 below
 are the manual fallback: use them when the Workflow tool is unavailable or the
 workflow run itself errors, never because the manual path feels quicker.
 
