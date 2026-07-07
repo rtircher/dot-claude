@@ -49,6 +49,7 @@ const LENS_PANELS = {
     { key: 'hidden-assumptions', brief: 'what is taken for granted that may not hold' },
     { key: 'gaps', brief: "what's undefined, ambiguous, or missing" },
     { key: 'contradiction-feasibility', brief: 'internal conflicts; can it actually be built as described' },
+    { key: 'scope-yagni', brief: "speculative scope, over-generalization, extensibility/config/abstraction the requirements don't justify" },
   ],
   plan: [
     { key: 'sequencing', brief: 'wrong order, unstated prerequisites, hidden coupling' },
