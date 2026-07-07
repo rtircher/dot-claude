@@ -79,7 +79,7 @@ failure mode, not a redundant copy:
 
 | Artifact | Lenses |
 |----------|--------|
-| Spec / design doc | **hidden-assumptions** (what is taken for granted that may not hold) · **gaps & underspecification** (what's undefined, ambiguous, or missing) · **contradiction & feasibility** (internal conflicts, can it actually be built as described) |
+| Spec / design doc | **hidden-assumptions** (what is taken for granted that may not hold) · **gaps & underspecification** (what's undefined, ambiguous, or missing) · **contradiction & feasibility** (internal conflicts, can it actually be built as described) · **scope & YAGNI** (speculative scope, over-generalization, extensibility/config/abstraction the requirements don't justify) |
 | Plan | **sequencing & dependencies** (wrong order, unstated prerequisites, hidden coupling) · **risk & failure modes** (what breaks, what's unrecoverable, what's untested) · **scope & YAGNI** (over-build, gold-plating, work that serves no stated goal) |
 
 Use all the lenses for the artifact type. Drop a lens only if it is clearly

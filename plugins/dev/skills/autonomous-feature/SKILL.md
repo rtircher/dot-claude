@@ -193,9 +193,10 @@ gaps with stated assumptions and only ping on design-changing ambiguity.
 
 ### Phase 2 — Review the spec
 
-Use the `adversarial-review` skill on the spec (include the over-engineering lens
-from *Bias to simplicity* above). Then address findings to the confidence gate
-above. Watch specifically for premise-breaking findings here — this is the
+Use the `adversarial-review` skill on the spec; its spec panel includes a
+**scope & YAGNI** lens that flags speculative scope and over-generalization, which
+carries the *Bias to simplicity* check here. Then address findings to the
+confidence gate above. Watch specifically for premise-breaking findings here — this is the
 cheapest place to discover the feature is wrong, so weight the spec review's ping
 threshold lower than later phases. Simplicity findings are cheapest to act on here
 too: cutting speculative scope from the spec is far easier than unwinding it from
@@ -213,9 +214,10 @@ equivalent) to turn the clean spec into a step-by-step implementation plan.
 
 ### Phase 4 — Review the plan
 
-Use the `adversarial-review` skill on the plan (sequencing, risk, scope, and
-over-engineering lenses — the plan is where a simple spec quietly grows extra
-steps, abstractions, and knobs). Address findings to the confidence gate.
+Use the `adversarial-review` skill on the plan; its plan panel runs sequencing,
+risk, and **scope & YAGNI** lenses — the last carries the *Bias to simplicity*
+check, since the plan is where a simple spec quietly grows extra steps,
+abstractions, and knobs. Address findings to the confidence gate.
 
 **Boundary:** checkpoint with the review outcome. (pause mode: wait for approval.)
 
