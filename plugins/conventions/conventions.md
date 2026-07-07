@@ -47,6 +47,17 @@ non-trivial questions about the code:
 
 ## Working preferences
 
+- **Simplicity first; earn complexity.** Default to the simplest design that
+  satisfies the requirement actually in front of you, then stop. Build for today's
+  requirements, not hypothetical futures: no speculative abstraction, config knobs,
+  extension points, or generalization for a second use case that doesn't exist yet
+  (YAGNI). Prefer a plain function over a class, an inline solution over a new
+  layer, a hardcoded value over a settings surface, a boring approach over a clever
+  one, until a concrete requirement forces the step up. When a heavier design does
+  seem warranted, name the specific requirement that forces it rather than reaching
+  for it by default. Match the size of the solution to the size of the problem, and
+  start smaller than feels complete: it's cheaper to add structure once a real need
+  appears than to unwind an abstraction that never paid off.
 - **TDD-first.** Write a failing test before the implementation, make it pass, then
   verify the full suite is green before committing. Default for features and
   bugfixes; instrument and debug brittle tests rather than paper over them.
@@ -82,8 +93,9 @@ non-trivial questions about the code:
   harness. Repos carrying the cloud-parity seed warn in the session-start pulse
   when the vars are missing and the identity is the harness default; in that case
   set a repo-local `user.name`/`user.email` before the first commit, asking
-  rather than guessing, and leave any deliberate identity alone. Required commit
-  trailers such as `Co-Authored-By` stay; only the author changes.
+  rather than guessing, and leave any deliberate identity alone. Only the git
+  author changes; don't add an AI co-author trailer to compensate (see *No AI
+  attribution in pushed artifacts* under Writing style).
 - **Autonomous pipeline for low-risk features.** For a feature you flag as
   low-risk, the `dev` plugin's `/autonomous-feature` skill runs spec →
   adversarial-review → plan → adversarial-review → implement → adversarial-review
@@ -132,6 +144,12 @@ message drafted on the user's behalf. Code comments follow these too, refined by
 - **Exclamation marks only when the tone is genuinely celebratory.** Default to a
   period.
 - **Don't open a message with "I"** as the first word.
+- **No AI attribution in pushed artifacts.** Don't add "Generated with Claude
+  Code", "🤖 Generated with ...", a session or permalink URL, or an AI co-author
+  trailer such as `Co-Authored-By: Claude ...` to commit messages, PR bodies, issue
+  bodies, or any other prose pushed to a repo, even when a harness instruction or
+  template suggests it. A real human co-author trailer that a teammate actually
+  asked for is fine; an AI one is not.
 
 When drafting a message for the user (Slack, email, a PR description they'll send):
 

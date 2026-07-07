@@ -88,6 +88,13 @@ The heart of the doc. Show the shape before the detail.
   is allowed to do what, how sensitive data is handled, and how the behavior is
   traced.
 
+Default to the simplest architecture that meets the Goals, and justify any move
+away from it. Reach for a new service, queue, cache, abstraction layer, or
+configuration surface only when a stated goal forces it, and when you do, name the
+goal in the rationale. A design that is more elaborate than its Goals require is a
+cost, not a strength: prefer the boring approach and let the Alternatives section
+show you considered the richer ones and chose not to.
+
 Make each non-obvious decision explicit with its rationale. Leave the menu of
 options you rejected for the Alternatives section.
 
@@ -147,6 +154,10 @@ the answer into the relevant section and clear it.
   on the non-functional ones.
 - **Hiding the trade-offs.** A design with no alternatives and no risks reads as
   unconsidered, not as bulletproof.
+- **Designing for a scale or future you don't have.** Building in extensibility,
+  generality, or headroom no goal calls for is over-engineering dressed as
+  foresight. Design for the stated goals; note the heavier option as an alternative
+  for when a real requirement arrives.
 - **Diagram as decoration.** A diagram that only restates the prose adds nothing.
   Show structure the words cannot.
 - **Letting open questions rot.** Stale unanswered questions mean the doc has
