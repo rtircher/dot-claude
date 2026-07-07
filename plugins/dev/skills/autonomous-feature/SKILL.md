@@ -59,6 +59,26 @@ code diff (Phase 6) is the strongest case for a different model family.
 Without `external-review`, the run stays Claude-only unless you approve a consent ping
 when a phase offers third-party review.
 
+## Bias to simplicity — active in every phase
+
+Running heads-down removes the human's chance to say "that's more than we need"
+mid-flight, so the bias toward the simplest workable design has to be built into
+the pipeline itself. It applies to every phase:
+
+- **Spec and plan the simplest thing that meets the intent.** No speculative
+  extensibility, config surfaces, abstraction layers, or generality that no stated
+  requirement asks for. Complexity introduced in the spec propagates into the plan
+  and multiplies in the code, so this is cheapest to hold the line on early.
+- **Every adversarial-review phase carries an over-engineering lens** alongside its
+  other lenses: flag speculative generality, unnecessary abstraction, unused
+  flexibility, premature optimization, and any flag/knob/layer nothing in the spec
+  requires. A simpler design that meets the spec is a valid review finding, not a
+  nitpick.
+- **Prefer starting too small.** When unsure between a lean design and a richer
+  one, spec the lean one and note the heavier option as a deferred alternative.
+  Adding structure later is cheap; unwinding an abstraction that never paid off is
+  not.
+
 ## The ping contract — active in BOTH modes
 
 Stop and ask the human — regardless of mode, even mid-phase — when you hit any of
@@ -173,10 +193,13 @@ gaps with stated assumptions and only ping on design-changing ambiguity.
 
 ### Phase 2 — Review the spec
 
-Use the `adversarial-review` skill on the spec. Then address findings to the
-confidence gate above. Watch specifically for premise-breaking findings here —
-this is the cheapest place to discover the feature is wrong, so weight the spec
-review's ping threshold lower than later phases.
+Use the `adversarial-review` skill on the spec (include the over-engineering lens
+from *Bias to simplicity* above). Then address findings to the confidence gate
+above. Watch specifically for premise-breaking findings here — this is the
+cheapest place to discover the feature is wrong, so weight the spec review's ping
+threshold lower than later phases. Simplicity findings are cheapest to act on here
+too: cutting speculative scope from the spec is far easier than unwinding it from
+the code.
 
 **Boundary:** checkpoint with what the review found and how it was resolved.
 (pause mode: wait for approval.)
@@ -190,8 +213,9 @@ equivalent) to turn the clean spec into a step-by-step implementation plan.
 
 ### Phase 4 — Review the plan
 
-Use the `adversarial-review` skill on the plan (sequencing, risk, scope lenses).
-Address findings to the confidence gate.
+Use the `adversarial-review` skill on the plan (sequencing, risk, scope, and
+over-engineering lenses — the plan is where a simple spec quietly grows extra
+steps, abstractions, and knobs). Address findings to the confidence gate.
 
 **Boundary:** checkpoint with the review outcome. (pause mode: wait for approval.)
 
@@ -253,6 +277,10 @@ was built, and hand back. (pause mode: wait for approval.)
   Closed findings must survive a fresh review.
 - **Silent scope creep.** If you find yourself building more than the spec
   describes, that's a ping, not a bonus.
+- **Gold-plating a heads-down run.** With no human watching each phase, it's easy
+  to add "while I'm here" abstractions, config, and generality. Build what the spec
+  says and no more; a simpler design that meets the spec beats a richer one that
+  exceeds it.
 - **Treating green tests as the code review.** Verification confirms behavior
   matches the plan; it does not surface bad abstractions, security holes, or
   cross-package drift. Phase 6 is not optional just because the build is green.

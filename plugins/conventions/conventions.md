@@ -47,6 +47,17 @@ non-trivial questions about the code:
 
 ## Working preferences
 
+- **Simplicity first; earn complexity.** Default to the simplest design that
+  satisfies the requirement actually in front of you, then stop. Build for today's
+  requirements, not hypothetical futures: no speculative abstraction, config knobs,
+  extension points, or generalization for a second use case that doesn't exist yet
+  (YAGNI). Prefer a plain function over a class, an inline solution over a new
+  layer, a hardcoded value over a settings surface, a boring approach over a clever
+  one, until a concrete requirement forces the step up. When a heavier design does
+  seem warranted, name the specific requirement that forces it rather than reaching
+  for it by default. Match the size of the solution to the size of the problem, and
+  start smaller than feels complete: it's cheaper to add structure once a real need
+  appears than to unwind an abstraction that never paid off.
 - **TDD-first.** Write a failing test before the implementation, make it pass, then
   verify the full suite is green before committing. Default for features and
   bugfixes; instrument and debug brittle tests rather than paper over them.
