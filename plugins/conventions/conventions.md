@@ -130,6 +130,16 @@ How to write prose: chat responses, commit messages, PR bodies, docs, and any
 message drafted on the user's behalf. Code comments follow these too, refined by the
 *Code comments* section below.
 
+- **Commit subjects: Scoped Commits, not Conventional Commits.** Write the subject
+  as `<scope>: <description>`, where scope is the subsystem or area touched
+  (`hooks:`, `conventions:`, `dev:`). No `feat:`/`fix:`/`chore:` type prefixes. For a
+  change spanning several areas, use a broader scope that covers them or list a few
+  comma-separated (`hooks, conventions:`); for a genuinely tree-wide change use
+  `treewide:` (or `all:` / `global:`). Reverts, merges, and other special commits can
+  be formatted however fits. Optional body and trailers follow a blank line. Spec:
+  https://scopedcommits.com/. Keep subject and body terse and to the point: the
+  subject one scannable line, the body only what the diff can't tell a reviewer
+  (the why, a non-obvious consequence). Skip a body when the subject says it all.
 - **Concise and natural.** No corporate filler, no preamble, no restating the
   question back. Say the thing.
 - **Diplomatic and collaborative**, especially when raising a concern or
