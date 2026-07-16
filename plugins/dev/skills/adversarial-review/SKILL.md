@@ -277,7 +277,15 @@ stay on-machine via a local model.
 When several third-party options are available, prefer Codex (first-party
 plugin, owns its auth), then the shipped script (structured output, mechanical
 artifact binding), then OpenCode/Cursor. One third-party reviewer is enough; a
-second adds little once cross-family corroboration is possible.
+second adds little once cross-family corroboration is possible. Exception: when
+the user _explicitly_ requested external review in this run, that request
+overrides both the one-reviewer cap and any standing default reviewer. Enlist
+the strongest available reviewer per the preference order above (typically
+Codex), even if a pre-authorized default (e.g. a local model) already ran or
+would otherwise satisfy this step. A user who asks for external review by name
+wants the strongest cross-family read available, and their explicit request is
+the consent for the artifact to reach that reviewer's provider. Do not quietly
+substitute the lower-friction default and report the ask as satisfied.
 
 **External review requested but no reviewer can run.** When the user asked for
 external review and none of the four options is available (tool missing,
