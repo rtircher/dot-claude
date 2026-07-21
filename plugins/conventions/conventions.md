@@ -144,13 +144,11 @@ message drafted on the user's behalf. Code comments follow these too, refined by
   question back. Say the thing.
 - **Diplomatic and collaborative**, especially when raising a concern or
   disagreeing: name the problem, propose the fix, skip the lecture.
-- **No em dashes** (or en dashes). Use a comma, colon, parentheses, or a full stop
-  instead. (This file follows its own rule.) A `PreToolUse` hook enforces this only
-  on text written as the user, the content of a Write/Edit, a commit message, a sent
-  message, denying the call before the dash lands so it gets rewritten. Conversation
-  with Claude is not checked, only deliverables. There is no inline override marker
-  (it would pollute the file or message). For a file that genuinely needs a dash,
-  such as one quoting verbatim, add its path to the `ALLOWLIST` in `block-emdash.py`.
+- **No em dashes** (or en dashes) in deliverables (files, commit messages, sent
+  messages). Use a comma, colon, parentheses, or a full stop instead. (This file
+  follows its own rule.) This is a writing convention, not machine-enforced: if a
+  dash slips into a deliverable, restructure the sentence rather than swapping in a
+  hyphen, which reads worse. Conversation with Claude is exempt.
 - **Exclamation marks only when the tone is genuinely celebratory.** Default to a
   period.
 - **Don't open a message with "I"** as the first word.
