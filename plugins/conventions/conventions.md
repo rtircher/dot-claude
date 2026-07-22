@@ -151,7 +151,9 @@ message drafted on the user's behalf. Code comments follow these too, refined by
   hyphen, which reads worse. Conversation with Claude is exempt.
 - **Exclamation marks only when the tone is genuinely celebratory.** Default to a
   period.
-- **Don't open a message with "I"** as the first word.
+- **Prefer not to open a message with "I"** as the first word, but never contort
+  a sentence to avoid it: a natural "I'll take a look" beats an awkward
+  reshuffle.
 - **No AI attribution in pushed artifacts.** Don't add "Generated with Claude
   Code", "🤖 Generated with ...", a session or permalink URL, or an AI co-author
   trailer such as `Co-Authored-By: Claude ...` to commit messages, PR bodies, issue
