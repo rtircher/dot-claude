@@ -20,7 +20,13 @@
  *                                    // Needed when the orchestrator runs outside that repo.
  *   focus?: string,                  // optional in-scope note, bound to every reviewer
  *   outOfScope?: string,             // optional exclusions, bound to every reviewer
- *   externalReview?: boolean,        // pre-authorized third-party reviewer (additive)
+ *   externalReview?: boolean,        // pre-authorized third-party review (additive):
+ *                                    // drives every wired EXTERNAL_REVIEWERS entry
+ *                                    // (currently scripts/external-review.mjs, which
+ *                                    // needs EXTERNAL_REVIEW_MODEL / API key in the
+ *                                    // environment). Skipped and reported via the
+ *                                    // returned `externalReview` field when unwired
+ *                                    // or unconfigured, never faked with a Claude vote.
  *   tiers?: {                        // optional per-reviewer re-tiering, decided by the
  *     [key: string]: {               // caller per dispatch ("pick the model per task").
  *       model?: string,              // unversioned alias ('opus', 'sonnet', 'haiku')
@@ -157,25 +163,94 @@ function diffReviewPrompt(art) {
 Perform a rigorous code review of ${range}. Run \`${gitPrefix(art)} diff ${art.diffRange || ''}\` to see the changes, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context. Hunt for correctness bugs, security holes, broken invariants, and cross-package coupling, not style. End with an overall verdict (ship / don't-ship) and one sentence why. Return findings via the structured output tool.`
 }
 
-function thirdPartyReviewer(art) {
-  // SEAM: production wiring invokes a genuinely different model family — the
-  // codex plugin (/codex:adversarial-review), the skill's scripts/external-review.mjs
-  // (any OpenAI-compatible endpoint, returns this exact schema), OpenCode pinned
-  // to a non-Claude model, or cursor-agent. Consent is the caller's
-  // job (the `external-review` pre-authorization). It runs on the SAME artifact
-  // with the SAME framing and returns the SAME schema, so it folds into synthesis
-  // as one more independent vote and lights up cross-family corroboration.
-  const instruction =
-    art.artifactType === 'diff'
-      ? `Review the diff ${art.diffRange || '(current branch)'} (run \`${gitPrefix(art)} diff ${art.diffRange || ''}\`).`
-      : `Review the ${art.artifactType} at ${art.artifactPath} (read it first).`
-  return () =>
-    agent(`${adversarialPreamble(art)}\n\nYou are an INDEPENDENT third-party reviewer. ${instruction} End with a verdict (ship / don't-ship) and one sentence why. Return findings via the structured output tool.`, {
-      label: 'third-party',
-      phase: 'Review',
-      schema: REVIEW_SCHEMA,
-    }).then(tag('third-party', 'external'))
+// SEAM: external (non-Claude) review. Each registry entry drives one genuinely
+// different model family and returns REVIEW_SCHEMA-shaped findings, so it folds
+// into synthesis as one more independent vote and LEGITIMATELY lights up
+// cross-family corroboration. The shipped entry drives the skill's
+// scripts/external-review.mjs (any OpenAI-compatible endpoint; Claude-family
+// models are refused there). Wire codex (/codex:adversarial-review), cursor-agent,
+// or OpenCode-on-a-non-Claude-model by adding entries. Consent to send the
+// artifact out is the caller's job (the `externalReview` pre-authorization).
+//
+// The workflow sandbox cannot run the script itself, so a driver AGENT runs it
+// via Bash and transcribes its output. The driver never reviews the artifact
+// itself: when the script, model, or credentials are absent, external review is
+// SKIPPED and REPORTED (see the returned externalReview field), never faked by a
+// Claude agent tagged 'external' (which would falsely light up crossFamily in
+// dedupe()). An empty registry is a valid state and skips external review too.
+
+// `ran` is the honest availability signal: a real external vote can legitimately
+// return zero findings on a clean artifact, so emptiness alone cannot stand in
+// for "did an external model actually weigh in".
+const EXTERNAL_DRIVER_SCHEMA = {
+  type: 'object',
+  required: ['ran', 'findings', 'verdict'],
+  additionalProperties: false,
+  properties: {
+    ran: { type: 'boolean', description: 'true ONLY if the external tool executed and returned valid JSON; false if its script, model, or credentials were absent, or it errored' },
+    family: { type: 'string', description: 'the family the tool reported (e.g. "external"); "" when ran=false' },
+    model: { type: 'string', description: 'the external model used; "" when ran=false' },
+    unavailable_reason: { type: 'string', description: 'when ran=false, the concrete reason (missing script / EXTERNAL_REVIEW_MODEL / API key / API error); "" when ran=true' },
+    findings: REVIEW_SCHEMA.properties.findings,
+    verdict: REVIEW_SCHEMA.properties.verdict,
+  },
 }
+
+function externalScriptDriverPrompt(art) {
+  const feed =
+    art.artifactType === 'diff'
+      ? `${gitPrefix(art)} diff ${art.diffRange || ''}`
+      : `cat ${JSON.stringify(art.artifactPath)}`
+  const target = art.artifactType === 'diff' ? art.diffRange || 'current branch diff' : art.artifactPath
+  const scopeFlags = [
+    art.focus && `--focus ${JSON.stringify(art.focus)}`,
+    art.outOfScope && `--out-of-scope ${JSON.stringify(art.outOfScope)}`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const repoHint = art.repoDir
+    ? JSON.stringify(`${art.repoDir}/plugins/dev/skills/adversarial-review/scripts/external-review.mjs`)
+    : '"plugins/dev/skills/adversarial-review/scripts/external-review.mjs"'
+  return `You are a NON-REVIEWING driver for a third-party review. You do NOT review the ${art.artifactType} yourself and you NEVER invent, add, drop, or reword findings. Your only job is to run the shipped external-review script and transcribe its JSON output.
+
+Steps:
+1. Locate "external-review.mjs": check a repo checkout (${repoHint}) and the installed plugin cache (\`find "$HOME/.claude/plugins" -name external-review.mjs 2>/dev/null | head -1\`). If you cannot find it, return ran=false with that reason.
+2. Confirm the environment is configured: run \`printenv EXTERNAL_REVIEW_MODEL\`. If it is unset, return ran=false with that reason. Do NOT set it or any API key yourself; the caller configures those.
+3. Get the pinned SHA: \`${gitPrefix(art)} rev-parse --short HEAD\` (if that fails because the artifact is not in a git repo, use the target without the SHA suffix).
+4. Run, piping the artifact on stdin (never as an argument):
+   \`${feed} | node <script-path> --type ${art.artifactType} --target "${target} @ <sha>"${scopeFlags ? ' ' + scopeFlags : ''}\`
+5. On non-zero exit or non-JSON stdout, return ran=false with the script's stderr as unavailable_reason. Do NOT retry with different flags and do NOT review the artifact yourself.
+6. On success, parse the script's JSON stdout and transcribe it EXACTLY: ran=true, family=its reviewer.family, model=its reviewer.model, findings=its findings verbatim, verdict=its verdict.
+
+When ran=false, set findings=[] and verdict={ship:true, reason:"external review unavailable: <reason>"} so the Claude panel alone decides. Return via the structured output tool.`
+}
+
+function externalScriptReviewer(art) {
+  return () =>
+    agent(externalScriptDriverPrompt(art), {
+      label: 'external:script',
+      phase: 'Review',
+      schema: EXTERNAL_DRIVER_SCHEMA,
+      agentType: 'dev:researcher',
+    }).then(foldExternal('external:script'))
+}
+
+// Normalize a driver result into the reviewer shape the panel consumes. A
+// ran=false result carries NO findings, so it can never tag a finding 'external'
+// or move crossFamily; its absence is surfaced via the externalReview field.
+function foldExternal(handle) {
+  return (r) => {
+    if (!r) return null
+    if (!r.ran) {
+      return { handle, external: true, ran: false, family: 'external', model: null, unavailable: r.unavailable_reason || 'external reviewer unavailable', findings: [], verdict: r.verdict || { ship: true, reason: `external review unavailable: ${r.unavailable_reason || 'unknown'}` } }
+    }
+    return { handle, external: true, ran: true, family: r.family || 'external', model: r.model || null, findings: r.findings || [], verdict: r.verdict }
+  }
+}
+
+// Wired external (non-Claude) reviewers. Empty is valid: external review then
+// skips and is reported, never faked.
+const EXTERNAL_REVIEWERS = [{ key: 'external-review-script', build: externalScriptReviewer }]
 
 function tag(handle, family) {
   return (r) => r && { handle, family, ...r }
@@ -203,7 +278,7 @@ function buildReviewers(art) {
       )
     }
   }
-  if (art.externalReview) thunks.push(thirdPartyReviewer(art))
+  if (art.externalReview) for (const ext of EXTERNAL_REVIEWERS) thunks.push(ext.build(art))
   return thunks
 }
 
@@ -330,8 +405,23 @@ if (art.artifactType !== 'diff' && !art.artifactPath) {
 phase('Review')
 const reviewers = buildReviewers(art)
 const dispatched = reviewers.length
+const externalDispatched = art.externalReview ? EXTERNAL_REVIEWERS.length : 0
+if (art.externalReview && externalDispatched === 0) {
+  log('External review requested but no external reviewer is wired: proceeding Claude-only (no cross-family corroboration this round)')
+}
 log(`Dispatching ${dispatched} reviewer(s) on ${art.artifactType} ${art.artifactPath || art.diffRange || ''}`.trim())
 const returned = (await parallel(reviewers)).filter(Boolean)
+
+// Whether a requested external review actually produced a non-Claude vote, so the
+// caller can tell "no cross-family signal" apart from "cross-family never ran".
+const externalResults = returned.filter((r) => r.external)
+const externalReview = {
+  requested: !!art.externalReview,
+  dispatched: externalDispatched,
+  ran: externalResults.filter((r) => r.ran).map((r) => ({ handle: r.handle, family: r.family, model: r.model })),
+  unavailable: externalResults.filter((r) => !r.ran).map((r) => ({ handle: r.handle, reason: r.unavailable })),
+}
+for (const u of externalReview.unavailable) log(`External reviewer "${u.handle}" unavailable: ${u.reason}`)
 
 // Dedup across the full panel BEFORE verifying, so a finding is never skeptic-checked
 // once per reviewer that raised it (a justified barrier: dedup needs all reviewers in).
@@ -373,7 +463,11 @@ return {
   artifact: { path: art.artifactPath || null, type: art.artifactType, range: art.diffRange || null },
   // What actually voted, so the caller never implies a fuller panel than weighed in.
   panel: { dispatched, returned: returned.length, dropped: dispatched - returned.length },
-  verdicts: returned.map((r) => ({ reviewer: r.handle, ship: r.verdict.ship, reason: r.verdict.reason })),
+  // Whether a requested external review produced a real non-Claude vote or was
+  // skipped/unavailable, so a skipped pass is reported, never silently faked.
+  externalReview,
+  // An unavailable external reviewer has no opinion, so it is not listed as a verdict.
+  verdicts: returned.filter((r) => !(r.external && !r.ran)).map((r) => ({ reviewer: r.handle, ship: r.verdict.ship, reason: r.verdict.reason })),
   findings,
   // Confirmed AND contested blocker/major findings gate; only unanimously-refuted ones drop out.
   hasBlockerOrMajor: findings.some((f) => f.severity !== 'minor'),
