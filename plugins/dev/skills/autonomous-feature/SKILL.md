@@ -189,6 +189,14 @@ equivalent) to turn the feature request into a spec / design doc. Capture intent
 over-interview — this skill exists to move with minimal input; fill reasonable
 gaps with stated assumptions and only ping on design-changing ambiguity.
 
+**The spec MUST include a Non-goals section.** List what this feature
+deliberately does not do — the adjacent capabilities, generalizations, and
+config surfaces that were considered and excluded. Downstream phases treat the
+spec as the scope contract: anything not in its requirements is out of scope
+for implementers, and reviewers judge against it. Scope that sneaks into the
+spec here gets legitimized by every later phase, so the Non-goals section is
+where the line is drawn while it's still one sentence to draw.
+
 **Boundary:** checkpoint with the spec summary. (pause mode: wait for approval.)
 
 ### Phase 2 — Review the spec
@@ -232,6 +240,16 @@ rather than defaulting: `dev:coder` (worktree-isolated) for implementer tasks
 that edit files in parallel, `dev:researcher` or `Explore` for read-only
 research and search, and a cheaper model tier for mechanical work. Follow the
 project's own conventions (TDD, verification) as those skills direct.
+
+**Every implementer dispatch brief carries the simplicity contract.** Subagents
+never see this skill or the session's conventions, so the *Bias to simplicity*
+rules must travel in the brief itself: implement only what the task names;
+before writing new code, reuse an existing helper, then stdlib, then a native
+platform feature, then an installed dependency, and only then the smallest
+working implementation; no new dependencies without reporting back; anything
+beyond the task is a report-back, not a bonus. An implementer building more
+than its brief describes is the scope-expansion ping firing one level down —
+surface it, don't merge it.
 
 When implementation is complete, verify before claiming done — use your
 verification-before-completion skill (`superpowers:verification-before-completion`)
