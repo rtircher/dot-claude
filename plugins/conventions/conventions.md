@@ -189,6 +189,12 @@ git history, drop it. Apply this when reviewing your own writes before committin
 - **No process narration.** Don't reference a monkeypatch, a test, "extracted from
   X", "we used to do Y", or "TODO refactor later"; that's git's job, not the
   code's.
+- **A deliberate simplification may get one terse line** stating its ceiling and
+  the step up: `linear scan; fine below ~1k items, index it past that`. That's a
+  present-tense fact about the code's limits, a valid *why*. Banned process
+  narration, by contrast, tells the story of the decision ("kept simple for
+  now", "TODO revisit"). One line, no marker prefix; if it needs more, it belongs
+  in a doc or the PR, not the code.
 - **Prefer self-documenting code.** A clear name beats a comment explaining a vague
   one; rename rather than annotate.
 - **Reserve comments for non-obvious context:** a tricky invariant, a deliberate
