@@ -58,6 +58,18 @@ non-trivial questions about the code:
   for it by default. Match the size of the solution to the size of the problem, and
   start smaller than feels complete: it's cheaper to add structure once a real need
   appears than to unwind an abstraction that never paid off.
+- **Before writing new code, climb the reuse ladder.** Solve at the first rung
+  that works: (1) does this need to exist at all — if no requirement asks for it,
+  skip it; (2) an existing helper/pattern in this codebase; (3) the standard
+  library; (4) a native platform feature (CSS, HTML inputs, database constraints);
+  (5) an already-installed dependency; (6) only then write the smallest working
+  implementation. Adding a new dependency is a last resort and gets flagged
+  explicitly, never slipped in. Lazy about the solution, never about reading:
+  understanding the problem and the affected code paths always comes first, and
+  bugs get fixed at the root cause, not papered over per-caller.
+- **Simplicity never trims the safety floor.** Input validation at trust
+  boundaries, error handling that prevents data loss, security, and accessibility
+  are not simplifications to make; the ladder applies to everything else.
 - **TDD-first.** Write a failing test before the implementation, make it pass, then
   verify the full suite is green before committing. Default for features and
   bugfixes; instrument and debug brittle tests rather than paper over them.
