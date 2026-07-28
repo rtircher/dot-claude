@@ -6,8 +6,12 @@ context size (input + cache-read + cache-creation tokens), and when it crosses
 a new band emits a nudge to delegate or respawn (see conventions.md,
 "Delegation"). Each band warns once per session.
 
+CONTEXT_WATCH_WINDOW is a cost budget, not the model's physical window: on
+1M-window models (fable) the whole context is still re-read every turn, so the
+200k default deliberately warns at the same absolute spend on every model.
+
 Env overrides:
-  CONTEXT_WATCH_WINDOW  context window in tokens (default 200000)
+  CONTEXT_WATCH_WINDOW  context budget in tokens (default 200000)
   CONTEXT_WATCH_BANDS   comma-separated warn thresholds in percent (default 50,70,85)
 """
 import json
@@ -97,13 +101,13 @@ def main():
             "handover and respawn into a fresh session."
         )
     message = (
-        f"Context at {pct}% of the window ({context:,}/{window:,} tokens). "
+        f"Context at {pct}% of the {window:,}-token budget ({context:,} tokens). "
         f"{advice} (conventions: Delegation)"
     )
     print(
         json.dumps(
             {
-                "systemMessage": f"context-watch: {pct}% of context window used",
+                "systemMessage": f"context-watch: {pct}% of context budget used",
                 "hookSpecificOutput": {
                     "hookEventName": "PostToolUse",
                     "additionalContext": message,
