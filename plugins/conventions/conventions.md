@@ -30,6 +30,37 @@ non-trivial questions about the code:
   dispatch rather than defaulting one tier across a whole plan. Subtle reasoning
   (feasibility, security, cross-cutting review) warrants a stronger tier than
   mechanical work.
+- **Every dispatch names its model explicitly.** Deciding the tier is part of
+  composing the dispatch: pass `model:` on every Agent call, never rely on
+  inherit. An omitted model silently runs the worker on whatever the main loop
+  happens to be — usually the most expensive tier for the most mechanical work.
+
+## Delegation
+
+The main session is an orchestrator, not a worker. Main-loop turns are the most
+expensive tokens in the system: they run on the strongest model, and every
+inline turn grows a context that every later turn re-reads. The main session
+decomposes, dispatches, reviews, and integrates; sustained implementation and
+broad reading happen in subagents.
+
+- **Delegation tripwire.** More than ~10 Edit/Write calls in the main loop, or a
+  third edit-test cycle on the same problem, means the work should have been a
+  dispatch: stop, package the remainder as a brief, and send it to a
+  coder-type subagent. Reading enough to write that brief is fine; grinding the
+  loop inline is not.
+- **Plan execution is delegation-only.** When executing a multi-task plan
+  (subagent-driven-development or equivalent), the main session never edits
+  implementation files itself: every task goes to a fresh implementer subagent,
+  and every fix from review goes to a fix subagent. "This task is small, faster
+  inline" is how plan execution migrates back into the orchestrator — if a task
+  is genuinely too small to brief, fold it into an adjacent task's brief rather
+  than doing it in the main loop.
+- **Long sessions are a cost bug, not a stamina test.** Context is re-read on
+  every turn, so cost grows superlinearly with session length. When the
+  context-budget warning fires (the conventions plugin's `context-watch` hook),
+  finish the current step, then either delegate the remaining work to subagents
+  or write a handover and respawn into a fresh session — don't keep grinding in
+  a bloated context.
 
 ## Toolchain management
 

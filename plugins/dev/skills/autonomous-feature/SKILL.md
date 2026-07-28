@@ -241,6 +241,13 @@ that edit files in parallel, `dev:researcher` or `Explore` for read-only
 research and search, and a cheaper model tier for mechanical work. Follow the
 project's own conventions (TDD, verification) as those skills direct.
 
+**When a subagent-driven mode is chosen, the main session does not edit
+implementation files at all.** Every task goes to a fresh implementer subagent
+and every review fix goes to a fix subagent — a task that feels too small to
+brief gets folded into an adjacent task's brief, not done inline. Inline edits
+during plan execution are how the orchestrator quietly becomes the worker and
+the session's context (and cost) balloons.
+
 **Every implementer dispatch brief carries the simplicity contract.** Subagents
 never see this skill or the session's conventions, so the *Bias to simplicity*
 rules must travel in the brief itself: implement only what the task names;
