@@ -10,9 +10,15 @@ CONTEXT_WATCH_WINDOW is a cost budget, not the model's physical window: on
 1M-window models (fable) the whole context is still re-read every turn, so the
 200k default deliberately warns at the same absolute spend on every model.
 
+The bands account for the fixed session baseline (system prompt, MCP schemas,
+CLAUDE.md, conventions/hook injections — measured at ~47-66k across recent
+sessions, i.e. 23-33% of the budget, before any work happens): a band below
+70 fires minutes into a session and just trains the main loop to ignore the
+warning.
+
 Env overrides:
   CONTEXT_WATCH_WINDOW  context budget in tokens (default 200000)
-  CONTEXT_WATCH_BANDS   comma-separated warn thresholds in percent (default 50,70,85)
+  CONTEXT_WATCH_BANDS   comma-separated warn thresholds in percent (default 70,85)
 """
 import json
 import os
@@ -67,7 +73,7 @@ def main():
     )
     window = int(os.environ.get("CONTEXT_WATCH_WINDOW", "200000"))
     bands = sorted(
-        int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "50,70,85").split(",")
+        int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "70,85").split(",")
     )
     pct = 100 * context // window
 
