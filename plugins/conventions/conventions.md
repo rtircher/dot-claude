@@ -61,9 +61,10 @@ broad reading happen in subagents.
   finish the current step, then either delegate the remaining work to subagents
   or write a handover and respawn into a fresh session — don't keep grinding in
   a bloated context.
-- **The delegation gate is enforcement, not advice.** Past the first
-  context-watch band, the `delegation-gate` hook denies bulk read/search calls
-  in the main loop after 3 round-trips per turn (1 past the last band). A
+- **The delegation gate is enforcement, not advice.** The 50% context-watch
+  band asks the session to shift into delegation mode; from 70% the
+  `delegation-gate` hook stops asking and denies bulk read/search calls in
+  the main loop after 3 round-trips per turn (1 past the last band). A
   denial is not an error to retry: dispatch a researcher/Explore subagent for
   the exploration, or make the read targeted (Read with offset+limit, Grep
   with head_limit — always allowed). Subagents are never gated. Kill switch
