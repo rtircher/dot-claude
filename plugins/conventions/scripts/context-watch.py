@@ -6,9 +6,15 @@ context size (input + cache-read + cache-creation tokens), and when it crosses
 a new band emits a nudge to delegate or respawn (see conventions.md,
 "Delegation"). Each band warns once per session.
 
-CONTEXT_WATCH_WINDOW is a cost budget, not the model's physical window: on
-1M-window models (fable) the whole context is still re-read every turn, so the
-200k default deliberately warns at the same absolute spend on every model.
+The budget is min(effective session window, 250k). The window is derived from
+the model id on the same transcript entry the usage comes from: models with a
+native 1M window count as 1M, everything else — including unknown or future
+ids — falls back to 200k (conservative: warns early, never late). A "[1m]"
+marker in the model id also counts as 1M, though in practice the API echo
+strips that suffix, so a 200k-native model running the 1m beta is treated as
+200k. The 250k cap is a cost budget, not the physical window: on 1M-window
+models the whole context is still re-read every turn, so the cap bounds the
+per-turn spend instead of letting the session grow to the window.
 
 The bands account for the fixed session baseline (system prompt, MCP schemas,
 CLAUDE.md, conventions/hook injections — measured at ~47-66k across recent
@@ -17,7 +23,8 @@ sessions, i.e. 23-33% of the budget, before any work happens): a band below
 warning.
 
 Env overrides:
-  CONTEXT_WATCH_WINDOW  context budget in tokens (default 200000)
+  CONTEXT_WATCH_WINDOW  budget in tokens; when set, used verbatim (skips the
+                        model lookup and the 250k cap)
   CONTEXT_WATCH_BANDS   comma-separated warn thresholds in percent (default 70,85)
 """
 import json
@@ -27,9 +34,33 @@ import tempfile
 
 TAIL_BYTES = 512 * 1024
 
+BUDGET_CAP = 250_000
+FALLBACK_WINDOW = 200_000
+# Canonical model-id prefixes with a native 1M window, from the Claude Code
+# model table (2.1.219). 200k-native and unknown ids both fall back to 200k,
+# so only the 1M side needs listing.
+NATIVE_1M_PREFIXES = (
+    "claude-sonnet-5",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
+
+def effective_window(model):
+    """Best-effort context window for the session's model id."""
+    if not model:
+        return FALLBACK_WINDOW
+    model = model.lower()
+    if "[1m]" in model or model.startswith(NATIVE_1M_PREFIXES):
+        return 1_000_000
+    return FALLBACK_WINDOW
+
 
 def last_usage(transcript_path):
-    """Return the usage dict of the last main-loop assistant message, or None."""
+    """Return (usage dict, model id) of the last main-loop assistant message."""
     try:
         with open(transcript_path, "rb") as f:
             f.seek(0, os.SEEK_END)
@@ -37,7 +68,7 @@ def last_usage(transcript_path):
             f.seek(max(0, size - TAIL_BYTES))
             tail = f.read().decode("utf-8", errors="replace")
     except OSError:
-        return None
+        return None, None
     for line in reversed(tail.splitlines()):
         if '"usage"' not in line:
             continue
@@ -47,10 +78,11 @@ def last_usage(transcript_path):
             continue
         if entry.get("type") != "assistant" or entry.get("isSidechain"):
             continue
-        usage = entry.get("message", {}).get("usage")
+        message = entry.get("message", {})
+        usage = message.get("usage")
         if usage and "input_tokens" in usage:
-            return usage
-    return None
+            return usage, message.get("model")
+    return None, None
 
 
 def main():
@@ -63,7 +95,7 @@ def main():
     if not transcript:
         return
 
-    usage = last_usage(transcript)
+    usage, model = last_usage(transcript)
     if not usage:
         return
     context = (
@@ -71,11 +103,15 @@ def main():
         + usage.get("cache_read_input_tokens", 0)
         + usage.get("cache_creation_input_tokens", 0)
     )
-    window = int(os.environ.get("CONTEXT_WATCH_WINDOW", "200000"))
+    override = os.environ.get("CONTEXT_WATCH_WINDOW")
+    if override:
+        budget = int(override)
+    else:
+        budget = min(effective_window(model), BUDGET_CAP)
     bands = sorted(
         int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "70,85").split(",")
     )
-    pct = 100 * context // window
+    pct = 100 * context // budget
 
     crossed = [b for b in bands if pct >= b]
     if not crossed:
@@ -107,7 +143,7 @@ def main():
             "handover and respawn into a fresh session."
         )
     message = (
-        f"Context at {pct}% of the {window:,}-token budget ({context:,} tokens). "
+        f"Context at {pct}% of the {budget:,}-token budget ({context:,} tokens). "
         f"{advice} (conventions: Delegation)"
     )
     print(
