@@ -37,14 +37,14 @@ Env overrides:
                              nudge — advice first, teeth later; lower to 50 if
                              the nudge alone still produces no dispatches)
   DELEGATION_GATE_ROUNDTRIPS free bulk round-trips per turn when armed (default 3)
-  CONTEXT_WATCH_WINDOW       shared with context-watch (default 250000, matching
-                             the min(model window, 250k) budget context-watch
-                             computes for every model currently in use; fold in
-                             its effective_window() helper if the fleet ever
-                             includes a 200k-native model)
+  CONTEXT_WATCH_WINDOW       shared with context-watch: when set, used verbatim;
+                             otherwise the budget is min(model window, 250k) via
+                             context-watch's effective_window() (200k fallback
+                             if the helper can't load — stricter, never laxer)
   CONTEXT_WATCH_BANDS        shared with context-watch (default 50,70,85; only
                              the last band is read here, for the harsh tier)
 """
+import importlib.util
 import json
 import os
 import re
@@ -69,6 +69,23 @@ def is_bulk_read(tool_name, tool_input):
     if tool_name == "Bash":
         return bool(BASH_READ_RE.match(tool_input.get("command", "")))
     return False
+
+
+def compute_budget(model):
+    """min(model window, 250k) via context-watch's helper; env override wins."""
+    override = os.environ.get("CONTEXT_WATCH_WINDOW")
+    if override:
+        return int(override)
+    try:
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "context-watch.py"
+        )
+        spec = importlib.util.spec_from_file_location("context_watch", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return min(mod.effective_window(model), mod.BUDGET_CAP)
+    except Exception:
+        return 200_000
 
 
 def read_tail(transcript_path):
@@ -143,6 +160,7 @@ def main():
         return
 
     usage = None
+    model = None
     context = 0
     bulk_roundtrips = 0
     skipped_own_message = False
@@ -155,6 +173,7 @@ def main():
             u = entry.get("message", {}).get("usage")
             if u and "input_tokens" in u:
                 usage = u
+                model = entry.get("message", {}).get("model")
                 context = (
                     u.get("input_tokens", 0)
                     + u.get("cache_read_input_tokens", 0)
@@ -179,7 +198,7 @@ def main():
     if usage is None:
         return
 
-    window = int(os.environ.get("CONTEXT_WATCH_WINDOW", "250000"))
+    window = compute_budget(model)
     bands = sorted(
         int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "50,70,85").split(",")
     )
