@@ -32,9 +32,18 @@ turn, a wrongly allowed read costs a few thousand tokens.
 
 Env overrides:
   DELEGATION_GATE            "off" disables the gate entirely
+  DELEGATION_GATE_ARM_PCT    context percent at which the gate arms (default 70;
+                             deliberately above context-watch's 50% delegation
+                             nudge — advice first, teeth later; lower to 50 if
+                             the nudge alone still produces no dispatches)
   DELEGATION_GATE_ROUNDTRIPS free bulk round-trips per turn when armed (default 3)
-  CONTEXT_WATCH_WINDOW       shared with context-watch (default 200000)
-  CONTEXT_WATCH_BANDS        shared with context-watch (default 70,85)
+  CONTEXT_WATCH_WINDOW       shared with context-watch (default 250000, matching
+                             the min(model window, 250k) budget context-watch
+                             computes for every model currently in use; fold in
+                             its effective_window() helper if the fleet ever
+                             includes a 200k-native model)
+  CONTEXT_WATCH_BANDS        shared with context-watch (default 50,70,85; only
+                             the last band is read here, for the harsh tier)
 """
 import json
 import os
@@ -170,12 +179,13 @@ def main():
     if usage is None:
         return
 
-    window = int(os.environ.get("CONTEXT_WATCH_WINDOW", "200000"))
+    window = int(os.environ.get("CONTEXT_WATCH_WINDOW", "250000"))
     bands = sorted(
-        int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "70,85").split(",")
+        int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "50,70,85").split(",")
     )
+    arm_pct = int(os.environ.get("DELEGATION_GATE_ARM_PCT", "70"))
     pct = 100 * context // window
-    if pct < bands[0]:
+    if pct < arm_pct:
         return
     free = int(os.environ.get("DELEGATION_GATE_ROUNDTRIPS", "3"))
     if pct >= bands[-1]:

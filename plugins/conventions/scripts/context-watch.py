@@ -16,16 +16,19 @@ strips that suffix, so a 200k-native model running the 1m beta is treated as
 models the whole context is still re-read every turn, so the cap bounds the
 per-turn spend instead of letting the session grow to the window.
 
-The bands account for the fixed session baseline (system prompt, MCP schemas,
-CLAUDE.md, conventions/hook injections — measured at ~47-66k across recent
-sessions, i.e. 23-33% of the budget, before any work happens): a band below
-70 fires minutes into a session and just trains the main loop to ignore the
-warning.
+Three default bands, three distinct messages: the lowest (50) only asks the
+session to shift into delegation mode — it says nothing about wrapping up,
+because delegation is most valuable while most of the budget is still
+unspent. The middle band (70) says stop taking on new inline work; the last
+(85) says wrap up and respawn. The wrap-up bands stay high because the fixed
+session baseline (system prompt, MCP schemas, CLAUDE.md, conventions/hook
+injections — measured at ~47-66k across recent sessions) already consumes a
+fifth to a third of the budget before any work happens.
 
 Env overrides:
   CONTEXT_WATCH_WINDOW  budget in tokens; when set, used verbatim (skips the
                         model lookup and the 250k cap)
-  CONTEXT_WATCH_BANDS   comma-separated warn thresholds in percent (default 70,85)
+  CONTEXT_WATCH_BANDS   comma-separated warn thresholds in percent (default 50,70,85)
 """
 import json
 import os
@@ -109,7 +112,7 @@ def main():
     else:
         budget = min(effective_window(model), BUDGET_CAP)
     bands = sorted(
-        int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "70,85").split(",")
+        int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "50,70,85").split(",")
     )
     pct = 100 * context // budget
 
@@ -135,6 +138,13 @@ def main():
         advice = (
             "Wrap up now: finish the current step only, then write a handover "
             "and respawn into a fresh session. Do not start new work here."
+        )
+    elif len(bands) >= 3 and band == bands[0]:
+        advice = (
+            "Shift into delegation mode: from here, send exploration and "
+            "sustained implementation to subagents and keep the main loop to "
+            "orchestration and targeted reads. No need to wrap up — just stop "
+            "growing this context with bulk work."
         )
     else:
         advice = (
