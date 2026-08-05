@@ -22,26 +22,38 @@ non-trivial questions about the code:
 
 ## Model selection
 
-- Refer to models by **unversioned alias** (`opus`, `sonnet`, `haiku`), never a
-  version-pinned id (including when naming a model in config or docs). The alias
-  always resolves to the latest release of that tier, so nothing needs editing
-  when a new version ships.
-- **Pick the model per task.** Assess each subagent task's difficulty before
-  dispatch rather than defaulting one tier across a whole plan. Subtle reasoning
-  (feasibility, security, cross-cutting review) warrants a stronger tier than
-  mechanical work.
+- Refer to models by **unversioned alias** (`fable`, `opus`, `sonnet`, `haiku`),
+  never a version-pinned id (including when naming a model in config or docs). The
+  alias always resolves to the latest release of that tier, so nothing needs
+  editing when a new version ships.
+- **Fixed routing table**, not per-dispatch judgment calls:
+    - **Orchestrator (main session): `opus`.** Orchestration is itself the complex
+      work (decomposing well, briefing precisely, judging results). A sonnet main
+      session was tried: its weaker decomposition and judging caused more rework
+      than the cheaper model saved. A fable main session burns the weekly cap on
+      always-on cache reads. Opus is the deliberate middle; don't relitigate this
+      toward either end.
+    - **Mechanical subtasks: `sonnet`.** Fully-specified work with a tight return
+      contract (apply a reviewed plan step, rename/move, format, run tests and
+      report).
+    - **Standard subtasks: `opus`.** Implementation, research, debugging; the
+      default tier.
+    - **Hardest-reasoning advisor calls: `fable`.** Cross-cutting review,
+      feasibility, security, subtle design judgment. Fable is bursty advisor
+      capacity, never an always-on loop; its weekly cap is the scarce resource.
+    - Never `haiku`.
 - **Every dispatch names its model explicitly.** Deciding the tier is part of
   composing the dispatch: pass `model:` on every Agent call, never rely on
   inherit. An omitted model silently runs the worker on whatever the main loop
-  happens to be — usually the most expensive tier for the most mechanical work.
+  happens to be, usually the most expensive tier for the most mechanical work.
 
 ## Delegation
 
 The main session is an orchestrator, not a worker. Main-loop turns are the most
-expensive tokens in the system: they run on the strongest model, and every
-inline turn grows a context that every later turn re-reads. The main session
-decomposes, dispatches, reviews, and integrates; sustained implementation and
-broad reading happen in subagents.
+expensive tokens in the system: they run on a premium tier, and every inline
+turn grows a context that every later turn re-reads. The main session's verbs
+are decompose, dispatch, judge, integrate, communicate; sustained
+implementation and broad reading happen in subagents.
 
 - **Delegation tripwire.** More than ~10 Edit/Write calls in the main loop, or a
   third edit-test cycle on the same problem, means the work should have been a
@@ -52,22 +64,37 @@ broad reading happen in subagents.
   (subagent-driven-development or equivalent), the main session never edits
   implementation files itself: every task goes to a fresh implementer subagent,
   and every fix from review goes to a fix subagent. "This task is small, faster
-  inline" is how plan execution migrates back into the orchestrator — if a task
+  inline" is how plan execution migrates back into the orchestrator: if a task
   is genuinely too small to brief, fold it into an adjacent task's brief rather
   than doing it in the main loop.
+- **Return contract on every dispatch.** End each brief with an explicit bounded
+  output spec, e.g. "Return at most 10 lines: the decision-relevant facts with
+  `file:line` cites. Do not return file contents." Only the subagent's final
+  message enters main context; the contract is what keeps it both small and
+  sufficient. Specify what must come back, not just "be brief": an
+  under-specified summary forces blind decisions downstream, and that rework
+  costs more than the tokens saved.
+- **Detail-to-disk.** Subagents doing heavy analysis write full findings to a
+  scratchpad or docs file and return the path plus a short executive summary
+  (5 lines or so). The main session pulls the detail back in only when a later
+  decision actually needs it.
+- **At most 3 parallel subagents.** Each completion notification lands in main
+  context. Prefer sequential dispatch when results feed into each other.
 - **Long sessions are a cost bug, not a stamina test.** Context is re-read on
-  every turn, so cost grows superlinearly with session length. When the
-  context-budget warning fires (the conventions plugin's `context-watch` hook),
-  finish the current step, then either delegate the remaining work to subagents
-  or write a handover and respawn into a fresh session — don't keep grinding in
-  a bloated context.
+  every turn, so cost grows superlinearly with session length. Keep the
+  orchestrator's working memory in a maintained task list, not the accumulated
+  transcript. When the context-budget warning fires (the conventions plugin's
+  `context-watch` hook), finish the current step, then either delegate the
+  remaining work to subagents or write a handover and respawn into a fresh
+  session; don't keep grinding in a bloated context, and prefer a handover over
+  mid-task compaction, which is where orchestrators lose the plot.
 - **The delegation gate is enforcement, not advice.** The 50% context-watch
   band asks the session to shift into delegation mode; from 70% the
   `delegation-gate` hook stops asking and denies bulk read/search calls in
   the main loop after 3 round-trips per turn (1 past the last band). A
   denial is not an error to retry: dispatch a researcher/Explore subagent for
   the exploration, or make the read targeted (Read with offset+limit, Grep
-  with head_limit — always allowed). Subagents are never gated. Kill switch
+  with head_limit, always allowed). Subagents are never gated. Kill switch
   for a session that legitimately needs deep inline reading:
   `DELEGATION_GATE=off`.
 
@@ -80,10 +107,9 @@ broad reading happen in subagents.
   competing with it (`package.json` `engines`/`packageManager`, `.ruby-version`):
   `.mise.toml` *installs* the toolchain; those fields are what other tooling *reads*.
   Don't introduce a second installer once mise owns the toolchain.
-- **Cloud caveat:** `mise.run` / the mise CDN are NOT on the Claude-Code-web Trusted
-  allowlist, but `github.com` and `nodejs.org` are. In a cloud setup script, install
-  mise from a **pinned GitHub release tarball**, not the `curl https://mise.run | sh`
-  one-liner.
+- **Cloud caveat:** in a cloud setup script, install mise from a **pinned GitHub
+  release tarball**, never the `curl https://mise.run | sh` one-liner (the mise
+  CDN is not on the cloud allowlist; see the plugin's `docs/reference.md`).
 
 ## Working preferences
 
@@ -99,7 +125,7 @@ broad reading happen in subagents.
   start smaller than feels complete: it's cheaper to add structure once a real need
   appears than to unwind an abstraction that never paid off.
 - **Before writing new code, climb the reuse ladder.** Solve at the first rung
-  that works: (1) does this need to exist at all — if no requirement asks for it,
+  that works: (1) does this need to exist at all; if no requirement asks for it,
   skip it; (2) an existing helper/pattern in this codebase; (3) the standard
   library; (4) a native platform feature (CSS, HTML inputs, database constraints);
   (5) an already-installed dependency; (6) only then write the smallest working
@@ -113,15 +139,11 @@ broad reading happen in subagents.
 - **TDD-first.** Write a failing test before the implementation, make it pass, then
   verify the full suite is green before committing. Default for features and
   bugfixes; instrument and debug brittle tests rather than paper over them.
-- **Green-tests commit gate (opt-in per repo).** A repo opts in by committing a
-  `.claude/require-green-tests` file at its root containing its canonical
-  full-suite command (e.g. `make test`). In opted-in repos, a PreToolUse hook
-  denies `git commit` unless the current worktree matches the fingerprint
-  recorded at the last green run. Record a run by executing the suite through
-  the conventions plugin's `scripts/record-green.sh <command>` from the repo
-  root; in these repos, always run the full suite via that wrapper so the pass
-  is recorded. Staging changes never invalidates a recorded run; editing any
-  file does.
+- **Green-tests commit gate (opt-in per repo).** Repos with a
+  `.claude/require-green-tests` file gate `git commit` on a recorded green run:
+  in those repos, always run the full suite via the plugin's
+  `scripts/record-green.sh <command>` so the pass is recorded. Mechanics in the
+  conventions plugin's `docs/reference.md`.
 - **Adversarial review before committing.** When a plan/spec is finalized or a
   PR/diff is ready, run independent skeptical review: find what's wrong, not
   rubber-stamp. (See the `dev` plugin's `adversarial-review` skill.)
@@ -135,19 +157,13 @@ broad reading happen in subagents.
   reverts into their target. Never cite commit short-hashes in docs or PR bodies
   (rebases churn them). Before deleting branches/worktrees, verify merge status
   (including squash-merges); never remove the worktree the session runs inside.
-- **Commits are authored as the human, never the harness.** Cloud containers boot
-  with the harness git identity (`Claude <noreply@anthropic.com>`); the owner's
-  identity is deliberately never written into a repo. Each cloud environment
-  carries it instead, as env vars set once in the environment settings at
-  claude.ai/code: all four of `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
-  `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`. Git honors them natively, so
-  nothing else is needed; author vars alone leave the committer field as the
-  harness. Repos carrying the cloud-parity seed warn in the session-start pulse
-  when the vars are missing and the identity is the harness default; in that case
-  set a repo-local `user.name`/`user.email` before the first commit, asking
-  rather than guessing, and leave any deliberate identity alone. Only the git
-  author changes; don't add an AI co-author trailer to compensate (see *No AI
-  attribution in pushed artifacts* under Writing style).
+- **Commits are authored as the human, never the harness.** If the git identity
+  resolves to the harness default (`Claude <noreply@anthropic.com>`), set a
+  repo-local `user.name`/`user.email` before the first commit, asking rather
+  than guessing, and leave any deliberate identity alone. Never add an AI
+  co-author trailer to compensate (see *No AI attribution in pushed artifacts*
+  under Writing style). Cloud identity setup (the four `GIT_*` env vars) is
+  documented in the conventions plugin's `docs/reference.md`.
 - **Autonomous pipeline for low-risk features.** For a feature you flag as
   low-risk, the `dev` plugin's `/autonomous-feature` skill runs spec →
   adversarial-review → plan → adversarial-review → implement → adversarial-review
