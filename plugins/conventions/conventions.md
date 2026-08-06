@@ -22,12 +22,18 @@ non-trivial questions about the code:
 
 ## Model selection
 
-- Refer to models by **unversioned alias** (`fable`, `opus`, `sonnet`, `haiku`),
+- Refer to models by **unversioned alias** (`fable`, `sonnet`, `haiku`),
   never a version-pinned id (including when naming a model in config or docs). The
   alias always resolves to the latest release of that tier, so nothing needs
   editing when a new version ships.
+    - **Deliberate exception — the opus tier is version-pinned to
+      `claude-opus-4-8`, not the `opus` alias.** Opus 5 regressed on our work
+      versus Opus 4.8, so we do not want the alias to auto-adopt it. This pin is
+      manual on purpose: revisit it when a future Opus is worth adopting, and only
+      then move it forward (to `claude-opus-5-x` or back to the `opus` alias).
 - **Fixed routing table**, not per-dispatch judgment calls:
-    - **Orchestrator (main session): `opus`.** Orchestration is itself the complex
+    - **Orchestrator (main session): `claude-opus-4-8`** (the pinned opus tier; set
+      in `settings.json`). Orchestration is itself the complex
       work (decomposing well, briefing precisely, judging results). A sonnet main
       session was tried: its weaker decomposition and judging caused more rework
       than the cheaper model saved. A fable main session burns the weekly cap on
@@ -36,16 +42,29 @@ non-trivial questions about the code:
     - **Mechanical subtasks: `sonnet`.** Fully-specified work with a tight return
       contract (apply a reviewed plan step, rename/move, format, run tests and
       report).
-    - **Standard subtasks: `opus`.** Implementation, research, debugging; the
-      default tier.
+    - **Standard subtasks: the pinned opus tier (`claude-opus-4-8`), reached by
+      inheritance — not by naming it.** Implementation, research, debugging; the
+      default tier. The Agent tool's `model` param accepts only aliases
+      (`sonnet`/`opus`/`haiku`/`fable`) and `opus` now resolves to Opus 5, so you
+      cannot pass `claude-opus-4-8` on the call. Dispatch these by **omitting
+      `model:`** so the worker inherits the pinned main session (`settings.json`).
+      Do **not** pass `model: opus` — that silently downgrades the worker to Opus 5.
+      (Our `coder`/`researcher` agent defs carry no `model:` frontmatter, so
+      inheritance holds; only add `model:` frontmatter with an alias if you
+      deliberately want that tier.)
     - **Hardest-reasoning advisor calls: `fable`.** Cross-cutting review,
       feasibility, security, subtle design judgment. Fable is bursty advisor
       capacity, never an always-on loop; its weekly cap is the scarce resource.
     - Never `haiku`.
-- **Every dispatch names its model explicitly.** Deciding the tier is part of
-  composing the dispatch: pass `model:` on every Agent call, never rely on
-  inherit. An omitted model silently runs the worker on whatever the main loop
-  happens to be, usually the most expensive tier for the most mechanical work.
+- **Name the model explicitly for the `sonnet` and `fable` tiers; inherit for the
+  opus tier.** Deciding the tier is part of composing the dispatch. For mechanical
+  (`sonnet`) and advisor (`fable`) work, pass `model:` on the Agent call. For the
+  opus tier, do the opposite — omit `model:` so the worker inherits the pinned
+  `claude-opus-4-8` main session, because the tool cannot name that version and
+  the `opus` alias would run Opus 5 (see the standard-subtasks row above). The one
+  hazard of inheriting: if you dispatch a `sonnet`/`fable` worker and forget the
+  `model:`, it silently runs on opus 4.8 (expensive tier for mechanical work) —
+  so never omit `model:` on a non-opus dispatch.
 
 ## Delegation
 
