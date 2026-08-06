@@ -72,7 +72,7 @@ if [ -z "$conv_present" ]; then
     printf "The shared conventions plugin isn't on disk this session, so its SessionStart injection won't fire.\n\n"
   fi
   printf "Cross-project reminders that live only in the plugin:\n"
-  printf -- "- Refer to models by unversioned alias (\`opus\`/\`sonnet\`/\`haiku\`), never a version-pinned id; pick the model per task.\n"
+  printf -- "- Model routing lives in the conventions plugin (not loaded this session); until it loads, run subagents on the inherited session model and don't downgrade them.\n"
   printf -- "- Pin language runtimes/tools via a committed \`.mise.toml\` (single source of truth for local dev, CI, and cloud setup).\n"
   printf -- "- TDD-first; adversarial review before committing; never push or commit to main without explicit approval.\n"
 fi
