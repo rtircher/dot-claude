@@ -138,17 +138,17 @@ git diff HEAD~1..HEAD | \
 ```
 
 Success = schema-valid JSON findings with the sha256 artifact binding. That is
-exactly what the `dev-adversarial-review` workflow folds in when invoked with
-`externalReview: true`.
+exactly what the `dev-adversarial-review` workflow folds in by default
+(`externalReview` defaults to true; the caller supplies `skillScriptsDir` and
+`expectedArtifactSha256`, and the workflow accepts the vote only on digest
+equality).
 
-## 9. Offer (do not impose) the standing default
+## 9. Confirm the standing default
 
-Ask whether the user wants a standing pre-authorization in their CLAUDE.md, and
-recommend the middle ground: `externalReview: true` by default for PR/diff
-reviews only (cross-family reads pay off most there), spec/plan panels staying
-Claude-only on request. Local model, so no consent ping either way. If they
-accept, also write a memory entry naming the endpoint, model, and fallback so
-future sessions discover the reviewer.
+External review is on by default in `dev-adversarial-review` for every artifact
+type, and this local reviewer is the always-available cross-family vote (local
+model, so no consent ping). Tell the user that, and write a memory entry naming
+the endpoint, model, and fallback so future sessions discover the reviewer.
 
 ## Report
 

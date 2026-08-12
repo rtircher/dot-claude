@@ -26,6 +26,19 @@
  * change to re-appear in that range; in autonomous-feature the coordinator owns
  * the worktree and verification around this. Do not run this on a tree you are not
  * prepared to have edited.
+ *
+ * COST NOTE: external reviewers (local endpoint model, Codex) are re-dispatched
+ * on EVERY round, up to maxRounds (3x) per artifact. Intended: a review of the
+ * pre-fix artifact says nothing about the post-fix one.
+ * KNOWN LIMIT: args are forwarded unchanged each round, so the caller-pinned
+ * expectedArtifactSha256 goes stale once a fix pass mutates the artifact;
+ * rounds 2+ then drop external votes on digest mismatch, reported in
+ * external.dropped, never silently substituted. Honest but degraded. Fresh
+ * per-round digests need a caller-side loop; deliberately out of scope here.
+ * FORCE/CONFIRM: requireExternal is a ROUND-1 contract. External participation
+ * is provable only while the pinned digest is fresh, so it is forwarded only on
+ * round 1; rounds 2+ drop stale-digest votes by design (the documented
+ * degradation above) and must never raise external.shortfall.
  */
 export const meta = {
   name: 'dev-gated-review',
@@ -63,7 +76,7 @@ while (true) {
   round += 1
   phase(`Round ${round}`)
   // Nested one level: dev-gated-review is top-level, dev-adversarial-review is the child.
-  review = await workflow('dev-adversarial-review', a)
+  review = await workflow('dev-adversarial-review', round === 1 ? a : { ...a, requireExternal: false })
   history.push({
     round,
     findings: review.findings.length,
