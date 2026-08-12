@@ -192,7 +192,7 @@ function tag(handle, family) {
 // (externalVoteProblem), not the courier's obedience: couriers never see
 // art.expectedArtifactSha256, so a courier that skips the tool cannot fabricate
 // a passing vote. Couriers run as the default workflow subagent (full tools):
-// dev:researcher is ruled out because its RULES forbid exactly what these do
+// dev:reviewer/dev:researcher are ruled out because their RULES forbid exactly what these do
 // (POSTing the artifact to an endpoint; spawning the Codex app-server).
 // The pipelines carry no env prefix: external-review.mjs reads its own
 // environment (which courier shells inherit) and fails fast with the exact
@@ -280,7 +280,7 @@ function buildReviewers(art) {
   const thunks = []
   if (art.artifactType === 'diff') {
     thunks.push(() =>
-      agent(diffReviewPrompt(art), { label: 'code-review', phase: 'Review', schema: REVIEW_SCHEMA, agentType: 'dev:researcher', ...tierOpts(art, 'code-review') }).then(tag('code-review', 'claude')),
+      agent(diffReviewPrompt(art), { label: 'code-review', phase: 'Review', schema: REVIEW_SCHEMA, agentType: 'dev:reviewer', ...tierOpts(art, 'code-review') }).then(tag('code-review', 'claude')),
     )
   } else {
     const lenses = LENS_PANELS[art.artifactType]
@@ -293,7 +293,7 @@ function buildReviewers(art) {
           schema: REVIEW_SCHEMA,
           ...(lens.model ? { model: lens.model } : {}),
           ...tierOpts(art, lens.key),
-          agentType: 'dev:researcher',
+          agentType: 'dev:reviewer',
         }).then(tag(lens.key, 'claude')),
       )
     }
@@ -480,6 +480,9 @@ if (toVerify.length) {
     await parallel(
       toVerify.flatMap((f, i) =>
         Array.from({ length: VERIFY_VOTES }, (_unused, k) => () =>
+          // dev:researcher, NOT dev:reviewer: verify agents adjudicate an objection, and the
+          // reviewer persona's flag-when-uncertain bias would stack with verifyPrompt's own
+          // prefer-confirmed bias and neuter the pass's ability to refute false positives.
           agent(verifyPrompt(f, art), { label: `verify:${i}.${k}`, phase: 'Verify', schema: VERDICT_SCHEMA, agentType: 'dev:researcher', ...tierOpts(art, 'verify') }).then((v) => v && { i, v }),
         ),
       ),

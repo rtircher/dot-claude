@@ -99,10 +99,12 @@ irrelevant to the specific artifact, and say so.
 ### 4. Dispatch independent reviewers in parallel (manual fallback)
 
 Dispatch one `Agent` per lens, **all in a single message** so they run
-concurrently with fresh, independent context. Reviewers only read and report, so
-dispatch each as a read-only `dev:researcher` agent (fall back to
-general-purpose only where custom agent types are unavailable). Each reviewer
-gets:
+concurrently with fresh, independent context. Dispatch each as a read-only
+`dev:reviewer` agent — its definition already carries the adversarial stance
+and the findings schema below, so the dispatch prompt only needs the artifact,
+the lens, and any overrides. (Fall back to `dev:researcher`, then
+general-purpose, where `dev:reviewer` is unavailable — in that case paste the
+framing and schema below into the prompt.) Each reviewer gets:
 
 - The full artifact (paste it or give the file path).
 - Its assigned lens, and only that lens.
