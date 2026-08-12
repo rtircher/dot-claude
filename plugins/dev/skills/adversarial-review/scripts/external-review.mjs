@@ -109,7 +109,7 @@ async function readStdin() {
   if (process.stdin.isTTY) fail(1, 'no artifact on stdin (pipe the diff or document in; never pass it as an argument)')
   const chunks = []
   for await (const chunk of process.stdin) chunks.push(chunk)
-  return Buffer.concat(chunks).toString('utf8')
+  return Buffer.concat(chunks) // raw bytes; caller hashes BEFORE decoding
 }
 
 function buildPrompt(opts, artifact) {
@@ -183,7 +183,13 @@ if (!apiKey && !isLocal) fail(1, `EXTERNAL_REVIEW_API_KEY is required for non-lo
 
 const timeoutMs = Number(process.env.EXTERNAL_REVIEW_TIMEOUT_MS) || 300_000
 
-const artifact = await readStdin()
+// Hash the RAW stdin bytes before decoding: for artifacts containing invalid
+// UTF-8 (non-UTF-8 text files, some binary hunks in a diff) the lossy decode
+// changes the bytes, and the digest must stay byte-exact against the caller's
+// raw-byte sha256sum for the workflow's equality gate to hold.
+const artifactBytes = await readStdin()
+const artifactSha256 = createHash('sha256').update(artifactBytes).digest('hex')
+const artifact = artifactBytes.toString('utf8')
 if (!artifact.trim()) fail(1, 'stdin was empty — nothing to review')
 if (artifact.length > MAX_ARTIFACT_CHARS) {
   fail(1, `artifact is ${artifact.length} chars (max ${MAX_ARTIFACT_CHARS}); narrow the diff range or split the document instead of truncating`)
@@ -227,7 +233,7 @@ process.stdout.write(JSON.stringify({
   reviewer: { kind: 'external-review-script', model, endpoint: host, family: 'external' },
   target: opts.target,
   artifactType: opts.type,
-  artifactSha256: createHash('sha256').update(artifact).digest('hex'),
+  artifactSha256,
   verdict: review.verdict,
   findings: review.findings,
 }, null, 2) + '\n')

@@ -1,6 +1,6 @@
 ---
 name: autonomous-feature
-description: Use when the user explicitly asks to run a whole feature through the full spec → adversarial-review → plan → adversarial-review → implement → adversarial-review pipeline with minimal supervision — e.g. "run the full pipeline", "spec it, review it, plan it, then build it", "take this all the way through with minimal input from me", "handle it end to end and only ping me if you need a decision", or the /autonomous-feature command. Do NOT trigger on an ordinary "add X" / "build Y" request, or on a request for only a spec, only a plan, only a review, or only the implementation — those belong to the individual skills (brainstorming, writing-plans, adversarial-review, subagent-driven-development). Pass a "pause" argument to gate for approval after each phase instead of running heads-down, or an "external-review" argument to pre-authorize a third-party (e.g. Codex) reviewer in the review phases.
+description: Use when the user explicitly asks to run a whole feature through the full spec → adversarial-review → plan → adversarial-review → implement → adversarial-review pipeline with minimal supervision — e.g. "run the full pipeline", "spec it, review it, plan it, then build it", "take this all the way through with minimal input from me", "handle it end to end and only ping me if you need a decision", or the /autonomous-feature command. Do NOT trigger on an ordinary "add X" / "build Y" request, or on a request for only a spec, only a plan, only a review, or only the implementation — those belong to the individual skills (brainstorming, writing-plans, adversarial-review, subagent-driven-development). Pass a "pause" argument to gate for approval after each phase instead of running heads-down, or an "external-review" argument to force and confirm third-party enlistment: the run must surface a loud, ping-worthy failure if no external reviewer ran in ROUND 1 of a review phase (external.shortfall), while rounds 2+ digest-staleness drops are the documented degradation and never ping.
 ---
 
 # Autonomous Feature
@@ -43,21 +43,23 @@ plan, etc.). Mid-phase, both modes behave identically.
 
 ## Third-party review (`external-review` argument)
 
-The adversarial-review phases default to Claude-only. Enlisting a third-party
-model (Codex via the `codex` plugin, Cursor, OpenCode, or the adversarial-review
-skill's shipped reviewer script) sends the reviewed artifact to an
-external API, which the ping contract below treats as a stop-and-ask. (A
-reviewer pinned to a local model sends nothing off-machine and needs no
-pre-authorization; the adversarial-review skill covers this.) Pass
-`external-review` to pre-authorize that for the whole run: `/autonomous-feature external-review`,
-or combined with the gate, `/autonomous-feature pause external-review`. Then every
-adversarial-review phase enlists the available third-party model (Codex
-preferred) as an extra independent reviewer with no per-phase consent stop, and
-that reviewer's artifact send is exempt from the external-service ping below. A
-code diff (Phase 6) is the strongest case for a different model family.
+The adversarial-review phases inherit external-on by default from
+`dev-adversarial-review`: every available, applicable cross-family reviewer
+runs alongside the Claude panel without a per-phase consent stop. The local
+endpoint reviewer always runs (nothing leaves the machine, no consent needed);
+Codex runs under the user's standing CLAUDE.md consent for their own explicit
+requests, and an autonomous-feature invocation is itself user-initiated, so it
+counts. A code diff (Phase 6) is the strongest case for a different model
+family.
 
-Without `external-review`, the run stays Claude-only unless you approve a consent ping
-when a phase offers third-party review.
+The `external-review` argument is therefore **force/confirm**, not an enable
+switch: `/autonomous-feature external-review` (or `/autonomous-feature pause
+external-review`) demands that external reviewers actually ran while the pinned
+digest was fresh. It is SATISFIED BY ROUND-1 external participation: round 1
+runs against the digest-fresh artifact, and once a fix pass mutates the
+artifact the once-pinned digest is stale by design, so rounds 2+ dropping
+external votes on digest mismatch is the documented degradation, reported but
+never pinged. A round-1 `external.shortfall` in a forced run IS ping-worthy.
 
 ## Bias to simplicity — active in every phase
 
@@ -93,9 +95,11 @@ invalidate the premise you're working from:
   implementations. Resolve trivial ambiguities yourself and note the assumption.
 - **Destructive or irreversible action.** Deleting data, schema/data migrations,
   force-push, rewriting history, publishing to an external service, anything
-  touching production, anything that spends money. (A third-party review send
-  pre-authorized by the `external-review` argument is exempt here; every other external
-  publish still stops.)
+  touching production, anything that spends money. (Third-party review sends are
+  pre-authorized as standing policy: the local model always, and Codex per the
+  standing CLAUDE.md consent, with autonomous-feature runs counting as
+  user-initiated. They never trigger this ping; every other external publish
+  still stops.)
 - **Scope expansion.** The work is drifting beyond what the agreed spec covers.
   Don't silently grow the feature — surface it and let the human decide.
 - **Security-sensitive decision.** Auth, secrets/credentials, cryptography,
@@ -176,8 +180,18 @@ consolidated structured result rather than flooding the coordinator with
 per-reviewer chatter, which suits the thin-coordinator discipline above, and its
 gate maps onto these confidence gates. A Workflow runs headless and cannot pause
 to disambiguate or to ask consent, so pass the full artifact contract up front:
-type, file path or diff range, repo, focus, out-of-scope, and whether third-party
-review is pre-authorized (the `external-review` argument). The ping contract stays
+type, file path or diff range, repo, focus, out-of-scope, plus (because
+gated-review forwards args unchanged into `dev-adversarial-review`) the
+external-review contract:
+`skillScriptsDir: "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts"`
+(`CLAUDE_PLUGIN_ROOT` is set for plugin commands, the same mechanism
+`setup-local-reviewer.md` uses; never a repo-relative guess),
+`expectedArtifactSha256` (computed by this coordinator in Bash exactly as the
+`/dev:review-panel` command does: sha256 of `git diff <range>` output for
+a diff, of the file bytes for spec/plan), and `requireExternal: true` when the
+`external-review` argument was given. Without the first two the workflow skips
+external with a `config` drop, which in a force/confirm run is a round-1
+shortfall, hence a ping. The ping contract stays
 with this coordinator: read the Workflow's returned findings and stop per the
 contract above; the Workflow never pings on its own. If the Workflow tool is
 unavailable, use the `adversarial-review` skill as written.
@@ -275,8 +289,9 @@ code does what you told it to, not that what you told it to do is right.
 
 Run the `adversarial-review` skill on the completed work (the branch diff). For a
 code diff it delegates to `/code-review` with effort scaled to diff size/risk —
-let it. When third-party review is enabled (the `external-review` flag, or an approved
-consent ping), it also enlists a third-party reviewer, and a code diff is the
+let it. External review is on by default; the `external-review` flag forces and
+confirms round-1 participation (`requireExternal: true`, ping on round-1
+`external.shortfall`), and a code diff is the
 strongest case for a different model family. For a **multi-task** plan, also run the final cross-implementation
 symmetry pass (sonnet+) over the full branch diff to catch type asymmetry,
 parallel-structure drift, undocumented behavior, and cross-package coupling that

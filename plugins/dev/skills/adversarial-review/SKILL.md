@@ -33,18 +33,29 @@ external review.
 (step 1), if the `Workflow` tool is available, dispatch the whole review pass as
 `Workflow` with `name: "dev-adversarial-review"` and args
 `{artifactPath, artifactType ('spec'|'plan'|'diff'), diffRange, repoDir, focus,
-outOfScope, externalReview, tiers}`. Reviewers inherit the session model by
-default; `tiers` is the per-dispatch re-tiering knob (keys: a lens key,
-`code-review`, `verify`; values `{model, effort}`). Apply step 4's convention
-when setting it: assess this artifact's difficulty per lens, and only re-tier
-where you have a concrete reason (e.g. `{ 'scope-yagni': { model: 'sonnet' } }`
-for a short, simple plan when cost matters). Never downgrade the verify
-skeptics. The workflow implements steps 2 to 6
-deterministically: the lens panel (or a code-review pass for a diff),
+outOfScope, externalReview, skillScriptsDir, expectedArtifactSha256, pinnedSha,
+tiers}`. `externalReview` defaults to **true**: the workflow itself runs every
+available, applicable cross-family reviewer (the endpoint script for any
+artifact type; Codex for diffs) alongside the Claude panel, and reports any it
+could not run. Opt out (`externalReview: false`) only on an explicit
+"no external" / "claude only" from the user. For external review the caller
+must supply `skillScriptsDir` (this skill's `scripts/` dir, absolute) and
+`expectedArtifactSha256` (sha256 of the exact artifact bytes, computed in
+Bash), plus `diffRange` for diffs; the `/dev:review-panel` command does
+all of this automatically and is the guaranteed entry point. Reviewers inherit
+the session model by default; `tiers` is the per-dispatch re-tiering knob
+(keys: a lens key, `code-review`, `verify`; values `{model, effort}`). Apply
+step 4's convention when setting it: assess this artifact's difficulty per
+lens, and only re-tier where you have a concrete reason (e.g.
+`{ 'scope-yagni': { model: 'sonnet' } }` for a short, simple plan when cost
+matters). Never downgrade the verify skeptics. The workflow implements steps 2
+to 6 deterministically: the lens panel (or a code-review pass for a diff),
+real external couriers (`external-review.mjs` / `codex-review.mjs`),
 schema-validated findings, a skeptic verify pass on uncorroborated blocker/major
-findings, and synthesis blind to model identity. Present its returned
-panel/verdicts/findings exactly per the Output section. Set
-`externalReview: true` only with the consent step 5 requires. Steps 2 to 6 below
+findings, and synthesis blind to model identity. The workflow *owns* external
+invocation; step 5's manual Bash instructions are the fallback for when the
+Workflow tool is unavailable. Present its returned panel/verdicts/findings
+exactly per the Output section. Steps 2 to 6 below
 are the manual fallback: use them when the Workflow tool is unavailable or the
 workflow run itself errors, never because the manual path feels quicker.
 
@@ -274,18 +285,21 @@ reachable endpoint; prefer it when Codex/OpenCode are absent, when the user
 wants structured output folded straight into synthesis, or when the review must
 stay on-machine via a local model.
 
-When several third-party options are available, prefer Codex (first-party
-plugin, owns its auth), then the shipped script (structured output, mechanical
-artifact binding), then OpenCode/Cursor. One third-party reviewer is enough; a
-second adds little once cross-family corroboration is possible. Exception: when
-the user _explicitly_ requested external review in this run, that request
-overrides both the one-reviewer cap and any standing default reviewer. Enlist
-the strongest available reviewer per the preference order above (typically
-Codex), even if a pre-authorized default (e.g. a local model) already ran or
-would otherwise satisfy this step. A user who asks for external review by name
-wants the strongest cross-family read available, and their explicit request is
-the consent for the artifact to reach that reviewer's provider. Do not quietly
-substitute the lower-friction default and report the ask as satisfied.
+The default is **all available** cross-family reviewers, not one: the workflow
+dispatches every reviewer the environment actually has that applies to the
+artifact (script/endpoint reviewers for any artifact type; Codex for diffs
+only, and only for ranges of the form `<ref>...HEAD`). Availability and consent
+still gate each reviewer exactly as above; a missing or unauthenticated tool is
+reported as absent, never faked and never a blocker for the rest of the panel.
+Both external kinds are bound **by-digest**: each tool self-reports the sha256
+of the bytes it reviewed, and the workflow accepts a vote only when that digest
+exactly matches the caller's pinned `expectedArtifactSha256` AND the vote
+carries a shape-valid verdict plus findings. When the user _explicitly_
+requested external review in this run, that request is the consent for the
+artifact to reach the named reviewer's provider, and a run where no external
+reviewer participated must say so loudly rather than report the ask as
+satisfied. Do not quietly substitute a lower-friction reviewer and report the
+ask as satisfied.
 
 **External review requested but no reviewer can run.** When the user asked for
 external review and none of the four options is available (tool missing,
@@ -362,7 +376,11 @@ Present to the user:
 - **The panel that actually voted**: how many reviewers were dispatched, how many
   returned, and which (if any) were dropped because a tool was missing,
   unauthenticated, or errored mid-run. State this up front so the user knows the
-  weight behind the verdict — never imply a fuller panel than voted. If the user
+  weight behind the verdict — never imply a fuller panel than voted. On the
+  Workflow path, ALWAYS surface the result's `external.ran` (which cross-family
+  reviewers really voted), `external.dropped` (each absent reviewer with its
+  reason), and `external.shortfall` (the caller demanded external participation
+  and nothing external ran). If the user
   asked for external review and no third-party reviewer could run, append the
   setup hint from step 5 (the cheapest paths to a cross-family reviewer, per the
   model-family table there).
@@ -395,6 +413,10 @@ that's a separate task.
 - **Same-family "third party".** A provider-agnostic harness running a Claude
   model is not an independent reviewer and never counts as cross-family
   corroboration. Independence is the model family, not the tool name.
+  The workflow now *enforces* this and the phantom-review anti-pattern
+  mechanically: any external vote whose self-reported digest does not equal the
+  caller-pinned one, or whose verdict/findings are malformed, is dropped and
+  reported in `external.dropped`, never counted.
 - **Prestige-weighted scoring.** Don't let a finding's rank ride on which model
   raised it. Score blind to model identity; the signal is corroboration count and
   cross-family agreement, not the brand name attached to a finding.

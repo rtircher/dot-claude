@@ -20,7 +20,28 @@
  *                                    // Needed when the orchestrator runs outside that repo.
  *   focus?: string,                  // optional in-scope note, bound to every reviewer
  *   outOfScope?: string,             // optional exclusions, bound to every reviewer
- *   externalReview?: boolean,        // pre-authorized third-party reviewer (additive)
+ *   externalReview?: boolean,        // defaults TRUE: real cross-family couriers run
+ *                                    // alongside the Claude panel; pass false to opt out
+ *   skillScriptsDir?: string,        // absolute path to the adversarial-review skill's
+ *                                    // scripts/ dir; plugin commands pass
+ *                                    // `${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts`.
+ *                                    // Required for external review (courier command paths).
+ *   expectedArtifactSha256?: string, // sha256 hex of the exact artifact bytes
+ *                                    // (`git diff <range>` output for a diff, file bytes
+ *                                    // for spec/plan), computed by the CALLER and never
+ *                                    // shown to couriers; each external vote must
+ *                                    // self-report an EQUAL digest to count.
+ *                                    // Required for external review.
+ *                                    // (There is no separate diff-base arg: base derives
+ *                                    // from the range, and a second artifact-selection
+ *                                    // knob could skew from the hashed range.)
+ *                                    // diffRange is additionally required for diff
+ *                                    // artifacts, and must be `<ref>...HEAD` for the
+ *                                    // Codex reviewer to participate (the companion
+ *                                    // reviews only that form).
+ *   requireExternal?: boolean,       // optional; when true and zero external votes ran,
+ *                                    // the result carries external.shortfall: true.
+ *                                    // Advisory only: the workflow never blocks on it.
  *   tiers?: {                        // optional per-reviewer re-tiering, decided by the
  *     [key: string]: {               // caller per dispatch ("pick the model per task").
  *       model?: string,              // unversioned alias ('opus', 'sonnet', 'haiku')
@@ -157,28 +178,102 @@ function diffReviewPrompt(art) {
 Perform a rigorous code review of ${range}. Run \`${gitPrefix(art)} diff ${art.diffRange || ''}\` to see the changes, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context. Hunt for correctness bugs, security holes, broken invariants, and cross-package coupling, not style. End with an overall verdict (ship / don't-ship) and one sentence why. Return findings via the structured output tool.`
 }
 
-function thirdPartyReviewer(art) {
-  // SEAM: production wiring invokes a genuinely different model family — the
-  // codex plugin (/codex:adversarial-review), the skill's scripts/external-review.mjs
-  // (any OpenAI-compatible endpoint, returns this exact schema), OpenCode pinned
-  // to a non-Claude model, or cursor-agent. Consent is the caller's
-  // job (the `external-review` pre-authorization). It runs on the SAME artifact
-  // with the SAME framing and returns the SAME schema, so it folds into synthesis
-  // as one more independent vote and lights up cross-family corroboration.
-  const instruction =
-    art.artifactType === 'diff'
-      ? `Review the diff ${art.diffRange || '(current branch)'} (run \`${gitPrefix(art)} diff ${art.diffRange || ''}\`).`
-      : `Review the ${art.artifactType} at ${art.artifactPath} (read it first).`
-  return () =>
-    agent(`${adversarialPreamble(art)}\n\nYou are an INDEPENDENT third-party reviewer. ${instruction} End with a verdict (ship / don't-ship) and one sentence why. Return findings via the structured output tool.`, {
-      label: 'third-party',
-      phase: 'Review',
-      schema: REVIEW_SCHEMA,
-    }).then(tag('third-party', 'external'))
+// Stamp AFTER the spread: a courier's returned payload is schema-legal with any
+// top-level keys (EXTERNAL_VOTE_SCHEMA requires nothing), so stamping first
+// would let it override handle/family and masquerade past the partition. Safe
+// for Claude votes too: REVIEW_SCHEMA is additionalProperties:false, so they
+// never carry stray handle/family keys for this spread to clobber.
+function tag(handle, family) {
+  return (r) => r && { ...r, handle, family }
 }
 
-function tag(handle, family) {
-  return (r) => r && { handle, family, ...r }
+// External courier reviewers. A courier's ONLY job is to run the real external
+// tool and hand back its stdout; the honesty guarantee is the digest gate
+// (externalVoteProblem), not the courier's obedience: couriers never see
+// art.expectedArtifactSha256, so a courier that skips the tool cannot fabricate
+// a passing vote. Couriers run as the default workflow subagent (full tools):
+// dev:researcher is ruled out because its RULES forbid exactly what these do
+// (POSTing the artifact to an endpoint; spawning the Codex app-server).
+// The pipelines carry no env prefix: external-review.mjs reads its own
+// environment (which courier shells inherit) and fails fast with the exact
+// reason when EXTERNAL_REVIEW_MODEL is unset; codex-review.mjs defaults
+// --companion itself and exits 2 when no companion is installed. Those stderr
+// reasons come back as __error and surface in external.dropped.
+
+const EXTERNAL_VOTE_SCHEMA = {
+  type: 'object', additionalProperties: true,
+  properties: {
+    reviewer: { type: 'object', additionalProperties: true },
+    artifactSha256: { type: 'string' },
+    __error: { type: 'string' },
+    findings: REVIEW_SCHEMA.properties.findings,
+    verdict: REVIEW_SCHEMA.properties.verdict,
+  },
+}
+
+function scriptCourier(art) {
+  const target = art.artifactType === 'diff'
+    ? `${art.diffRange} @ ${art.pinnedSha || 'HEAD'}`
+    : `${art.artifactPath} @ ${art.artifactType}`
+  const feed = art.artifactType === 'diff'
+    ? `${gitPrefix(art)} diff ${art.diffRange}`
+    : `cat "${art.artifactPath}"`
+  return () => agent(
+    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}.\n\n${feed} | node "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"`,
+    { label: 'external:script', phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA },
+  ).then(tag('external:script', 'script'))
+}
+
+function codexCourier(art) {
+  // codex-review.mjs derives base internally from the range's left side and
+  // refuses any range that is not <ref>...HEAD (the only form the companion
+  // reviews), so the courier passes the caller-pinned range and nothing else.
+  return () => agent(
+    `You are a COURIER, not a reviewer. Run EXACTLY this command and return its stdout parsed as JSON via the structured output tool. Do not review anything yourself. If it errors or prints no JSON, return {"__error":"<stderr>"}.\n\nnode "${art.skillScriptsDir}/codex-review.mjs" --cwd "${art.repoDir || '.'}" --range "${art.diffRange}" --target "${art.diffRange} @ ${art.pinnedSha || 'HEAD'}"`,
+    { label: 'external:codex', phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA },
+  ).then(tag('external:codex', 'openai'))
+}
+
+// Static dispatch (no discovery pre-pass): the script courier always runs (any
+// artifact type); the codex courier runs for diffs only, reported "not
+// applicable" otherwise. Availability is enforced by the tools themselves at
+// run time; a tool failure returns as __error and is dropped plus reported.
+function externalReviewerThunks(art) {
+  const dropped = []
+  const thunks = [scriptCourier(art)]
+  if (art.artifactType === 'diff') thunks.push(codexCourier(art))
+  else dropped.push({ kind: 'codex', family: 'openai', dropReason: `not applicable to ${art.artifactType}` })
+  return { thunks, dropped }
+}
+
+// Returns null for a countable external vote, else the exact drop reason.
+// Checks, in order: courier-declared failure, tool fingerprint, digest
+// EQUALITY against the caller-pinned value (never mere presence; the expected
+// value lives only in args, couriers never see it, so a courier that skipped
+// the tool cannot fabricate a passing vote), then vote SHAPE (verdict +
+// schema-valid findings), because EXTERNAL_VOTE_SCHEMA deliberately requires
+// nothing and the fold reads r.verdict.ship / r.findings unconditionally.
+function externalVoteProblem(art, r) {
+  if (!r) return 'courier returned nothing'
+  if (r.__error) return r.__error
+  const kind = r.reviewer && r.reviewer.kind
+  if (kind !== 'external-review-script' && kind !== 'codex-review-script') {
+    return `no tool fingerprint (reviewer.kind = ${JSON.stringify(kind)})`
+  }
+  if (r.artifactSha256 !== art.expectedArtifactSha256) {
+    return 'digest mismatch: vote does not cover the caller-pinned bytes'
+  }
+  if (typeof r.verdict?.ship !== 'boolean' || typeof r.verdict?.reason !== 'string') {
+    return `tool ran but vote malformed: verdict = ${JSON.stringify(r.verdict)}`
+  }
+  if (!Array.isArray(r.findings)) return 'tool ran but vote malformed: findings is not an array'
+  const requiredKeys = REVIEW_SCHEMA.properties.findings.items.required
+  for (const [i, f] of r.findings.entries()) {
+    for (const k of requiredKeys) {
+      if (!f || !(k in f)) return `tool ran but vote malformed: findings[${i}] missing "${k}"`
+    }
+  }
+  return null
 }
 
 function buildReviewers(art) {
@@ -203,7 +298,6 @@ function buildReviewers(art) {
       )
     }
   }
-  if (art.externalReview) thunks.push(thirdPartyReviewer(art))
   return thunks
 }
 
@@ -327,15 +421,55 @@ if (art.artifactType !== 'diff' && !art.artifactPath) {
   throw new Error('adversarial-review requires args.artifactPath (or artifactType "diff" with diffRange)')
 }
 
+// External review is ON by default; opt out with externalReview:false (or "no-external").
+const externalRequested = art.externalReview !== false
+let runExternal = externalRequested
+const externalDroppedPre = [] // config failures, recorded before any courier runs
+if (runExternal && !art.skillScriptsDir) {
+  runExternal = false
+  externalDroppedPre.push({ kind: 'config', dropReason: 'skillScriptsDir not provided by caller' })
+}
+if (runExternal && !art.expectedArtifactSha256) {
+  runExternal = false
+  externalDroppedPre.push({ kind: 'config', dropReason: 'expectedArtifactSha256 not provided by caller' })
+}
+if (runExternal && art.artifactType === 'diff' && !art.diffRange) {
+  runExternal = false
+  externalDroppedPre.push({ kind: 'config', dropReason: 'diffRange not provided for a diff artifact (couriers never guess a range)' })
+}
+
 phase('Review')
-const reviewers = buildReviewers(art)
+const ext = runExternal ? externalReviewerThunks(art) : { thunks: [], dropped: [] }
+const claudeThunks = buildReviewers(art)
+const reviewers = [...claudeThunks, ...ext.thunks]
 const dispatched = reviewers.length
 log(`Dispatching ${dispatched} reviewer(s) on ${art.artifactType} ${art.artifactPath || art.diffRange || ''}`.trim())
-const returned = (await parallel(reviewers)).filter(Boolean)
+// ONE parallel; parallel preserves order, so slots [0, claudeThunks.length)
+// are Claude votes and the rest are external couriers. The split is by
+// DISPATCH IDENTITY (index offset), never by any field on the returned
+// object: the payload is courier-controlled. Do NOT filter nulls before
+// slicing; that would shift the offsets. A null in an EXTERNAL slot is
+// deliberately KEPT: externalVoteProblem turns it into a visible
+// external.dropped entry instead of a silent absence.
+const returnedAll = await parallel(reviewers)
+const claudeVotes = returnedAll.slice(0, claudeThunks.length).filter(Boolean)
+const externalReturned = returnedAll.slice(claudeThunks.length)
+
+// Partition external returns by the digest-EQUALITY plus vote-shape gate:
+// verdicts, panel counts, and the dedupe fold are built ONLY from Claude votes
+// plus real external votes; everything else is dropped WITH its reason.
+const realExternalVotes = []
+const externalDropped = []
+for (const [i, r] of externalReturned.entries()) {
+  const problem = externalVoteProblem(art, r)
+  if (problem) externalDropped.push({ handle: r?.handle || `external[${i}]`, family: r?.family || null, dropReason: problem })
+  else realExternalVotes.push(r)
+}
+const panelVotes = [...claudeVotes, ...realExternalVotes]
 
 // Dedup across the full panel BEFORE verifying, so a finding is never skeptic-checked
 // once per reviewer that raised it (a justified barrier: dedup needs all reviewers in).
-const deduped = dedupe(returned.flatMap((r) => r.findings.map((f) => ({ ...f, source: r.handle, family: r.family }))))
+const deduped = dedupe(panelVotes.flatMap((r) => r.findings.map((f) => ({ ...f, source: r.handle, family: r.family }))))
 
 phase('Verify')
 const toVerify = deduped.filter(needsVerification)
@@ -371,12 +505,23 @@ const refuted = annotated.filter((f) => f.verification && f.verification.status 
 
 return {
   artifact: { path: art.artifactPath || null, type: art.artifactType, range: art.diffRange || null },
-  // What actually voted, so the caller never implies a fuller panel than weighed in.
-  panel: { dispatched, returned: returned.length, dropped: dispatched - returned.length },
-  verdicts: returned.map((r) => ({ reviewer: r.handle, ship: r.verdict.ship, reason: r.verdict.reason })),
+  // Counts cover votes that actually folded in: Claude panel + digest-verified external.
+  panel: { dispatched, returned: panelVotes.length, dropped: dispatched - panelVotes.length },
+  verdicts: panelVotes.map((r) => ({ reviewer: r.handle, ship: r.verdict.ship, reason: r.verdict.reason })),
   findings,
   // Confirmed AND contested blocker/major findings gate; only unanimously-refuted ones drop out.
   hasBlockerOrMajor: findings.some((f) => f.severity !== 'minor'),
   // Unanimously refuted by skeptics; kept with full reasoning for transparency, not silently dropped.
   refuted,
+  external: {
+    requested: externalRequested,
+    ran: realExternalVotes.map((r) => ({ family: r.family, kind: r.reviewer.kind })),
+    // config failures + not-applicable + failed couriers, each with a reason
+    dropped: [...externalDroppedPre, ...ext.dropped, ...externalDropped],
+    // Force/confirm hook (advisory: the workflow NEVER blocks on it). True only
+    // when the caller demanded external participation and nothing external ran
+    // in THIS call. gated-review forwards requireExternal only on round 1
+    // (Task 6 Step 2), so rounds-2+ stale-digest drops never raise it.
+    shortfall: art.requireExternal === true && externalRequested && realExternalVotes.length === 0,
+  },
 }
