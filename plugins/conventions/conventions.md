@@ -158,6 +158,21 @@ implementation and broad reading happen in subagents.
 - **TDD-first.** Write a failing test before the implementation, make it pass, then
   verify the full suite is green before committing. Default for features and
   bugfixes; instrument and debug brittle tests rather than paper over them.
+- **Test suite discipline: curate, don't append.** Lean, high-signal suites sized
+  to decision branches, not a coverage percentage: roughly one test case per
+  distinct path (`if/else`, `switch`, `catch`), 1-2 for pure utilities, and don't add
+  functions just to lift line-coverage numbers. When behavior changes, edit the
+  existing tests first, then delete tests for removed paths, deprecated arguments,
+  or superseded logic, and merge overlapping ones into parameterized tables
+  (`@pytest.mark.parametrize`, `test.each`, Go subtests); never bolt new tests onto
+  a legacy file untouched. A bug repro is one minimal unit test at the root
+  component, not a copied integration harness. No tests for getters/setters,
+  pass-throughs, framework defaults, or input tweaks with no distinct logic path.
+  Keep new tests consistent with the surrounding suite and curate for balance: push
+  coverage down the pyramid, don't over-test the top layers; if a change reveals a
+  stack-wide inconsistency worth fixing, flag it with a migration plan rather than
+  diverging silently. Before writing test code, state the plan: what's added (new
+  branches), updated (signature/behavior changes), and deleted.
 - **Green-tests commit gate (opt-in per repo).** Repos with a
   `.claude/require-green-tests` file gate `git commit` on a recorded green run:
   in those repos, always run the full suite via the plugin's
