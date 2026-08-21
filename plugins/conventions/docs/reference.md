@@ -30,6 +30,19 @@ executing the suite through the conventions plugin's
 `scripts/record-green.sh <command>` from the repo root. Staging changes never
 invalidates a recorded run; editing any file does.
 
+## Testing-rule sources
+
+The "Test observable behavior at the boundary" rule distills matklad's
+"How to Test" (https://matklad.github.io/2021/05/31/how-to-test.html):
+test features at observable boundaries (the suite should survive an
+implementation swap), prefer real implementations/fakes over interaction
+mocks, and keep logic sans-I/O so the default suite stays fast. Deliberately
+not adopted from the article: expect/snapshot testing as a default (invites
+snapshot sprawl outside languages with strong tooling for it), the shared
+`check`-function pattern, coverage marks, and its skepticism of TDD for
+small-scale design (our TDD-first rule is workflow discipline, not design
+methodology; the two coexist).
+
 ## mise in cloud setup scripts
 
 `mise.run` and the mise CDN are NOT on the Claude-Code-web Trusted allowlist,

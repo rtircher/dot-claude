@@ -173,6 +173,16 @@ implementation and broad reading happen in subagents.
   stack-wide inconsistency worth fixing, flag it with a migration plan rather than
   diverging silently. Before writing test code, state the plan: what's added (new
   branches), updated (signature/behavior changes), and deleted.
+- **Test observable behavior at the boundary.** Exercise the public API or
+  feature surface, not private helpers: the suite should survive the
+  implementation being replaced wholesale. Size cases by the decision branches
+  of the public behavior (per the rule above), not of internals. Prefer real
+  implementations or lightweight fakes at the system's edge over mocks; assert
+  resulting state and output, never that specific internal calls were made.
+  Keep core logic testable without I/O, subprocesses, or sleeps; where a test
+  genuinely needs them, mark it slow/integration explicitly rather than letting
+  it drag the default suite. (Distilled from matklad's "How to Test"; source in
+  the plugin's `docs/reference.md`.)
 - **Green-tests commit gate (opt-in per repo).** Repos with a
   `.claude/require-green-tests` file gate `git commit` on a recorded green run:
   in those repos, always run the full suite via the plugin's
