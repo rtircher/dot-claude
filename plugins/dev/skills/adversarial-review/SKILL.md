@@ -42,13 +42,15 @@ could not run. Opt out (`externalReview: false`) only on an explicit
 must supply `skillScriptsDir` (this skill's `scripts/` dir, absolute) and
 `expectedArtifactSha256` (sha256 of the exact artifact bytes, computed in
 Bash), plus `diffRange` for diffs; the `/dev:review-panel` command does
-all of this automatically and is the guaranteed entry point. Reviewers inherit
-the session model by default; `tiers` is the per-dispatch re-tiering knob
-(keys: a lens key, `code-review`, `verify`; values `{model, effort}`). Apply
-step 4's convention when setting it: assess this artifact's difficulty per
-lens, and only re-tier where you have a concrete reason (e.g.
-`{ 'scope-yagni': { model: 'sonnet' } }` for a short, simple plan when cost
-matters). Never downgrade the verify skeptics. The workflow implements steps 2
+all of this automatically and is the guaranteed entry point. The workflow bakes
+in a default routing: the mechanical lenses (`scope-yagni`, `gaps`) run on
+sonnet, and everything else — the reasoning-heavy lenses, `code-review`, the
+verify skeptics — inherits the session model. Callers who pass nothing get
+that; `tiers` is the per-dispatch override knob (keys: a lens key,
+`code-review`, `verify`; values `{model, effort}`). Apply step 4's convention
+when overriding: assess this artifact's difficulty per lens, and only re-tier
+where you have a concrete reason (e.g. promote `gaps` back to the session model
+for a dense spec). Never downgrade the verify skeptics. The workflow implements steps 2
 to 6 deterministically: the lens panel (or a code-review pass for a diff),
 real external couriers (`external-review.mjs` / `codex-review.mjs`),
 schema-validated findings, a skeptic verify pass on uncorroborated blocker/major
@@ -381,8 +383,9 @@ Present to the user:
   weight behind the verdict — never imply a fuller panel than voted. On the
   Workflow path, ALWAYS surface the result's `external.ran` (which cross-family
   reviewers really voted), `external.dropped` (each absent reviewer with its
-  reason), and `external.shortfall` (the caller demanded external participation
-  and nothing external ran). If the user
+  reason), and `external.shortfall` (external review was on — the default — and
+  nothing external actually voted; it fires even on caller config drops, so a
+  Claude-only degradation is never silent). If the user
   asked for external review and no third-party reviewer could run, append the
   setup hint from step 5 (the cheapest paths to a cross-family reviewer, per the
   model-family table there).

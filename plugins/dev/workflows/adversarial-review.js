@@ -39,16 +39,25 @@
  *                                    // artifacts, and must be `<ref>...HEAD` for the
  *                                    // Codex reviewer to participate (the companion
  *                                    // reviews only that form).
- *   requireExternal?: boolean,       // optional; when true and zero external votes ran,
- *                                    // the result carries external.shortfall: true.
+ *   requireExternal?: boolean,       // shortfall suppressor. external.shortfall fires by
+ *                                    // DEFAULT whenever external review was requested and
+ *                                    // zero external votes counted (config drop, courier
+ *                                    // failure, digest mismatch — never a silent
+ *                                    // degradation to Claude-only). Pass false to
+ *                                    // suppress it for a round where external absence is
+ *                                    // the documented degradation (gated-review rounds
+ *                                    // 2+, stale digest). `true` is the old force form
+ *                                    // and is now redundant with the default.
  *                                    // Advisory only: the workflow never blocks on it.
  *   tiers?: {                        // optional per-reviewer re-tiering, decided by the
  *     [key: string]: {               // caller per dispatch ("pick the model per task").
  *       model?: string,              // unversioned alias ('opus', 'sonnet', 'haiku')
  *       effort?: string,             // 'low'|'medium'|'high'|'xhigh'|'max'
  *     },                             // keys: a lens key, 'code-review' (diff reviewer),
- *   },                               // 'verify' (skeptics). Omit to inherit the session
- *                                    // model at session effort.
+ *   },                               // 'verify' (skeptics). DEFAULT_TIERS routes the
+ *                                    // mechanical lenses (scope-yagni, gaps) to sonnet;
+ *                                    // every other slot inherits the session model at
+ *                                    // session effort. Explicit tiers override per key.
  * }
  */
 export const meta = {
@@ -119,7 +128,18 @@ const REVIEW_SCHEMA = {
 // Skeptics adjudicate each such finding (confirm / reframe / refute); a finding is
 // demoted to `refuted` ONLY on unanimous refutation, so a real-but-mis-framed issue
 // is never buried by a wording nitpick.
+//
+// Fan-out is BOUNDED. The naive shape (VERIFY_VOTES agents per finding) is
+// unbounded in the finding count and has blown up in practice: a spec review
+// with 21 uncorroborated blocker/major findings dispatched 63 verify agents
+// (run wf_ce42497d-830). Instead, skeptics adjudicate BATCHES: findings are
+// ranked, chunked into groups of VERIFY_BATCH, and each chunk gets VERIFY_VOTES
+// skeptics, capped at MAX_VERIFY_AGENTS dispatches total. Findings beyond the
+// cap are kept, annotated as contested-unverified (they still gate ship), and
+// the drop is logged — never a silent truncation.
 const VERIFY_VOTES = 3
+const VERIFY_BATCH = 5 // findings adjudicated per skeptic agent
+const MAX_VERIFY_AGENTS = 12 // hard ceiling on verify dispatches per run
 
 const VERDICT_SCHEMA = {
   type: 'object',
@@ -134,6 +154,26 @@ const VERDICT_SCHEMA = {
     reasoning: { type: 'string', description: 'what you traced and why you reached this verdict' },
     corrected_framing: { type: 'string', description: 'when verdict=reframe, the accurate statement of the real issue' },
     confidence: { enum: ['high', 'low'] },
+  },
+}
+
+// One skeptic adjudicates a whole batch: one verdict per numbered finding.
+const BATCH_VERDICT_SCHEMA = {
+  type: 'object',
+  required: ['verdicts'],
+  additionalProperties: false,
+  properties: {
+    verdicts: {
+      type: 'array',
+      items: {
+        ...VERDICT_SCHEMA,
+        required: ['index', ...VERDICT_SCHEMA.required],
+        properties: {
+          index: { type: 'integer', description: 'the finding number this verdict answers, exactly as listed in the prompt' },
+          ...VERDICT_SCHEMA.properties,
+        },
+      },
+    },
   },
 }
 
@@ -161,11 +201,19 @@ function gitPrefix(art) {
   return art.repoDir ? `git -C "${art.repoDir}"` : 'git'
 }
 
-// Caller-supplied re-tiering for one reviewer slot. Empty (inherit the session
-// model at session effort) unless args.tiers names this key: re-tiering is
-// always a deliberate per-dispatch choice, never a baked-in default.
+// Default routing: the mechanical lenses run on sonnet; the reasoning-heavy
+// lenses (hidden-assumptions, contradiction-feasibility, sequencing, risk),
+// the diff reviewer, and the verify skeptics inherit the session model (no
+// entry). Callers who pass nothing get this; args.tiers overrides per key.
+const DEFAULT_TIERS = {
+  'scope-yagni': { model: 'sonnet' },
+  gaps: { model: 'sonnet' },
+}
+
+// Effective tiering for one reviewer slot: DEFAULT_TIERS under any
+// caller-supplied override for the same key.
 function tierOpts(art, key) {
-  const t = (art.tiers || {})[key] || {}
+  const t = { ...(DEFAULT_TIERS[key] || {}), ...((art.tiers || {})[key] || {}) }
   return { ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}) }
 }
 
@@ -369,22 +417,24 @@ function needsVerification(f) {
   return f.severity !== 'minor' && f.corroboration.reviewers === 1
 }
 
-function verifyPrompt(f, art) {
+function verifyPrompt(batch, art) {
   const inspect =
     art.artifactType === 'diff'
       ? `Inspect the code in ${art.repoDir || 'the repo'}: run \`${gitPrefix(art)} diff ${art.diffRange || ''}\` and read full files for surrounding context.`
       : `Read the ${art.artifactType} at ${art.artifactPath}.`
-  return `A reviewer raised this ${f.severity} objection:
+  const items = batch
+    .map(({ f, index }) => `Finding ${index} [${f.severity}]:\nObjection: ${f.objection}\nLocation: ${f.location}`)
+    .join('\n\n')
+  return `Reviewers raised the following blocker/major objections. Adjudicate EACH one independently — do not let a verdict on one color another.
 
-Objection: ${f.objection}
-Location: ${f.location}
+${items}
 
-Judge whether a REAL underlying issue exists, independent of how precisely the objection is worded. ${inspect} Trace the actual control flow and facts, then return one verdict:
+For each finding, judge whether a REAL underlying issue exists, independent of how precisely the objection is worded. ${inspect} Trace the actual control flow and facts, then return one verdict per finding (carrying its finding number as "index"):
 - "confirmed": a real issue exists essentially as described.
 - "reframe": a real issue exists but the objection mis-states it (wrong end-state, severity, or trigger). Put the accurate statement in corrected_framing. Do NOT discard a real issue just because its wording is imperfect.
 - "refuted": there is no real issue. Use this ONLY with positive evidence the problem cannot occur (a guard, an invariant, an unreachable path), never merely because you are unsure or the wording is loose.
 
-This is a ${f.severity}-severity finding: when in doubt, prefer confirmed or reframe over refuted. Refuting means proving the issue is not real, not pointing out that the objection is imprecise. Return your verdict via the structured output tool.`
+These are blocker/major-severity findings: when in doubt, prefer confirmed or reframe over refuted. Refuting means proving the issue is not real, not pointing out that the objection is imprecise. Return one verdict for EVERY finding listed, via the structured output tool.`
 }
 
 // Adjudicate skeptic ballots into a verification verdict. Demote (refuted) ONLY on
@@ -472,32 +522,55 @@ const panelVotes = [...claudeVotes, ...realExternalVotes]
 const deduped = dedupe(panelVotes.flatMap((r) => r.findings.map((f) => ({ ...f, source: r.handle, family: r.family }))))
 
 phase('Verify')
-const toVerify = deduped.filter(needsVerification)
-const ballots = new Map() // finding index -> skeptic verdicts that returned
-if (toVerify.length) {
-  log(`Verifying ${toVerify.length} uncorroborated blocker/major finding(s), ${VERIFY_VOTES} skeptics each`)
+// Rank first so the cap (if it bites) drops the least severe findings; capped-out
+// findings are kept and adjudicated as contested (zero skeptics), so they still
+// gate ship — the cap bounds spend, never silently clears a finding.
+const toVerify = rank(deduped.filter(needsVerification))
+const maxVerifiable = Math.floor(MAX_VERIFY_AGENTS / VERIFY_VOTES) * VERIFY_BATCH
+const verified = toVerify.slice(0, maxVerifiable)
+const capSkipped = toVerify.slice(maxVerifiable)
+const ballots = new Map() // finding index (into `verified`) -> skeptic verdicts that returned
+if (verified.length) {
+  const indexed = verified.map((f, index) => ({ f, index }))
+  const batches = []
+  for (let i = 0; i < indexed.length; i += VERIFY_BATCH) batches.push(indexed.slice(i, i + VERIFY_BATCH))
+  log(
+    `Verifying ${verified.length} uncorroborated blocker/major finding(s): ${batches.length} batch(es) x ${VERIFY_VOTES} skeptics = ${batches.length * VERIFY_VOTES} agent(s)` +
+      (capSkipped.length ? `; ${capSkipped.length} finding(s) beyond the ${MAX_VERIFY_AGENTS}-agent cap stay unverified (kept as contested)` : ''),
+  )
   const votes = (
     await parallel(
-      toVerify.flatMap((f, i) =>
+      batches.flatMap((batch, b) =>
         Array.from({ length: VERIFY_VOTES }, (_unused, k) => () =>
           // dev:researcher, NOT dev:reviewer: verify agents adjudicate an objection, and the
           // reviewer persona's flag-when-uncertain bias would stack with verifyPrompt's own
           // prefer-confirmed bias and neuter the pass's ability to refute false positives.
-          agent(verifyPrompt(f, art), { label: `verify:${i}.${k}`, phase: 'Verify', schema: VERDICT_SCHEMA, agentType: 'dev:researcher', ...tierOpts(art, 'verify') }).then((v) => v && { i, v }),
+          agent(verifyPrompt(batch, art), { label: `verify:${b}.${k}`, phase: 'Verify', schema: BATCH_VERDICT_SCHEMA, agentType: 'dev:researcher', ...tierOpts(art, 'verify') }).then(
+            (r) => r && { batch, verdicts: r.verdicts },
+          ),
         ),
       ),
     )
   ).filter(Boolean)
-  for (const { i, v } of votes) {
-    const list = ballots.get(i) || []
-    list.push(v)
-    ballots.set(i, list)
+  for (const { batch, verdicts } of votes) {
+    // Fold by the skeptic-echoed index, accepting only indices this batch actually
+    // carried (a stray index must not vote on someone else's finding).
+    const valid = new Set(batch.map((b) => b.index))
+    for (const v of verdicts || []) {
+      if (!valid.has(v.index)) continue
+      const list = ballots.get(v.index) || []
+      list.push(v)
+      ballots.set(v.index, list)
+    }
   }
 }
 
-// toVerify holds the same object refs as deduped, so map verdicts back by identity.
+// `verified`/`capSkipped` hold the same object refs as deduped, so map verdicts
+// back by identity. adjudicate([]) = contested: an unverified blocker/major
+// (capped out, or all its skeptics failed to return) never silently clears.
 const verificationByFinding = new Map()
-toVerify.forEach((f, i) => verificationByFinding.set(f, adjudicate(ballots.get(i) || [])))
+verified.forEach((f, i) => verificationByFinding.set(f, adjudicate(ballots.get(i) || [])))
+capSkipped.forEach((f) => verificationByFinding.set(f, adjudicate([])))
 const annotated = deduped.map((f) => ({ ...f, verification: verificationByFinding.get(f) || null }))
 
 phase('Synthesize')
@@ -521,10 +594,12 @@ return {
     ran: realExternalVotes.map((r) => ({ family: r.family, kind: r.reviewer.kind })),
     // config failures + not-applicable + failed couriers, each with a reason
     dropped: [...externalDroppedPre, ...ext.dropped, ...externalDropped],
-    // Force/confirm hook (advisory: the workflow NEVER blocks on it). True only
-    // when the caller demanded external participation and nothing external ran
-    // in THIS call. gated-review forwards requireExternal only on round 1
-    // (Task 6 Step 2), so rounds-2+ stale-digest drops never raise it.
-    shortfall: art.requireExternal === true && externalRequested && realExternalVotes.length === 0,
+    // Loud-failure hook (advisory: the workflow NEVER blocks on it). Fires by
+    // DEFAULT whenever external review was requested (the default) and zero
+    // external votes counted — config drops included — so a run never silently
+    // degrades to Claude-only. requireExternal:false suppresses it for rounds
+    // where external absence is the documented degradation (gated-review
+    // forwards false on rounds 2+, where the pinned digest is stale by design).
+    shortfall: art.requireExternal !== false && externalRequested && realExternalVotes.length === 0,
   },
 }

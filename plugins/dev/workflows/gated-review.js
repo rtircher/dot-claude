@@ -35,10 +35,11 @@
  * rounds 2+ then drop external votes on digest mismatch, reported in
  * external.dropped, never silently substituted. Honest but degraded. Fresh
  * per-round digests need a caller-side loop; deliberately out of scope here.
- * FORCE/CONFIRM: requireExternal is a ROUND-1 contract. External participation
- * is provable only while the pinned digest is fresh, so it is forwarded only on
- * round 1; rounds 2+ drop stale-digest votes by design (the documented
- * degradation above) and must never raise external.shortfall.
+ * LOUD FAILURE is a ROUND-1 contract: external.shortfall now fires by default
+ * whenever zero external votes count, so external participation is asserted on
+ * round 1 (fresh digest) without any caller flag. Rounds 2+ drop stale-digest
+ * votes by design (the documented degradation above) and must never raise
+ * external.shortfall, so this wrapper passes requireExternal:false there.
  */
 export const meta = {
   name: 'dev-gated-review',
