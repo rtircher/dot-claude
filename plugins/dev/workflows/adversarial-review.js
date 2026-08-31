@@ -2,9 +2,10 @@
  * Adversarial review as a Workflow.
  *
  * One faithful review PASS of the `adversarial-review` skill: fan a panel of
- * independent lens reviewers (or /code-review for a diff) at an artifact, force
- * each to return schema-validated findings, then synthesize one deduped,
- * severity-ranked objection list, blind to model identity.
+ * independent lens reviewers at an artifact (specs, plans, and diffs each have
+ * their own lens panel), force each to return schema-validated findings, then
+ * synthesize one deduped, severity-ranked objection list, blind to model
+ * identity.
  *
  * Advisory only. This workflow never edits the artifact and never blocks. The
  * review/fix/re-review gate loop (3-round cap, "clean" judgement, human ping)
@@ -53,9 +54,10 @@
  *     [key: string]: {               // caller per dispatch ("pick the model per task").
  *       model?: string,              // unversioned alias ('opus', 'sonnet', 'haiku')
  *       effort?: string,             // 'low'|'medium'|'high'|'xhigh'|'max'
- *     },                             // keys: a lens key, 'code-review' (diff reviewer),
- *   },                               // 'verify' (skeptics). DEFAULT_TIERS routes the
- *                                    // mechanical lenses (scope-yagni, gaps) to sonnet;
+ *     },                             // keys: a lens key (see LENS_PANELS; diffs have
+ *   },                               // their own panel) or 'verify' (skeptics).
+ *                                    // DEFAULT_TIERS routes the mechanical lenses
+ *                                    // (scope-yagni, gaps, simplicity-yagni) to sonnet;
  *                                    // every other slot inherits the session model at
  *                                    // session effort. Explicit tiers override per key.
  * }
@@ -65,7 +67,7 @@ export const meta = {
   description:
     'Independent adversarial review of a spec, plan, or diff: lens-panel fan-out, schema-validated findings, blind synthesis into one ranked objection list. Advisory, never edits, never blocks.',
   phases: [
-    { title: 'Review', detail: 'one reviewer per lens (or /code-review for a diff), in parallel' },
+    { title: 'Review', detail: 'one reviewer per lens (specs, plans, and diffs each have a panel), in parallel' },
     { title: 'Verify', detail: 'skeptics adjudicate each uncorroborated blocker/major finding (confirm / reframe / refute)' },
     { title: 'Synthesize', detail: 'dedup + rank blind to model identity' },
   ],
@@ -83,8 +85,15 @@ const LENS_PANELS = {
   ],
   plan: [
     { key: 'sequencing', brief: 'wrong order, unstated prerequisites, hidden coupling' },
-    { key: 'risk', brief: 'what breaks, what is unrecoverable, what is untested' },
+    { key: 'risk', brief: 'what breaks, what is unrecoverable, what is untested or has no stated test strategy' },
     { key: 'scope-yagni', brief: 'over-build, gold-plating, work serving no stated goal' },
+  ],
+  // Diffs get a panel too, not one omnibus reviewer: correctness, simplicity/
+  // yagni, and testing are distinct failure modes a single pass conflates.
+  diff: [
+    { key: 'correctness', brief: 'bugs, broken invariants, security holes, cross-package coupling — not style' },
+    { key: 'simplicity-yagni', brief: 'needless complexity, a simpler design that does the same, reinvented helpers the codebase already has, abstraction/config/generality this change does not need' },
+    { key: 'testing', brief: 'the testing approach: decision branches the change adds with no test, tests that cannot fail or assert nothing, over-mocking that tests the mock, missing regression test for the bug being fixed, brittle tests coupled to implementation detail' },
   ],
 }
 
@@ -123,8 +132,8 @@ const REVIEW_SCHEMA = {
   },
 }
 
-// Adversarial verify, aimed at the diff path's blind spot. A diff is reviewed by
-// a single reviewer, so a blocker rides on one read with no second opinion.
+// Adversarial verify. Lenses are disjoint by design, so a blocker/major usually
+// rides on one reviewer's read with no second opinion.
 // Skeptics adjudicate each such finding (confirm / reframe / refute); a finding is
 // demoted to `refuted` ONLY on unanimous refutation, so a real-but-mis-framed issue
 // is never buried by a wording nitpick.
@@ -190,9 +199,13 @@ function adversarialPreamble(art) {
 }
 
 function lensPrompt(lens, art) {
+  const open =
+    art.artifactType === 'diff'
+      ? `Review the diff ${art.diffRange || 'of the current branch'} through ONE lens only: ${lens.key} (${lens.brief}). Run \`${gitPrefix(art)} diff ${art.diffRange || ''}\` to see the changes first, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context.`
+      : `Review the ${art.artifactType} at ${art.artifactPath} through ONE lens only: ${lens.key} (${lens.brief}). Read the file first.`
   return `${adversarialPreamble(art)}
 
-Review the ${art.artifactType} at ${art.artifactPath} through ONE lens only: ${lens.key} (${lens.brief}). Read the file first. Report only findings that fall under this lens. End with a single verdict (ship / don't-ship) and one sentence why. Return everything via the structured output tool.`
+${open} Report only findings that fall under this lens. End with a single verdict (ship / don't-ship) and one sentence why. Return everything via the structured output tool.`
 }
 
 // `git -C <repoDir>` so reviewers target the artifact's repo even when the
@@ -208,6 +221,7 @@ function gitPrefix(art) {
 const DEFAULT_TIERS = {
   'scope-yagni': { model: 'sonnet' },
   gaps: { model: 'sonnet' },
+  'simplicity-yagni': { model: 'sonnet' },
 }
 
 // Effective tiering for one reviewer slot: DEFAULT_TIERS under any
@@ -215,15 +229,6 @@ const DEFAULT_TIERS = {
 function tierOpts(art, key) {
   const t = { ...(DEFAULT_TIERS[key] || {}), ...((art.tiers || {})[key] || {}) }
   return { ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}) }
-}
-
-function diffReviewPrompt(art) {
-  const range = art.diffRange || 'the current branch diff'
-  // SEAM: production wiring delegates to the /code-review skill (or its own
-  // workflow form) rather than hand-rolling the pass.
-  return `${adversarialPreamble(art)}
-
-Perform a rigorous code review of ${range}. Run \`${gitPrefix(art)} diff ${art.diffRange || ''}\` to see the changes, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context. Hunt for correctness bugs, security holes, broken invariants, and cross-package coupling, not style. End with an overall verdict (ship / don't-ship) and one sentence why. Return findings via the structured output tool.`
 }
 
 // Stamp AFTER the spread: a courier's returned payload is schema-legal with any
@@ -325,28 +330,18 @@ function externalVoteProblem(art, r) {
 }
 
 function buildReviewers(art) {
-  const thunks = []
-  if (art.artifactType === 'diff') {
-    thunks.push(() =>
-      agent(diffReviewPrompt(art), { label: 'code-review', phase: 'Review', schema: REVIEW_SCHEMA, agentType: 'dev:reviewer', ...tierOpts(art, 'code-review') }).then(tag('code-review', 'claude')),
-    )
-  } else {
-    const lenses = LENS_PANELS[art.artifactType]
-    if (!lenses) throw new Error(`unknown artifactType "${art.artifactType}" (expected spec | plan | diff)`)
-    for (const lens of lenses) {
-      thunks.push(() =>
-        agent(lensPrompt(lens, art), {
-          label: `lens:${lens.key}`,
-          phase: 'Review',
-          schema: REVIEW_SCHEMA,
-          ...(lens.model ? { model: lens.model } : {}),
-          ...tierOpts(art, lens.key),
-          agentType: 'dev:reviewer',
-        }).then(tag(lens.key, 'claude')),
-      )
-    }
-  }
-  return thunks
+  const lenses = LENS_PANELS[art.artifactType]
+  if (!lenses) throw new Error(`unknown artifactType "${art.artifactType}" (expected spec | plan | diff)`)
+  return lenses.map((lens) => () =>
+    agent(lensPrompt(lens, art), {
+      label: `lens:${lens.key}`,
+      phase: 'Review',
+      schema: REVIEW_SCHEMA,
+      ...(lens.model ? { model: lens.model } : {}),
+      ...tierOpts(art, lens.key),
+      agentType: 'dev:reviewer',
+    }).then(tag(lens.key, 'claude')),
+  )
 }
 
 // Synthesis: plain JS between agent stages, blind to model identity.

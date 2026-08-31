@@ -56,8 +56,9 @@ non-trivial questions about the code:
       feasibility, security, subtle design judgment. Fable is bursty advisor
       capacity, never an always-on loop; its weekly cap is the scarce resource.
     - **Adversarial-review panels route themselves:** the `dev-adversarial-review`
-      workflow bakes in scope-yagni + gaps on `sonnet` and everything else
-      (reasoning lenses, code-review, verify skeptics) on the session model —
+      workflow bakes in the mechanical lenses (scope-yagni, gaps,
+      simplicity-yagni) on `sonnet` and everything else (reasoning lenses,
+      correctness/testing on diffs, verify skeptics) on the session model —
       don't restate tiers on those dispatches; pass `tiers` only to deliberately
       override a slot.
     - Never `haiku`.
