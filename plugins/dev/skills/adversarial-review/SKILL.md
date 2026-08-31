@@ -46,12 +46,14 @@ all of this automatically and is the guaranteed entry point. The workflow bakes
 in a default routing: the mechanical lenses (`scope-yagni`, `gaps`) run on
 sonnet, and everything else — the reasoning-heavy lenses, `code-review`, the
 verify skeptics — inherits the session model. Callers who pass nothing get
-that; `tiers` is the per-dispatch override knob (keys: a lens key,
-`code-review`, `verify`; values `{model, effort}`). Apply step 4's convention
-when overriding: assess this artifact's difficulty per lens, and only re-tier
-where you have a concrete reason (e.g. promote `gaps` back to the session model
-for a dense spec). Never downgrade the verify skeptics. The workflow implements steps 2
-to 6 deterministically: the lens panel (or a code-review pass for a diff),
+that; `tiers` is the per-dispatch override knob (keys: a lens key — diffs have
+their own lens panel — or `verify`; values `{model, effort}`). Apply step 4's
+convention when overriding: assess this artifact's difficulty per lens, and
+only re-tier where you have a concrete reason (e.g. promote `gaps` back to the
+session model for a dense spec). Never downgrade the verify skeptics. The
+workflow implements steps 2 to 6 deterministically: the per-type lens panel
+(specs, plans, AND diffs — a diff gets `correctness`, `simplicity-yagni`, and
+`testing` lenses),
 real external couriers (`external-review.mjs` / `codex-review.mjs`),
 schema-validated findings, a skeptic verify pass on uncorroborated blocker/major
 findings, and synthesis blind to model identity. The workflow *owns* external
@@ -78,12 +80,16 @@ proceed.
 
 If the artifact is a **PR or code diff**, do not hand-roll code review. Use the
 `/code-review` skill, with effort scaled to diff size (larger or riskier diffs →
-higher effort). Surface its findings. If a third-party model is available, also
+higher effort) — it covers correctness plus simplification/reuse. `/code-review`
+does NOT cover the testing lens, so additionally dispatch one reviewer for it
+(the diff row's **testing** lens in step 3's table, framed per step 4). Surface
+all findings. If a third-party model is available, also
 enlist it as an independent reviewer (see "Enlist a third-party model" below):
 a different model family is the most independent second read you can get on a
-diff. The lens-based panel in steps 3 and 4 is for documents, not diffs; synthesize a
-diff on its own terms (step 6, **Diffs**), where `/code-review` and any
-third-party run are the named reviewers and there are no per-lens verdicts.
+diff. On this manual path, synthesize a
+diff on its own terms (step 6, **Diffs**), where `/code-review`, the testing
+reviewer, and any third-party run are the named reviewers. (The Workflow path
+instead reviews a diff with its own three-lens panel — see step 3's table.)
 
 ### 3. Pick lenses scaled to the artifact (manual fallback)
 
@@ -93,7 +99,8 @@ failure mode, not a redundant copy:
 | Artifact | Lenses |
 |----------|--------|
 | Spec / design doc | **hidden-assumptions** (what is taken for granted that may not hold) · **gaps & underspecification** (what's undefined, ambiguous, or missing) · **contradiction & feasibility** (internal conflicts, can it actually be built as described) · **scope & YAGNI** (speculative scope, over-generalization, extensibility/config/abstraction the requirements don't justify) |
-| Plan | **sequencing & dependencies** (wrong order, unstated prerequisites, hidden coupling) · **risk & failure modes** (what breaks, what's unrecoverable, what's untested) · **scope & YAGNI** (over-build, gold-plating, work that serves no stated goal) |
+| Plan | **sequencing & dependencies** (wrong order, unstated prerequisites, hidden coupling) · **risk & failure modes** (what breaks, what's unrecoverable, what's untested or has no stated test strategy) · **scope & YAGNI** (over-build, gold-plating, work that serves no stated goal) |
+| PR / diff (Workflow path) | **correctness** (bugs, broken invariants, security holes, cross-package coupling — not style) · **simplicity & YAGNI** (needless complexity, a simpler design that does the same, reinvented helpers, abstraction/generality the change doesn't need) · **testing** (untested decision branches, tests that can't fail, over-mocking, missing regression test for the fixed bug, brittle implementation-coupled tests) |
 
 Use all the lenses for the artifact type. Drop a lens only if it is clearly
 irrelevant to the specific artifact, and say so.
@@ -350,8 +357,8 @@ signals. Re-attach source names only after ranking is fixed, and only if the use
 asked who said what.
 
 Once reviewers return (including any third-party model you enlisted): for a
-document the reviewers are the lens panel; for a diff they are `/code-review`
-plus any third-party run.
+document the reviewers are the lens panel; for a diff on this manual path they
+are `/code-review`, the testing reviewer, plus any third-party run.
 
 1. **Account for who actually voted.** State the panel that returned versus the
    panel you dispatched — e.g. "3 of 4 reviewers returned; the minimax reviewer
@@ -369,9 +376,10 @@ plus any third-party run.
    confidence · location · suggested fix · corroboration (how many independent
    reviewers / lenses, cross-family or not).
 5. **Report verdicts by reviewer.** For a document, report each lens's ship /
-   don't-ship verdict. A diff has no lenses: report `/code-review`'s overall
-   result and each third-party reviewer's verdict instead. Never invent a
-   per-lens verdict for a reviewer that did not produce one.
+   don't-ship verdict. For a diff on this manual path, report `/code-review`'s
+   overall result, the testing reviewer's verdict, and each third-party
+   reviewer's verdict. Never invent a per-lens verdict for a reviewer that did
+   not produce one.
 
 ## Output
 
@@ -393,8 +401,9 @@ Present to the user:
   group speculative ones after so the user can skim them separately. Each entry
   carries its corroboration (how many independent reviewers / lenses, cross-family
   or not) rather than model names.
-- The verdicts: per lens for a document panel, or per reviewer (`/code-review`
-  plus any third-party run) for a diff.
+- The verdicts: per lens (documents and Workflow-path diffs), or per reviewer
+  (`/code-review`, the testing reviewer, plus any third-party run) for a
+  manual-path diff.
 - Source attribution is available on request, but the ranked list stands on
   merit and corroboration, not on which model raised each point.
 
