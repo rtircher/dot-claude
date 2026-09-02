@@ -19,7 +19,6 @@ non-trivial questions about the code:
 - Treat these `AGENTS.md` files as authoritative project instructions, at the
   same priority you would give a `CLAUDE.md`.
 
-<!-- main-session-only: start -->
 ## Model selection
 
 - Refer to models by **unversioned alias** (`fable`, `sonnet`, `haiku`), never a
@@ -27,6 +26,7 @@ non-trivial questions about the code:
   opus tier is pinned to `claude-opus-4-8`** in `settings.json`, because Opus 5
   regressed on our work and the `opus` alias now resolves to it. Revisit the pin
   only when a future Opus is worth adopting, and only then move it forward.
+<!-- main-session-only: start -->
 - **Fixed routing table**, not per-dispatch judgment calls. Deciding the tier is
   part of composing the dispatch: pass `model:` for `sonnet` and `fable`; for the
   opus tier omit `model:` so the worker inherits the pinned main session (the Agent
@@ -43,7 +43,7 @@ non-trivial questions about the code:
     - **Standard subtasks: the pinned opus tier, by inheritance.** Implementation,
       research, debugging; the default tier. Our `coder`/`researcher` agent defs
       carry no `model:` frontmatter, so inheritance holds; add `model:` frontmatter
-      with an alias only to deliberately want that tier.
+      with an alias only when you deliberately want that tier.
     - **Hardest-reasoning advisor calls: `fable`.** Cross-cutting review,
       feasibility, security, subtle design judgment. Bursty advisor capacity, never
       an always-on loop; its weekly cap is the scarce resource.
