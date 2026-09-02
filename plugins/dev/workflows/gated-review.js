@@ -50,7 +50,18 @@ export const meta = {
   ],
 }
 
-const a = typeof args === 'string' ? JSON.parse(args) : args || {}
+let a
+if (typeof args === 'string') {
+  try {
+    a = JSON.parse(args)
+  } catch {
+    throw new Error(
+      `gated-review args must be a JSON object (got an unparseable string starting "${args.slice(0, 60)}"): pass args as a real JSON value, not prose`
+    )
+  }
+} else {
+  a = args || {}
+}
 const MAX_ROUNDS = a.maxRounds || 3
 
 function fixPrompt(art, blockers, round) {

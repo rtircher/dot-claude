@@ -461,7 +461,18 @@ function adjudicate(votes) {
 
 // Tolerate args arriving either as a parsed object or a JSON string, since
 // callers (and the Workflow tool) vary in how they marshal it.
-const art = typeof args === 'string' ? JSON.parse(args) : args || {}
+let art
+if (typeof args === 'string') {
+  try {
+    art = JSON.parse(args)
+  } catch {
+    throw new Error(
+      `adversarial-review args must be a JSON object (got an unparseable string starting "${args.slice(0, 60)}"): pass args as a real JSON value, not prose`
+    )
+  }
+} else {
+  art = args || {}
+}
 if (art.artifactType !== 'diff' && !art.artifactPath) {
   throw new Error('adversarial-review requires args.artifactPath (or artifactType "diff" with diffRange)')
 }
