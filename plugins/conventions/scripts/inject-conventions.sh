@@ -1,21 +1,41 @@
 #!/usr/bin/env bash
 #
-# SessionStart hook: print personal working-style conventions to stdout, which
-# Claude Code injects into every session's context (local AND cloud sessions).
+# Prints conventions.md for Claude Code to inject as context.
 #
-# Confirmed behavior (docs/en/hooks): "Any text your hook script prints to
-# stdout is added as context for Claude." No JSON envelope needed for a hook
-# that only loads context.
+# SessionStart (no args): the whole file as plain stdout, which Claude Code adds
+# to the main session's context. Marker lines are never printed.
 #
-# ${CLAUDE_PLUGIN_ROOT} is the plugin's install dir — required because plugins
-# run from a cache location, so relative paths would not resolve.
+# SubagentStart (--subagent): the file minus the `main-session-only` region
+# (model routing, delegation), which only the orchestrator uses. Subagent hooks
+# only take context through the JSON hookSpecificOutput envelope, so the text is
+# wrapped in one.
+#
+# ${CLAUDE_PLUGIN_ROOT} is the plugin's install dir; plugins run from a cache
+# location, so relative paths would not resolve.
 set -euo pipefail
 
 conventions="${CLAUDE_PLUGIN_ROOT}/conventions.md"
-if [ -f "$conventions" ]; then
-  cat "$conventions"
-else
-  # Don't hard-fail SessionStart if the plugin cache is incomplete — warn on
-  # stderr (not injected) and exit clean so the session still starts.
+if [ ! -f "$conventions" ]; then
+  # Don't hard-fail the hook if the plugin cache is incomplete: warn on stderr
+  # (not injected) and exit clean so the session still starts.
   echo "WARN: conventions.md not found at ${conventions}; conventions not injected." >&2
+  exit 0
+fi
+
+subagent=0
+[ "${1:-}" = "--subagent" ] && subagent=1
+
+filter() {
+  awk -v skip_region="$subagent" '
+    /^<!-- main-session-only: start -->$/ { in_region = 1; next }
+    /^<!-- main-session-only: end -->$/   { in_region = 0; next }
+    in_region && skip_region              { next }
+    { print }
+  ' "$conventions"
+}
+
+if [ "$subagent" = 1 ]; then
+  filter | python3 -c 'import json, sys; print(json.dumps({"hookSpecificOutput": {"hookEventName": "SubagentStart", "additionalContext": sys.stdin.read()}}))'
+else
+  filter
 fi
