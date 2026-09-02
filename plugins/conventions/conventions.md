@@ -92,7 +92,8 @@ implementation and broad reading happen in subagents.
   finish the current step, then delegate the rest or write a handover and respawn;
   prefer a handover over mid-task compaction.
 - **From 70% context the `delegation-gate` hook denies bulk read/search in the
-  main loop.** A denial is not an error to retry: dispatch a researcher/Explore
+  main loop after 3 round-trips per turn (1 past the last band).** A denial is
+  not an error to retry: dispatch a researcher/Explore
   subagent, or make the read targeted (Read with offset+limit, Grep with
   head_limit). Subagents are never gated. Kill switch for a session that
   legitimately needs deep inline reading: `DELEGATION_GATE=off`.
