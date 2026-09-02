@@ -1,76 +1,58 @@
 # Working conventions
 
-Cross-cutting working-style conventions, injected into every session (local and
-cloud) by the `conventions` plugin's SessionStart hook. This file is the single
-source of truth: edit here, and every project that enables the plugin picks it
-up on its next session. Project-specific facts belong in that repo's `AGENTS.md`,
-not here.
+Cross-cutting working-style conventions, injected into every session by the
+`conventions` plugin; project-specific facts belong in that repo's `AGENTS.md`.
 
 ## Load project context files
 
 At the start of work in any repository, before making changes or answering
 non-trivial questions about the code:
 
-- If an `AGENTS.md` exists at the repo root, **read it first.** It holds project
-  conventions (package boundaries, command quirks, supply-chain rules, do/don't
-  lists) that are not otherwise auto-loaded into context.
+- If an `AGENTS.md` exists at the repo root, **read it first**, unless the repo's
+  `CLAUDE.local.md` states that it curates `AGENTS.md`; then do not load `AGENTS.md`
+  separately. It holds project conventions (package boundaries, command quirks,
+  supply-chain rules, do/don't lists) that are not otherwise auto-loaded into
+  context.
 - When working inside a specific package or subdirectory, also read the nearest
   `AGENTS.md` in that subtree if one exists; it refines the root conventions for
   that area.
 - Treat these `AGENTS.md` files as authoritative project instructions, at the
   same priority you would give a `CLAUDE.md`.
 
+<!-- main-session-only: start -->
 ## Model selection
 
-- Refer to models by **unversioned alias** (`fable`, `sonnet`, `haiku`),
-  never a version-pinned id (including when naming a model in config or docs). The
-  alias always resolves to the latest release of that tier, so nothing needs
-  editing when a new version ships.
-    - **Deliberate exception — the opus tier is version-pinned to
-      `claude-opus-4-8`, not the `opus` alias.** Opus 5 regressed on our work
-      versus Opus 4.8, so we do not want the alias to auto-adopt it. This pin is
-      manual on purpose: revisit it when a future Opus is worth adopting, and only
-      then move it forward (to `claude-opus-5-x` or back to the `opus` alias).
-- **Fixed routing table**, not per-dispatch judgment calls:
-    - **Orchestrator (main session): `claude-opus-4-8`** (the pinned opus tier; set
-      in `settings.json`). Orchestration is itself the complex
-      work (decomposing well, briefing precisely, judging results). A sonnet main
-      session was tried: its weaker decomposition and judging caused more rework
-      than the cheaper model saved. A fable main session burns the weekly cap on
-      always-on cache reads. Opus is the deliberate middle; don't relitigate this
-      toward either end.
+- Refer to models by **unversioned alias** (`fable`, `sonnet`, `haiku`), never a
+  version-pinned id, including in config and docs. **One deliberate exception: the
+  opus tier is pinned to `claude-opus-4-8`** in `settings.json`, because Opus 5
+  regressed on our work and the `opus` alias now resolves to it. Revisit the pin
+  only when a future Opus is worth adopting, and only then move it forward.
+- **Fixed routing table**, not per-dispatch judgment calls. Deciding the tier is
+  part of composing the dispatch: pass `model:` for `sonnet` and `fable`; for the
+  opus tier omit `model:` so the worker inherits the pinned main session (the Agent
+  tool accepts only aliases, and `model: opus` silently downgrades the worker to
+  Opus 5). A `sonnet`/`fable` dispatch that forgets `model:` silently runs on opus
+  4.8, so never omit `model:` on a non-opus dispatch.
+    - **Orchestrator (main session): `claude-opus-4-8`.** Orchestration is itself
+      the complex work (decomposing well, briefing precisely, judging results). A
+      sonnet main session caused more rework than it saved and a fable one burns the
+      weekly cap on cache reads; don't relitigate toward either end.
     - **Mechanical subtasks: `sonnet`.** Fully-specified work with a tight return
       contract (apply a reviewed plan step, rename/move, format, run tests and
       report).
-    - **Standard subtasks: the pinned opus tier (`claude-opus-4-8`), reached by
-      inheritance — not by naming it.** Implementation, research, debugging; the
-      default tier. The Agent tool's `model` param accepts only aliases
-      (`sonnet`/`opus`/`haiku`/`fable`) and `opus` now resolves to Opus 5, so you
-      cannot pass `claude-opus-4-8` on the call. Dispatch these by **omitting
-      `model:`** so the worker inherits the pinned main session (`settings.json`).
-      Do **not** pass `model: opus` — that silently downgrades the worker to Opus 5.
-      (Our `coder`/`researcher` agent defs carry no `model:` frontmatter, so
-      inheritance holds; only add `model:` frontmatter with an alias if you
-      deliberately want that tier.)
+    - **Standard subtasks: the pinned opus tier, by inheritance.** Implementation,
+      research, debugging; the default tier. Our `coder`/`researcher` agent defs
+      carry no `model:` frontmatter, so inheritance holds; add `model:` frontmatter
+      with an alias only to deliberately want that tier.
     - **Hardest-reasoning advisor calls: `fable`.** Cross-cutting review,
-      feasibility, security, subtle design judgment. Fable is bursty advisor
-      capacity, never an always-on loop; its weekly cap is the scarce resource.
-    - **Adversarial-review panels route themselves:** the `dev-adversarial-review`
-      workflow bakes in the mechanical lenses (scope-yagni, gaps,
-      simplicity-yagni) on `sonnet` and everything else (reasoning lenses,
-      correctness/testing on diffs, verify skeptics) on the session model —
-      don't restate tiers on those dispatches; pass `tiers` only to deliberately
-      override a slot.
+      feasibility, security, subtle design judgment. Bursty advisor capacity, never
+      an always-on loop; its weekly cap is the scarce resource.
+    - **Adversarial-review panels route themselves:** `dev-adversarial-review` puts
+      the mechanical lenses (scope-yagni, gaps, simplicity-yagni) on `sonnet` and
+      everything else (reasoning lenses, correctness/testing on diffs, verify
+      skeptics) on the session model; don't restate tiers there, pass `tiers` only
+      to override a slot.
     - Never `haiku`.
-- **Name the model explicitly for the `sonnet` and `fable` tiers; inherit for the
-  opus tier.** Deciding the tier is part of composing the dispatch. For mechanical
-  (`sonnet`) and advisor (`fable`) work, pass `model:` on the Agent call. For the
-  opus tier, do the opposite — omit `model:` so the worker inherits the pinned
-  `claude-opus-4-8` main session, because the tool cannot name that version and
-  the `opus` alias would run Opus 5 (see the standard-subtasks row above). The one
-  hazard of inheriting: if you dispatch a `sonnet`/`fable` worker and forget the
-  `model:`, it silently runs on opus 4.8 (expensive tier for mechanical work) —
-  so never omit `model:` on a non-opus dispatch.
 
 ## Delegation
 
@@ -105,23 +87,16 @@ implementation and broad reading happen in subagents.
   decision actually needs it.
 - **At most 3 parallel subagents.** Each completion notification lands in main
   context. Prefer sequential dispatch when results feed into each other.
-- **Long sessions are a cost bug, not a stamina test.** Context is re-read on
-  every turn, so cost grows superlinearly with session length. Keep the
-  orchestrator's working memory in a maintained task list, not the accumulated
-  transcript. When the context-budget warning fires (the conventions plugin's
-  `context-watch` hook), finish the current step, then either delegate the
-  remaining work to subagents or write a handover and respawn into a fresh
-  session; don't keep grinding in a bloated context, and prefer a handover over
-  mid-task compaction, which is where orchestrators lose the plot.
-- **The delegation gate is enforcement, not advice.** The 50% context-watch
-  band asks the session to shift into delegation mode; from 70% the
-  `delegation-gate` hook stops asking and denies bulk read/search calls in
-  the main loop after 3 round-trips per turn (1 past the last band). A
-  denial is not an error to retry: dispatch a researcher/Explore subagent for
-  the exploration, or make the read targeted (Read with offset+limit, Grep
-  with head_limit, always allowed). Subagents are never gated. Kill switch
-  for a session that legitimately needs deep inline reading:
-  `DELEGATION_GATE=off`.
+- **Long sessions are a cost bug.** Keep the orchestrator's working memory in a
+  maintained task list, not the transcript. When the `context-watch` hook warns,
+  finish the current step, then delegate the rest or write a handover and respawn;
+  prefer a handover over mid-task compaction.
+- **From 70% context the `delegation-gate` hook denies bulk read/search in the
+  main loop.** A denial is not an error to retry: dispatch a researcher/Explore
+  subagent, or make the read targeted (Read with offset+limit, Grep with
+  head_limit). Subagents are never gated. Kill switch for a session that
+  legitimately needs deep inline reading: `DELEGATION_GATE=off`.
+<!-- main-session-only: end -->
 
 ## Toolchain management
 
@@ -139,25 +114,21 @@ implementation and broad reading happen in subagents.
 ## Working preferences
 
 - **Simplicity first; earn complexity.** Default to the simplest design that
-  satisfies the requirement actually in front of you, then stop. Build for today's
-  requirements, not hypothetical futures: no speculative abstraction, config knobs,
-  extension points, or generalization for a second use case that doesn't exist yet
-  (YAGNI). Prefer a plain function over a class, an inline solution over a new
-  layer, a hardcoded value over a settings surface, a boring approach over a clever
-  one, until a concrete requirement forces the step up. When a heavier design does
-  seem warranted, name the specific requirement that forces it rather than reaching
-  for it by default. Match the size of the solution to the size of the problem, and
-  start smaller than feels complete: it's cheaper to add structure once a real need
-  appears than to unwind an abstraction that never paid off.
-- **Before writing new code, climb the reuse ladder.** Solve at the first rung
+  satisfies the requirement in front of you, then stop: no speculative abstraction,
+  config knobs, extension points, or generalization for a second use case that
+  doesn't exist yet (YAGNI). Prefer a plain function over a class, an inline
+  solution over a new layer, a hardcoded value over a settings surface, a boring
+  approach over a clever one, until a concrete requirement forces the step up; when
+  one does, name it. Start smaller than feels complete: adding structure once a real
+  need appears is cheaper than unwinding an abstraction that never paid off.
+- **Before writing new code, climb the reuse ladder**, solving at the first rung
   that works: (1) does this need to exist at all; if no requirement asks for it,
   skip it; (2) an existing helper/pattern in this codebase; (3) the standard
   library; (4) a native platform feature (CSS, HTML inputs, database constraints);
-  (5) an already-installed dependency; (6) only then write the smallest working
-  implementation. Adding a new dependency is a last resort and gets flagged
-  explicitly, never slipped in. Lazy about the solution, never about reading:
-  understanding the problem and the affected code paths always comes first, and
-  bugs get fixed at the root cause, not papered over per-caller.
+  (5) an already-installed dependency; (6) only then the smallest working
+  implementation. A new dependency is a last resort, flagged explicitly, never
+  slipped in. Lazy about the solution, never about reading: understand the problem
+  and the affected code paths first, and fix bugs at the root cause, not per-caller.
 - **Simplicity never trims the safety floor.** Input validation at trust
   boundaries, error handling that prevents data loss, security, and accessibility
   are not simplifications to make; the ladder applies to everything else.
