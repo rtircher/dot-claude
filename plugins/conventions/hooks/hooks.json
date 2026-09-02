@@ -12,6 +12,7 @@
     ],
     "SubagentStart": [
       {
+        "matcher": "^(general-purpose|(dev:)?(coder|researcher|reviewer))$",
         "hooks": [
           {
             "type": "command",
