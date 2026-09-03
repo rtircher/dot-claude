@@ -89,8 +89,10 @@ implementation and broad reading happen in subagents.
   context. Prefer sequential dispatch when results feed into each other.
 - **Long sessions are a cost bug.** Keep the orchestrator's working memory in a
   maintained task list, not the transcript. When the `context-watch` hook warns,
-  finish the current step, then delegate the rest or write a handover and respawn;
-  prefer a handover over mid-task compaction.
+  finish the current step, then delegate the rest. Before respawning, estimate
+  the remaining cost from what the same kind of step cost earlier in the session;
+  if it fits, keep going. Respawn only when it clearly does not fit, at a natural
+  boundary, and prefer a handover over mid-task compaction.
 - **From 70% context the `delegation-gate` hook denies bulk read/search in the
   main loop after 3 round-trips per turn (1 past the last band).** A denial is
   not an error to retry: dispatch a researcher/Explore
