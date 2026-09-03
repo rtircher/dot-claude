@@ -19,8 +19,10 @@ per-turn spend instead of letting the session grow to the window.
 Three default bands, three distinct messages: the lowest (50) only asks the
 session to shift into delegation mode — it says nothing about wrapping up,
 because delegation is most valuable while most of the budget is still
-unspent. The middle band (70) says stop taking on new inline work; the last
-(85) says wrap up and respawn. The wrap-up bands stay high because the fixed
+unspent. The middle band (70) says stop taking on new inline work and to
+estimate, from measured per-step cost, whether the rest still fits before
+respawning (a respawn is not free and a mid-task handover loses momentum); the
+last (85) says wrap up and respawn. The wrap-up bands stay high because the fixed
 session baseline (system prompt, MCP schemas, CLAUDE.md, conventions/hook
 injections — measured at ~47-66k across recent sessions) already consumes a
 fifth to a third of the budget before any work happens.
@@ -149,8 +151,11 @@ def main():
     else:
         advice = (
             "Stop taking on new inline work: delegate remaining implementation "
-            "or research to subagents, and if substantial work remains, write a "
-            "handover and respawn into a fresh session."
+            "or research to subagents. Before respawning, estimate the remaining "
+            "cost from what the same kind of step cost earlier in this session; "
+            "if it fits the budget left, keep going and finish the current unit "
+            "of work. Respawn only when it clearly does not fit, at a natural "
+            "boundary, and say what the estimate was."
         )
     message = (
         f"Context at {pct}% of the {budget:,}-token budget ({context:,} tokens). "
