@@ -34,9 +34,9 @@ non-trivial questions about the code:
   Opus 5). A `sonnet`/`fable` dispatch that forgets `model:` silently runs on opus
   4.8, so never omit `model:` on a non-opus dispatch.
     - **Orchestrator (main session): `claude-opus-4-8`.** Orchestration is itself
-      the complex work (decomposing well, briefing precisely, judging results). A
-      sonnet main session caused more rework than it saved and a fable one burns the
-      weekly cap on cache reads; don't relitigate toward either end.
+      the complex work (decomposing well, briefing precisely, judging results), so
+      the main session runs on the opus tier: sonnet is not reliable enough for it,
+      and fable's weekly cap is too scarce for an always-on main loop.
     - **Mechanical subtasks: `sonnet`.** Fully-specified work with a tight return
       contract (apply a reviewed plan step, rename/move, format, run tests and
       report).
@@ -70,10 +70,9 @@ implementation and broad reading happen in subagents.
 - **Plan execution is delegation-only.** When executing a multi-task plan
   (subagent-driven-development or equivalent), the main session never edits
   implementation files itself: every task goes to a fresh implementer subagent,
-  and every fix from review goes to a fix subagent. "This task is small, faster
-  inline" is how plan execution migrates back into the orchestrator: if a task
-  is genuinely too small to brief, fold it into an adjacent task's brief rather
-  than doing it in the main loop.
+  and every fix from review goes to a fix subagent. Small tasks stay delegated
+  too: if a task is genuinely too small to brief, fold it into an adjacent
+  task's brief rather than running it in the main loop.
 - **Return contract on every dispatch.** End each brief with an explicit bounded
   output spec, e.g. "Return at most 10 lines: the decision-relevant facts with
   `file:line` cites. Do not return file contents." Only the subagent's final
