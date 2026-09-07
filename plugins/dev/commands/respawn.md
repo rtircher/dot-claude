@@ -213,9 +213,9 @@ Tell the user plainly:
 
 ## Why the cloud flow differs
 
-Claude Code cloud/web sessions break four assumptions the local flow rests on
-(observed 2026-07-04). Each forces the substitution named with it; do not "simplify"
-one away without re-checking its constraint:
+Claude Code cloud/web sessions break four assumptions the local flow rests on.
+Each forces the substitution named with it; do not "simplify" one away without
+re-checking its constraint:
 
 1. **No `spawn_task`.** Cloud sessions do not expose `mcp__ccd_session__spawn_task`,
    so there is no clickable chip. Substitution: the deliverable becomes a **copy-paste
