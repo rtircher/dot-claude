@@ -246,6 +246,13 @@ message drafted on the user's behalf. Code comments follow these too, refined by
   (the why, a non-obvious consequence). Skip a body when the subject says it all.
 - **Concise and natural.** No corporate filler, no preamble, no restating the
   question back. Say the thing.
+- **No internal laundry in pushed artifacts** (commit bodies, PR descriptions,
+  issue bodies, code comments). Cut process and org history: ticket dispositions
+  ("closed as can't-repro", "after discussion"), who caught what in review, and
+  admissions of test/CI/infra fragility ("only reproduces on the branch", "flaky
+  on dev"). Stating the defect being fixed neutrally is the required why and
+  stays; everything about how the team arrived at the fix goes. These bodies
+  become permanent history read by future hires, auditors, and customers.
 - **Diplomatic and collaborative**, especially when raising a concern or
   disagreeing: name the problem, propose the fix, skip the lecture.
 - **No em dashes** (or en dashes) in deliverables (files, commit messages, sent
