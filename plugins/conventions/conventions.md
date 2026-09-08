@@ -162,6 +162,19 @@ implementation and broad reading happen in subagents.
   genuinely needs them, mark it slow/integration explicitly rather than letting
   it drag the default suite. (Distilled from matklad's "How to Test"; source in
   the plugin's `docs/reference.md`.)
+- **A test that cannot fail is worse than none.** Tautology patterns to reject,
+  in review and in your own work: asserting a mock returns what it was
+  configured to return; `is not None` or "didn't raise" as the only assertion;
+  try/except swallowing the assert; snapshots regenerated without reading the
+  diff. Assert specific values and shapes, with failure output (parameter ids,
+  message-bearing asserts) that localizes the bug without a debugger.
+- **Deterministic by construction.** No sleeps, no wall clock, seeded
+  randomness, no live network, order-independent fixtures. A test that needs a
+  rerun to pass is broken, not flaky-but-green: fix or delete it rather than
+  leaning on retry machinery.
+- **Test data earns its size.** Minimal inline fixtures and builders over
+  checked-in golden dumps; a reader should see from the test itself why the
+  expected value is correct.
 - **Green-tests commit gate (opt-in per repo).** Repos with a
   `.claude/require-green-tests` file gate `git commit` on a recorded green run:
   in those repos, always run the full suite via the plugin's
