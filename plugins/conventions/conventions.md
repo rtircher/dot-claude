@@ -21,46 +21,34 @@ non-trivial questions about the code:
 
 ## Model selection
 
-- Refer to models by **unversioned alias** (`fable`, `sonnet`, `haiku`), never a
-  version-pinned id, including in config and docs. **One deliberate exception: the
-  opus tier is pinned to `claude-opus-4-8`** in `settings.json`, because Opus 5
-  regressed on our work and the `opus` alias now resolves to it. Revisit the pin
-  only when a future Opus is worth adopting, and only then move it forward.
+- Refer to models by **unversioned alias** (`fable`, `sonnet`), never a
+  version-pinned id, including in config and docs. The Agent tool accepts only
+  aliases. Never `opus`: it resolves to Opus 5, which regressed on our work.
+  Never `haiku`.
 <!-- main-session-only: start -->
-- **Fixed routing table**, not per-dispatch judgment calls. Deciding the tier is
-  part of composing the dispatch: pass `model:` for `sonnet` and `fable`; for the
-  opus tier omit `model:` so the worker inherits the pinned main session (the Agent
-  tool accepts only aliases, and `model: opus` silently downgrades the worker to
-  Opus 5). A `sonnet`/`fable` dispatch that forgets `model:` silently runs on opus
-  4.8, so never omit `model:` on a non-opus dispatch.
-    - **Orchestrator (main session): `claude-opus-4-8`.** Orchestration is itself
-      the complex work (decomposing well, briefing precisely, judging results), so
-      the main session runs on the opus tier: sonnet is not reliable enough for it,
-      and fable's weekly cap is too scarce for an always-on main loop.
-    - **Mechanical subtasks: `sonnet`.** Fully-specified work with a tight return
-      contract (apply a reviewed plan step, rename/move, format, run tests and
-      report).
-    - **Standard subtasks: the pinned opus tier, by inheritance.** Implementation,
-      research, debugging; the default tier. Our `coder`/`researcher` agent defs
-      carry no `model:` frontmatter, so inheritance holds; add `model:` frontmatter
-      with an alias only when you deliberately want that tier.
-    - **Hardest-reasoning advisor calls: `fable`.** Cross-cutting review,
-      feasibility, security, subtle design judgment. Bursty advisor capacity, never
-      an always-on loop; its weekly cap is the scarce resource.
-    - **Adversarial-review panels route themselves:** `dev-adversarial-review` puts
-      the mechanical lenses (scope-yagni, gaps, simplicity-yagni) on `sonnet` and
-      everything else (reasoning lenses, correctness/testing on diffs, verify
-      skeptics) on the session model; don't restate tiers there, pass `tiers` only
-      to override a slot.
-    - Never `haiku`.
+- **Fixed routing, not per-dispatch judgment.** Two tiers exist:
+    - **Omit `model:` for sonnet.** The main session runs sonnet (since
+      2026-09-15: faster and fewer hallucinations than Opus 4.8 on our work), so
+      omitting `model:` gives sonnet: orchestration, implementation, research,
+      debugging, mechanical work. Our `coder`/`researcher` agent defs carry no
+      `model:` frontmatter for this reason.
+    - **Pass `model: fable` for hard reasoning.** Cross-cutting review,
+      feasibility, security, subtle design judgment: wherever nuance decides the
+      answer. Bursty advisor capacity, never an always-on loop; its weekly cap is
+      the scarce resource.
+- **Adversarial-review panels route themselves:** `dev-adversarial-review` pins
+  every slot in its `DEFAULT_TIERS` (mechanical lenses sonnet, reasoning lenses
+  and verify skeptics fable) and rejects any other alias. Don't restate tiers
+  there; pass `tiers` only to override one named key, and never downgrade the
+  verify skeptics.
 
 ## Delegation
 
 The main session is an orchestrator, not a worker. Main-loop turns are the most
-expensive tokens in the system: they run on a premium tier, and every inline
-turn grows a context that every later turn re-reads. The main session's verbs
-are decompose, dispatch, judge, integrate, communicate; sustained
-implementation and broad reading happen in subagents.
+expensive tokens in the system: every inline turn grows a context that every
+later turn re-reads. The main session's verbs are decompose, dispatch, judge,
+integrate, communicate; sustained implementation and broad reading happen in
+subagents.
 
 - **Delegation tripwire.** More than ~10 Edit/Write calls in the main loop, or a
   third edit-test cycle on the same problem, means the work should have been a

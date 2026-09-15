@@ -249,11 +249,13 @@ Execute the clean plan. Prefer your subagent-driven-development skill
 (`superpowers:subagent-driven-development`, or your environment's equivalent) for
 plans with independent tasks; use an executing-plans skill or inline
 implementation when that fits better — use judgment, and say which you chose and
-why. When dispatching subagents, pick the agent type and model tier per task
-rather than defaulting: `dev:coder` (worktree-isolated) for implementer tasks
+why. When dispatching subagents, pick the agent type per task rather than
+defaulting: `dev:coder` (worktree-isolated) for implementer tasks
 that edit files in parallel, `dev:reviewer` for review tasks (adversarial
 stance and findings schema baked in), `dev:researcher` or `Explore` for
-read-only research and search, and a cheaper model tier for mechanical work. Follow the
+read-only research and search. Tiers follow the conventions' routing table
+(omit `model:` for sonnet, `model: fable` for hard reasoning, never `opus`);
+review phases route themselves. Follow the
 project's own conventions (TDD, verification) as those skills direct.
 
 **When a subagent-driven mode is chosen, the main session does not edit

@@ -43,16 +43,12 @@ must supply `skillScriptsDir` (this skill's `scripts/` dir, absolute) and
 `expectedArtifactSha256` (sha256 of the exact artifact bytes, computed in
 Bash), plus `diffRange` for diffs; the `/dev:review-panel` command does
 all of this automatically and is the guaranteed entry point. The workflow bakes
-in a default routing: the mechanical lenses (`scope-yagni`, `gaps`,
-`simplicity-yagni`, `duplication`) run on sonnet, and everything else —
-the reasoning-heavy lenses, `code-review`, the
-verify skeptics — inherits the session model. Callers who pass nothing get
-that; `tiers` is the per-dispatch override knob (keys: a lens key — diffs have
-their own lens panel — or `verify`; values `{model, effort}`). Apply step 4's
-convention when overriding: assess this artifact's difficulty per lens, and
-only re-tier where you have a concrete reason (e.g. promote `gaps` back to the
-session model for a dense spec). Never downgrade the verify skeptics. The
-workflow implements steps 2 to 6 deterministically: the per-type lens panel
+in a fixed routing: `DEFAULT_TIERS` in `workflows/adversarial-review.js` names
+every slot (mechanical lenses sonnet, reasoning lenses and the verify skeptics
+fable) and rejects any other alias. No slot inherits the session model. `tiers`
+overrides one named key (a lens key or `verify`; values `{model, effort}`) and
+needs a concrete reason about this artifact. Never downgrade the verify
+skeptics. The workflow implements steps 2 to 6 deterministically: the per-type lens panel
 (specs, plans, AND diffs — a diff gets `correctness`, `simplicity-yagni`,
 `testing`, and `duplication` lenses),
 real external couriers (`external-review.mjs` / `codex-review.mjs`),
@@ -82,8 +78,8 @@ proceed.
 If the artifact is a **PR or code diff**, do not hand-roll code review. Use the
 `/code-review` skill, with effort scaled to diff size (larger or riskier diffs →
 higher effort) — it covers correctness plus simplification/reuse. `/code-review`
-does NOT cover the testing lens, so additionally dispatch one reviewer for it
-(the diff row's **testing** lens in step 3's table, framed per step 4). Surface
+does NOT cover the testing lens, so additionally dispatch one reviewer for it,
+with `model: fable` (the diff row's **testing** lens in step 3's table, framed per step 4). Surface
 all findings. If a third-party model is available, also
 enlist it as an independent reviewer (see "Enlist a third-party model" below):
 a different model family is the most independent second read you can get on a
@@ -134,10 +130,9 @@ framing and schema below into the prompt.) Each reviewer gets:
 > something is a problem, flag it rather than letting it pass. End with a single
 > verdict: ship or don't-ship, with one sentence why.
 
-Pick each reviewer's model deliberately based on how hard that lens is for this
-artifact — do not default one model across the whole panel. (Subtle
-feasibility/assumption reasoning may warrant a stronger model than a
-straightforward scope pass.)
+Tier each lens reviewer from `DEFAULT_TIERS` in `workflows/adversarial-review.js`:
+mechanical lenses `model: sonnet`, reasoning lenses `model: fable`. Never omit
+`model:` (the session is sonnet), never `opus`.
 
 ### 5. Enlist a third-party model (additive, when available; applies on BOTH paths)
 

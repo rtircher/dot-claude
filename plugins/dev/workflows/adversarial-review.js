@@ -50,16 +50,18 @@
  *                                    // 2+, stale digest). `true` is the old force form
  *                                    // and is now redundant with the default.
  *                                    // Advisory only: the workflow never blocks on it.
- *   tiers?: {                        // optional per-reviewer re-tiering, decided by the
- *     [key: string]: {               // caller per dispatch ("pick the model per task").
- *       model?: string,              // unversioned alias ('opus', 'sonnet', 'haiku')
+ *   tiers?: {                        // optional override of one DEFAULT_TIERS key;
+ *     [key: string]: {               // normally omitted. Any alias other than 'fable' or 'sonnet' throws.
+ *       model?: string,              // unversioned alias ('fable' | 'sonnet'); never 'opus',
+ *                                    // which resolves to Opus 5
  *       effort?: string,             // 'low'|'medium'|'high'|'xhigh'|'max'
  *     },                             // keys: a lens key (see LENS_PANELS; diffs have
  *   },                               // their own panel) or 'verify' (skeptics).
- *                                    // DEFAULT_TIERS routes the mechanical lenses
- *                                    // (scope-yagni, gaps, simplicity-yagni, duplication) to sonnet;
- *                                    // every other slot inherits the session model at
- *                                    // session effort. Explicit tiers override per key.
+ *                                    // DEFAULT_TIERS names every slot: mechanical lenses
+ *                                    // (scope-yagni, gaps, simplicity-yagni, duplication) on
+ *                                    // sonnet, reasoning lenses and the verify skeptics on
+ *                                    // fable, all at session effort. Nothing inherits the
+ *                                    // session model. Explicit tiers override per key.
  * }
  */
 export const meta = {
@@ -73,9 +75,8 @@ export const meta = {
   ],
 }
 
-// One lens = one distinct failure mode, never a redundant copy. Reviewers inherit
-// the session model (never a downgrade when the session runs a stronger tier);
-// set `model` on a lens only to deliberately re-tier an unusually easy/hard one.
+// One lens = one distinct failure mode, never a redundant copy. Tiers live in
+// DEFAULT_TIERS below (every key there), never on the lens entry.
 const LENS_PANELS = {
   spec: [
     { key: 'hidden-assumptions', brief: 'what is taken for granted that may not hold' },
@@ -216,21 +217,31 @@ function gitPrefix(art) {
   return art.repoDir ? `git -C "${art.repoDir}"` : 'git'
 }
 
-// Default routing: the mechanical lenses run on sonnet; the reasoning-heavy
-// lenses (hidden-assumptions, contradiction-feasibility, sequencing, risk),
-// the diff reviewer, and the verify skeptics inherit the session model (no
-// entry). Callers who pass nothing get this; args.tiers overrides per key.
+// Fixed routing, every slot named (conventions, "Model selection"): mechanical
+// lenses on sonnet; reasoning lenses, the diff correctness and testing lenses,
+// and the verify skeptics on fable. Nothing inherits: the main session runs
+// sonnet, so an omitted model would be a downgrade, not the stronger tier it
+// once meant. args.tiers overrides one key; never downgrade the verify skeptics.
 const DEFAULT_TIERS = {
-  'scope-yagni': { model: 'sonnet' },
+  'hidden-assumptions': { model: 'fable' },
   gaps: { model: 'sonnet' },
+  'contradiction-feasibility': { model: 'fable' },
+  'scope-yagni': { model: 'sonnet' },
+  sequencing: { model: 'fable' },
+  risk: { model: 'fable' },
+  correctness: { model: 'fable' },
   'simplicity-yagni': { model: 'sonnet' },
+  testing: { model: 'fable' },
   duplication: { model: 'sonnet' },
+  verify: { model: 'fable' },
 }
 
 // Effective tiering for one reviewer slot: DEFAULT_TIERS under any
 // caller-supplied override for the same key.
 function tierOpts(art, key) {
   const t = { ...(DEFAULT_TIERS[key] || {}), ...((art.tiers || {})[key] || {}) }
+  // The only two tiers that exist for reviewers; enforced here so prose need not repeat it.
+  if (t.model && !['fable', 'sonnet'].includes(t.model)) throw new Error(`tiers.${key}.model must be 'fable' or 'sonnet' (got '${t.model}'); 'opus' resolves to Opus 5`)
   return { ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}) }
 }
 
@@ -340,7 +351,6 @@ function buildReviewers(art) {
       label: `lens:${lens.key}`,
       phase: 'Review',
       schema: REVIEW_SCHEMA,
-      ...(lens.model ? { model: lens.model } : {}),
       ...tierOpts(art, lens.key),
       agentType: 'dev:reviewer',
     }).then(tag(lens.key, 'claude')),
