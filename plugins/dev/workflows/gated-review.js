@@ -19,7 +19,7 @@
  * review round), plus:
  *   maxRounds?: number   // default 3
  *   fixConventions?: string  // optional repo conventions handed to the fix agent
- *   tiers?.fix: { model?, effort? }  // re-tier the fix agent; omit to inherit the session model
+ *   tiers?.fix: { model?, effort? }  // omit for sonnet; 'fable' for a fix pass over reasoning-heavy findings; never 'opus'
  *
  * NOTE: the fix step MUTATES the artifact (edits the doc, or code in repoDir). For
  * a diff whose range is two committed branches, the fix agent must commit for the
@@ -113,6 +113,7 @@ while (true) {
   // agent needs write tools. In autonomous-feature the coordinator runs this whole
   // loop inside one worktree, so isolation is handled there, not per fix agent.
   const fixTier = (a.tiers || {}).fix || {}
+  if (fixTier.model && !['fable', 'sonnet'].includes(fixTier.model)) throw new Error(`tiers.fix.model must be 'fable' or 'sonnet' (got '${fixTier.model}')`)
   await agent(fixPrompt(a, blockers, round), {
     label: `fix:round${round}`,
     phase: `Round ${round}`,
