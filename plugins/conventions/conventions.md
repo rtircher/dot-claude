@@ -71,7 +71,10 @@ subagents.
 - **Detail-to-disk.** Subagents doing heavy analysis write full findings to a
   scratchpad or docs file and return the path plus a short executive summary
   (5 lines or so). The main session pulls the detail back in only when a later
-  decision actually needs it.
+  decision actually needs it, and pulls it from the file: a Read with
+  offset+limit or a Grep of that path. Never resume the agent (SendMessage) to
+  re-emit what is already on disk; one such re-emit was the single largest
+  report in a transcript audit, at 31k characters.
 - **At most 3 parallel subagents.** Each completion notification lands in main
   context. Prefer sequential dispatch when results feed into each other.
 - **Long sessions are a cost bug.** Keep the orchestrator's working memory in a
@@ -80,11 +83,15 @@ subagents.
   the remaining cost from what the same kind of step cost earlier in the session;
   if it fits, keep going. Respawn only when it clearly does not fit, at a natural
   boundary, and prefer a handover over mid-task compaction.
-- **From 70% context the `delegation-gate` hook denies bulk read/search in the
-  main loop after 3 round-trips per turn (1 past the last band).** A denial is
-  not an error to retry: dispatch a researcher/Explore
-  subagent, or make the read targeted (Read with offset+limit, Grep with
-  head_limit). Subagents are never gated. Kill switch for a session that
+- **From 50% context the `delegation-gate` hook denies bulk read/search in the
+  main loop after 3 round-trips per turn (1 past the last band).** Bulk means
+  Read without offset+limit, Grep content mode without head_limit, and Bash
+  whose output is unbounded by construction: `cat`/`grep -r`/`find` with no
+  limiter, whole-file `git diff`/`git show`, `git log` or `jj log -r` with no
+  `-n`, `gh pr view` without `--json`. A denial is not an error to retry:
+  dispatch a researcher/Explore subagent, or make the read targeted (Read with
+  offset+limit, Grep with head_limit, `--stat`/`--name-only`, `-n N`,
+  `| head -50`). Subagents are never gated. Kill switch for a session that
   legitimately needs deep inline reading: `DELEGATION_GATE=off`.
 <!-- main-session-only: end -->
 
@@ -103,6 +110,13 @@ subagents.
 
 ## Working preferences
 
+- **Reporting back from a dispatch.** When you run as a subagent, your final
+  message is the only thing that reaches the caller's context. Keep it under
+  40 lines unless the brief sets another bound: decision-relevant facts with
+  `file:line` cites, never pasted files, diffs, or raw command output. Put the
+  full material in a scratchpad file and return its path with a short summary.
+  If the caller asks you to re-emit detail already on disk, return the path and
+  line range, not the content.
 - **Simplicity first; earn complexity.** Default to the simplest design that
   satisfies the requirement in front of you, then stop: no speculative abstraction,
   config knobs, extension points, or generalization for a second use case that

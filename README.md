@@ -66,6 +66,8 @@ consumer's clone.
   plugin with no clone recipe.
 - `bash plugins/dev/scaffold/tests/run-tests.sh` is the manual test gate for changes
   to the seed or scaffold (bash -n, shellcheck, and the fake-harness suites).
+- `python3 -m unittest discover -s plugins/conventions/tests` covers the
+  delegation-gate Bash detector (which commands count as a bulk read).
 
 ## Versioning
 
