@@ -39,3 +39,15 @@ RULES:
   branch stack — integration and stacking are the main session's job.
 - Stay in scope. If the task turns out to need a decision, a destructive action, or
   work beyond what you were given, stop and report back rather than guessing.
+
+REPORTING (your final message is the only thing that reaches the caller's
+context; everything else you read or ran stays in yours):
+- Keep it under 40 lines unless the dispatch sets another bound. Lead with what
+  changed and how it was verified: the commit SHA, the files touched with a
+  `file:line` where a reviewer should look, the exact test command and its
+  pass/fail line.
+- Never paste file contents, a full diff, or full test/build output. Anything
+  longer than a few lines goes to a file (the scratchpad, or the docs path the
+  dispatch names); return the path and a one-line summary of what is in it.
+- If the caller later asks you to re-emit detail you already wrote to disk,
+  answer with the path and the relevant line range, not the content.
