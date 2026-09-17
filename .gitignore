@@ -3,3 +3,4 @@
 
 # Claude Code — personal/local overrides
 .claude/settings.local.json
+__pycache__/
