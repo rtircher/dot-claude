@@ -35,9 +35,10 @@ external review.
 `{artifactPath, artifactType ('spec'|'plan'|'diff'), diffRange, repoDir, focus,
 outOfScope, externalReview, skillScriptsDir, expectedArtifactSha256, pinnedSha,
 tiers}`. `externalReview` defaults to **true**: the workflow itself runs every
-available, applicable cross-family reviewer (the endpoint script for any
-artifact type; Codex for diffs) alongside the Claude panel, and reports any it
-could not run. Opt out (`externalReview: false`) only on an explicit
+external reviewer this machine configures (`EXTERNAL_REVIEWERS`, see step 5)
+that applies to the artifact alongside the Claude panel, and reports any it
+could not run. A machine that configures none gets a Claude-only panel with
+`external.configured: false` and no shortfall. Opt out (`externalReview: false`) only on an explicit
 "no external" / "claude only" from the user. For external review the caller
 must supply `skillScriptsDir` (this skill's `scripts/` dir, absolute) and
 `expectedArtifactSha256` (sha256 of the exact artifact bytes, computed in
@@ -51,7 +52,8 @@ needs a concrete reason about this artifact. Never downgrade the verify
 skeptics. The workflow implements steps 2 to 6 deterministically: the per-type lens panel
 (specs, plans, AND diffs — a diff gets `correctness`, `simplicity-yagni`,
 `testing`, and `duplication` lenses),
-real external couriers (`external-review.mjs` / `codex-review.mjs`),
+real external reviewers (`external-review.mjs`, which runs each configured
+entry and calls `codex-review.mjs` for Codex ones),
 schema-validated findings, a skeptic verify pass on uncorroborated blocker/major
 findings, and synthesis blind to model identity. The workflow *owns* external
 invocation; step 5's manual Bash instructions are the fallback for when the
@@ -265,8 +267,9 @@ Verify flags against `opencode run --help` — the CLI evolves quickly. Requires
 `opencode` on PATH with the target provider authenticated; check
 `command -v opencode` first and skip this reviewer if absent. For consent, name
 the provider the pinned model resolves to, not "OpenCode". Pointed at a local
-model (e.g. `ollama/qwen3-coder`), the artifact never leaves the machine and the
-consent stop does not apply.
+model (e.g. `ollama/qwen3-coder`, on this machine or other hardware the user
+controls), the artifact never leaves the user's hardware and the consent stop
+does not apply.
 
 **Shipped reviewer script (no harness at all).** This skill ships
 `scripts/external-review.mjs` (resolve it relative to this SKILL.md), a
@@ -279,23 +282,42 @@ artifacts instead of silently truncating, and echoes back the `--target` binding
 plus a sha256 digest of what it reviewed — which satisfies this step's
 artifact-binding requirement mechanically.
 
-```bash
-git diff main...HEAD | \
-  EXTERNAL_REVIEW_MODEL=gpt-5 EXTERNAL_REVIEW_API_KEY=... \
-  node <skill-dir>/scripts/external-review.mjs \
-    --type diff --target "main...HEAD @ $(git rev-parse --short HEAD)"
+**Which external reviewers run is per-machine config, never the plugin's.**
+Set `EXTERNAL_REVIEWERS` (in the machine's `settings.json` env, typically its
+dotfiles) to a JSON array; it is the complete list:
+
+```json
+"EXTERNAL_REVIEWERS": "[{\"name\":\"codex\",\"kind\":\"codex\"},{\"name\":\"qwen\",\"model\":\"qwen3.8:27b-q8_0\",\"baseUrl\":\"http://gpu-box:11434/v1\",\"private\":true},{\"name\":\"gpt\",\"model\":\"gpt-5\",\"baseUrl\":\"https://api.openai.com/v1\",\"apiKeyEnv\":\"OPENAI_API_KEY\"}]"
 ```
 
-Point `EXTERNAL_REVIEW_BASE_URL` at `http://localhost:11434/v1` for Ollama (no
-API key needed for local endpoints). Requires only `node` (≥ 18) and a
-reachable endpoint; prefer it when Codex/OpenCode are absent, when the user
-wants structured output folded straight into synthesis, or when the review must
-stay on-machine via a local model.
+Entries are `{name?, kind?, model, baseUrl, apiKeyEnv?, private?, family?}`.
+`kind` is `openai-compatible` (default: this script calls the endpoint itself)
+or `codex` (the Codex companion via `codex-review.mjs`, diffs only). Set
+`"private": true` only on an endpoint that runs on hardware the user controls
+(their own GPU box, however it is reached): it needs no API key and the consent
+stop does not apply. Loopback is always private; anything else without the flag
+is treated as a hosted vendor, which needs `apiKeyEnv` and consent. `"[]"` means
+no external reviewers. When `EXTERNAL_REVIEWERS` is unset, the legacy
+single-reviewer vars (`EXTERNAL_REVIEW_MODEL`, `EXTERNAL_REVIEW_BASE_URL`,
+`EXTERNAL_REVIEW_API_KEY`) count as one entry, plus Codex if its companion is
+installed.
 
-The default is **all available** cross-family reviewers, not one: the workflow
-dispatches every reviewer the environment actually has that applies to the
-artifact (script/endpoint reviewers for any artifact type; Codex for diffs
-only, and only for ranges of the form `<ref>...HEAD`). Availability and consent
+```bash
+git diff main...HEAD | node <skill-dir>/scripts/external-review.mjs \
+  --type diff --target "main...HEAD @ $(git rev-parse --short HEAD)" \
+  --cwd . --range main...HEAD
+```
+
+The script runs every entry in parallel and prints
+`{configured, artifactSha256, votes:[...]}`; the workflow folds each vote as its
+own `external:<name>` reviewer. A reviewer that is down, misconfigured, or not
+applicable (Codex on a spec) is one `external.dropped` entry, never a lost
+panel. Requires only `node` (≥ 18) plus whatever each entry needs.
+
+The default is **all configured** cross-family reviewers, not one: the workflow
+runs every entry the machine configures that applies to the artifact (endpoint
+reviewers for any artifact type; Codex for diffs only, and only for ranges of
+the form `<ref>...HEAD`). Availability and consent
 still gate each reviewer exactly as above; a missing or unauthenticated tool is
 reported as absent, never faked and never a blocker for the rest of the panel.
 Both external kinds are bound **by-digest**: each tool self-reports the sha256
@@ -387,9 +409,12 @@ Present to the user:
   weight behind the verdict — never imply a fuller panel than voted. On the
   Workflow path, ALWAYS surface the result's `external.ran` (which cross-family
   reviewers really voted), `external.dropped` (each absent reviewer with its
-  reason), and `external.shortfall` (external review was on — the default — and
-  nothing external actually voted; it fires even on caller config drops, so a
-  Claude-only degradation is never silent). If the user
+  reason), and `external.shortfall` (external review was on — the default — the
+  machine configures external reviewers, and nothing external actually voted;
+  it fires even on caller config drops, so a Claude-only degradation is never
+  silent). `external.configured: false` means the machine has none: report the
+  panel as Claude-only, which is not a failure unless the user asked for
+  external review (callers pass `requireExternal: true` then). If the user
   asked for external review and no third-party reviewer could run, append the
   setup hint from step 5 (the cheapest paths to a cross-family reviewer, per the
   model-family table there).

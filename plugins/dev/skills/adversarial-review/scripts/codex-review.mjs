@@ -87,7 +87,7 @@ function fail(code, message) {
 // a machine without the codex plugin. Returns null when none is installed;
 // the caller exits 2 with the reason (this IS the availability report: v5
 // dropped the discovery probe, so absence surfaces here, at tool run time).
-function defaultCompanion() {
+export function defaultCompanion() {
   const root = process.env.CODEX_COMPANION_ROOT
     || join(homedir(), '.claude', 'plugins', 'cache', 'openai-codex', 'codex')
   let versions

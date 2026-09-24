@@ -5,7 +5,7 @@ allowed-tools: Bash(bash:*), Bash(nvidia-smi:*), Bash(ollama:*), Bash(curl:*), B
 
 Set up the local-model path of the `adversarial-review` skill on this machine:
 Ollama serving a coder model sized to the hardware, OpenCode as the agent
-harness, and the `EXTERNAL_REVIEW_*` env vars that drive the skill's shipped
+harness, and the `EXTERNAL_REVIEWERS` entry that drives the skill's shipped
 `external-review.mjs` reviewer. Everything runs on localhost, so third-party
 review gains a cross-family vote without any artifact leaving the machine (and
 therefore without the skill's consent stop).
@@ -118,13 +118,21 @@ Add to the user's `settings.json` (their dotfiles copy when tracked):
 
 ```json
 "env": {
-  "EXTERNAL_REVIEW_BASE_URL": "http://localhost:11434/v1",
-  "EXTERNAL_REVIEW_MODEL": "<primary>"
+  "EXTERNAL_REVIEWERS": "[{\"name\":\"<primary>\",\"model\":\"<primary>\",\"baseUrl\":\"http://localhost:11434/v1\"}]"
 }
 ```
 
+`EXTERNAL_REVIEWERS` is the machine's complete external list, so keep any
+entries already there (Codex is `{"name":"codex","kind":"codex"}`) and append
+this one rather than replacing the value.
+
 plus `Bash(ollama *)` and `Bash(opencode *)` permissions. Tell the user the env
 block becomes ambient in NEW sessions only.
+
+For an Ollama on another host the user controls, use its address as `baseUrl`
+and add `"private": true` to that entry (no key, no consent stop). Ollama has
+no authentication: expose it beyond loopback only behind the user's own network
+controls (firewall, VPN ACLs), and never on a public interface.
 
 ## 8. Smoke-test the real path
 
@@ -132,12 +140,13 @@ Run the adversarial-review skill's shipped reviewer on a real diff:
 
 ```sh
 git diff HEAD~1..HEAD | \
-  EXTERNAL_REVIEW_BASE_URL=http://localhost:11434/v1 EXTERNAL_REVIEW_MODEL=<primary> \
+  EXTERNAL_REVIEWERS='[{"model":"<primary>","baseUrl":"http://localhost:11434/v1"}]' \
   node "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts/external-review.mjs" \
     --type diff --target "HEAD~1..HEAD @ $(git rev-parse --short HEAD)"
 ```
 
-Success = schema-valid JSON findings with the sha256 artifact binding. That is
+Success = `configured: true` and a `votes[0]` with schema-valid findings and
+the sha256 artifact binding. That is
 exactly what the `dev-adversarial-review` workflow folds in by default
 (`externalReview` defaults to true; the caller supplies `skillScriptsDir` and
 `expectedArtifactSha256`, and the workflow accepts the vote only on digest
