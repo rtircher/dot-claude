@@ -48,7 +48,7 @@ Steps:
    the couriers return. A digest a courier has seen proves nothing.
 4. List the configured reviewer names:
 
-       node "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts/external-review.mjs" --list
+       "$(command -v node || bash -lc 'command -v node')" "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts/external-review.mjs" --list
 
    and pass its `names` as `externalReviewers`, so each reviewer shows as its
    own `external:<name>` step. If the command fails, omit the arg (one

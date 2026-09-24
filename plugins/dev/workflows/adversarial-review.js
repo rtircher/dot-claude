@@ -292,6 +292,10 @@ const EXTERNAL_VOTE_SCHEMA = {
   },
 }
 
+// A tool shell can start without the user's login PATH (node under nvm/conda),
+// so fall back to a login shell's lookup rather than failing the courier.
+const NODE_BIN = `"$(command -v node || bash -lc 'command -v node')"`
+
 // Local and hosted models routinely take 2 to 5 min per review (thinking
 // models, cold loads), past the Bash tool's 2 min default.
 const COURIER_BASH_TIMEOUT = 'Run it with the Bash tool timeout set to 600000 ms (the command can take several minutes; do not background it).'
@@ -315,7 +319,7 @@ function externalCourier(art, name) {
   // Couriers only run a shell pipeline, so the cheapest tier is pinned: an
   // omitted model would inherit the session's.
   return () => agent(
-    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}. ${COURIER_BASH_TIMEOUT}\n\n${feed} | node "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"${codexArgs}${only}`,
+    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}. ${COURIER_BASH_TIMEOUT}\n\n${feed} | ${NODE_BIN} "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"${codexArgs}${only}`,
     { label, phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA, model: 'sonnet', effort: 'low' },
   ).then(tag(label, 'external'))
 }
