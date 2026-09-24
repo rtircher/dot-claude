@@ -32,14 +32,23 @@
  *   to openai-compatible. "private": true declares the endpoint is hardware the
  *   user controls (no API key needed, no consent stop); loopback is always
  *   private, anything else without the flag is treated as a hosted vendor.
- *   Optional "family" (e.g. "google") is echoed for reporting.
+ *   Optional "family" (e.g. "google") is echoed for reporting. Optional
+ *   "serialize" (default: the "private" value) queues requests so only one
+ *   review per endpoint host:port runs at a time across every process on this
+ *   machine; see host-lock.mjs. Codex is never queued.
  *
  *   Unset: the legacy single-reviewer vars below, if present, plus Codex when
  *   its companion is installed (skipped silently when it is not), so a machine
  *   with nothing set and no Codex gets a clean "none configured".
  *     EXTERNAL_REVIEW_MODEL / EXTERNAL_REVIEW_BASE_URL / EXTERNAL_REVIEW_API_KEY
  *
- *   EXTERNAL_REVIEW_TIMEOUT_MS  default 300000, per openai-compatible reviewer
+ *   EXTERNAL_REVIEW_TIMEOUT_MS  default 300000, per openai-compatible request;
+ *                               time queued for the host lock is not counted
+ *   EXTERNAL_REVIEW_MAX_WAIT_MS default 240000, max time queued for the host
+ *                               lock before the vote drops with "queued past
+ *                               max wait"
+ *   EXTERNAL_REVIEW_LOCK_DIR    default $XDG_CACHE_HOME/external-review
+ *                               (~/.cache/external-review)
  *
  * Output: {reviewer:{kind:'external-review-script', mode:'multi'}, configured,
  *   artifactSha256, votes:[vote | {name, __error} | {name, skipped}]}.
@@ -69,6 +78,7 @@ import { createHash } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defaultCompanion } from './codex-review.mjs'
+import { acquireHostLock, defaultLockDir, hostKey } from './host-lock.mjs'
 
 const CODEX_SCRIPT = fileURLToPath(new URL('./codex-review.mjs', import.meta.url))
 
@@ -111,6 +121,11 @@ const REVIEW_SCHEMA = {
 // Past this size the tail silently falls off most context windows; refuse
 // loudly instead so the caller narrows scope (the skill bans silent caps).
 const MAX_ARTIFACT_CHARS = 400_000
+
+// The workflow courier's Bash call is capped at 10 min; the default max wait
+// plus the default request timeout stays under it.
+const DEFAULT_TIMEOUT_MS = 300_000
+const DEFAULT_MAX_WAIT_MS = 240_000
 
 function fail(code, msg) {
   process.stderr.write(`external-review: ${msg}\n`)
@@ -259,11 +274,13 @@ export function resolveReviewers(env, { allowSameFamily = false, codexAvailable 
     }
     try {
       r.host = new URL(r.baseUrl).hostname
+      r.lockKey = hostKey(r.baseUrl)
     } catch {
       r.problem = `base URL is not a valid URL: "${r.baseUrl}"`
       return r
     }
     r.private = spec.private === true || isLoopback(r.host)
+    r.serialize = typeof spec.serialize === 'boolean' ? spec.serialize : r.private
     if (!r.apiKey && !r.private) {
       r.problem = `no API key for ${r.host}: set apiKeyEnv, or "private": true if this endpoint runs on hardware you control`
     }
@@ -356,7 +373,10 @@ async function main() {
     fail(e.code || 1, e.message)
   }
 
-  const timeoutMs = Number(process.env.EXTERNAL_REVIEW_TIMEOUT_MS) || 300_000
+  const timeoutMs = Number(process.env.EXTERNAL_REVIEW_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS
+  const maxWaitEnv = process.env.EXTERNAL_REVIEW_MAX_WAIT_MS
+  const maxWaitMs = maxWaitEnv && Number(maxWaitEnv) >= 0 ? Number(maxWaitEnv) : DEFAULT_MAX_WAIT_MS
+  const lockDir = defaultLockDir(process.env)
 
   // Hash the RAW stdin bytes before decoding: for artifacts containing invalid
   // UTF-8 (non-UTF-8 text files, some binary hunks in a diff) the lossy decode
@@ -391,10 +411,15 @@ async function main() {
       return runCodex(r, opts)
     }
     if (r.problem) return { name: r.name, __error: r.problem }
+    let lock = null
     try {
+      // Acquired before reviewOne so queue time never eats the request timeout.
+      if (r.serialize) lock = await acquireHostLock(r.lockKey, { dir: lockDir, maxWaitMs })
       return vote(r, await reviewOne(r, prompt, timeoutMs))
     } catch (e) {
       return { name: r.name, __error: e.message }
+    } finally {
+      lock?.release()
     }
   }))
   process.stdout.write(JSON.stringify({
