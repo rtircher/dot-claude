@@ -21,8 +21,10 @@
  *                                    // Needed when the orchestrator runs outside that repo.
  *   focus?: string,                  // optional in-scope note, bound to every reviewer
  *   outOfScope?: string,             // optional exclusions, bound to every reviewer
- *   externalReview?: boolean,        // defaults TRUE: real cross-family couriers run
- *                                    // alongside the Claude panel; pass false to opt out
+ *   externalReview?: boolean,        // defaults TRUE: every external reviewer this machine
+ *                                    // configures (EXTERNAL_REVIEWERS, see
+ *                                    // external-review.mjs) runs alongside the Claude
+ *                                    // panel; pass false to opt out
  *   skillScriptsDir?: string,        // absolute path to the adversarial-review skill's
  *                                    // scripts/ dir; plugin commands pass
  *                                    // `${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts`.
@@ -37,18 +39,20 @@
  *                                    // from the range, and a second artifact-selection
  *                                    // knob could skew from the hashed range.)
  *                                    // diffRange is additionally required for diff
- *                                    // artifacts, and must be `<ref>...HEAD` for the
- *                                    // Codex reviewer to participate (the companion
- *                                    // reviews only that form).
- *   requireExternal?: boolean,       // shortfall suppressor. external.shortfall fires by
- *                                    // DEFAULT whenever external review was requested and
- *                                    // zero external votes counted (config drop, courier
- *                                    // failure, digest mismatch — never a silent
- *                                    // degradation to Claude-only). Pass false to
- *                                    // suppress it for a round where external absence is
- *                                    // the documented degradation (gated-review rounds
- *                                    // 2+, stale digest). `true` is the old force form
- *                                    // and is now redundant with the default.
+ *                                    // artifacts, and must be `<ref>...HEAD` for a
+ *                                    // configured Codex reviewer to participate (the
+ *                                    // companion reviews only that form).
+ *   requireExternal?: boolean,       // external.shortfall control. By DEFAULT it fires
+ *                                    // when external review was requested, the machine
+ *                                    // configures external reviewers, and zero external
+ *                                    // votes counted (config drop, courier failure,
+ *                                    // digest mismatch — never a silent degradation to
+ *                                    // Claude-only); a machine with none configured
+ *                                    // stays quiet. Pass true when the user explicitly
+ *                                    // asked for an external review (fires even with
+ *                                    // none configured); false to suppress it for a
+ *                                    // round where external absence is the documented
+ *                                    // degradation (gated-review rounds 2+, stale digest).
  *                                    // Advisory only: the workflow never blocks on it.
  *   tiers?: {                        // optional override of one DEFAULT_TIERS key;
  *     [key: string]: {               // normally omitted. Any alias other than 'fable' or 'sonnet' throws.
@@ -254,63 +258,78 @@ function tag(handle, family) {
   return (r) => r && { ...r, handle, family }
 }
 
-// External courier reviewers. A courier's ONLY job is to run the real external
-// tool and hand back its stdout; the honesty guarantee is the digest gate
+// External reviewers. The plugin names none: which ones exist (Codex, any
+// OpenAI-compatible endpoint, hosted or on the user's own hardware) is the
+// machine's EXTERNAL_REVIEWERS config, read by external-review.mjs, which runs
+// them all and returns one vote each. A courier's ONLY job is to run that
+// script and hand back its stdout; the honesty guarantee is the digest gate
 // (externalVoteProblem), not the courier's obedience: couriers never see
 // art.expectedArtifactSha256, so a courier that skips the tool cannot fabricate
-// a passing vote. Couriers run as the default workflow subagent (full tools):
-// dev:reviewer/dev:researcher are ruled out because their RULES forbid exactly what these do
-// (POSTing the artifact to an endpoint; spawning the Codex app-server).
-// The pipelines carry no env prefix: external-review.mjs reads its own
-// environment (which courier shells inherit) and fails fast with the exact
-// reason when EXTERNAL_REVIEW_MODEL is unset; codex-review.mjs defaults
-// --companion itself and exits 2 when no companion is installed. Those stderr
-// reasons come back as __error and surface in external.dropped.
+// a passing vote. The courier runs as the default workflow subagent (full
+// tools): dev:reviewer/dev:researcher are ruled out because their RULES forbid
+// exactly what it does (POSTing the artifact to an endpoint; spawning the
+// Codex app-server). The pipeline carries no env prefix: the script reads the
+// environment the courier shell inherits. A config error comes back as __error
+// and surfaces in external.dropped; a machine with nothing configured reports
+// configured:false, which is not a shortfall unless the caller demands one.
 
 const EXTERNAL_VOTE_SCHEMA = {
   type: 'object', additionalProperties: true,
   properties: {
     reviewer: { type: 'object', additionalProperties: true },
+    configured: { type: 'boolean' },
     artifactSha256: { type: 'string' },
     __error: { type: 'string' },
-    findings: REVIEW_SCHEMA.properties.findings,
-    verdict: REVIEW_SCHEMA.properties.verdict,
+    // One entry per configured reviewer: a full vote, {name, __error}, or
+    // {name, skipped}; see splitScriptVotes.
+    votes: { type: 'array', items: { type: 'object', additionalProperties: true } },
   },
 }
 
-function scriptCourier(art) {
-  const target = art.artifactType === 'diff'
+// Local and hosted models routinely take 2 to 5 min per review (thinking
+// models, cold loads), past the Bash tool's 2 min default.
+const COURIER_BASH_TIMEOUT = 'Run it with the Bash tool timeout set to 600000 ms (the command can take several minutes; do not background it).'
+
+function externalCourier(art) {
+  const diff = art.artifactType === 'diff'
+  const target = diff
     ? `${art.diffRange} @ ${art.pinnedSha || 'HEAD'}`
     : `${art.artifactPath} @ ${art.artifactType}`
-  const feed = art.artifactType === 'diff'
-    ? `${gitPrefix(art)} diff ${art.diffRange}`
-    : `cat "${art.artifactPath}"`
+  const feed = diff ? `${gitPrefix(art)} diff ${art.diffRange}` : `cat "${art.artifactPath}"`
+  // --cwd/--range serve codex entries, which review the range themselves
+  // (<ref>...HEAD only) rather than stdin.
+  const codexArgs = diff ? ` --cwd "${art.repoDir || '.'}" --range "${art.diffRange}"` : ''
   return () => agent(
-    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}.\n\n${feed} | node "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"`,
-    { label: 'external:script', phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA },
-  ).then(tag('external:script', 'script'))
+    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}. ${COURIER_BASH_TIMEOUT}\n\n${feed} | node "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"${codexArgs}`,
+    { label: 'external', phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA },
+  ).then(tag('external', 'external'))
 }
 
-function codexCourier(art) {
-  // codex-review.mjs derives base internally from the range's left side and
-  // refuses any range that is not <ref>...HEAD (the only form the companion
-  // reviews), so the courier passes the caller-pinned range and nothing else.
-  return () => agent(
-    `You are a COURIER, not a reviewer. Run EXACTLY this command and return its stdout parsed as JSON via the structured output tool. Do not review anything yourself. If it errors or prints no JSON, return {"__error":"<stderr>"}.\n\nnode "${art.skillScriptsDir}/codex-review.mjs" --cwd "${art.repoDir || '.'}" --range "${art.diffRange}" --target "${art.diffRange} @ ${art.pinnedSha || 'HEAD'}"`,
-    { label: 'external:codex', phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA },
-  ).then(tag('external:codex', 'openai'))
-}
-
-// Static dispatch (no discovery pre-pass): the script courier always runs (any
-// artifact type); the codex courier runs for diffs only, reported "not
-// applicable" otherwise. Availability is enforced by the tools themselves at
-// run time; a tool failure returns as __error and is dropped plus reported.
-function externalReviewerThunks(art) {
-  const dropped = []
-  const thunks = [scriptCourier(art)]
-  if (art.artifactType === 'diff') thunks.push(codexCourier(art))
-  else dropped.push({ kind: 'codex', family: 'openai', dropReason: `not applicable to ${art.artifactType}` })
-  return { thunks, dropped }
+// Expand the script's {votes:[...]} into one external return per configured
+// reviewer so each is gated, counted, and dropped on its own. Handles are
+// stamped here from the reviewer name (after the spread, as in tag); a repeated
+// name keeps only its first vote, so a courier cannot inflate the panel by
+// duplicating one real vote. family is the tool's self-report, for display
+// only. A courier failure (__error, null, no votes array) passes through
+// untouched and is dropped with its reason.
+function splitScriptVotes(r) {
+  if (!r || r.__error || !Array.isArray(r.votes)) return [r]
+  const seen = new Set()
+  const out = []
+  for (const [i, v] of r.votes.entries()) {
+    const name = (v && (v.name || v.reviewer?.name)) || `#${i}`
+    const handle = `external:${name}`
+    const family = (v && v.reviewer?.family) || 'external'
+    if (seen.has(name)) {
+      out.push({ __error: `duplicate vote for reviewer "${name}" ignored`, handle, family })
+      continue
+    }
+    seen.add(name)
+    if (!v) out.push({ __error: 'courier returned an empty vote', handle, family })
+    else if (v.skipped) out.push({ __error: v.skipped, handle, family, skipped: true })
+    else out.push({ ...v, handle, family })
+  }
+  return out
 }
 
 // Returns null for a countable external vote, else the exact drop reason.
@@ -508,7 +527,7 @@ if (runExternal && art.artifactType === 'diff' && !art.diffRange) {
 }
 
 phase('Review')
-const ext = runExternal ? externalReviewerThunks(art) : { thunks: [], dropped: [] }
+const ext = { thunks: runExternal ? [externalCourier(art)] : [] }
 const claudeThunks = buildReviewers(art)
 const reviewers = [...claudeThunks, ...ext.thunks]
 const dispatched = reviewers.length
@@ -522,7 +541,12 @@ log(`Dispatching ${dispatched} reviewer(s) on ${art.artifactType} ${art.artifact
 // external.dropped entry instead of a silent absence.
 const returnedAll = await parallel(reviewers)
 const claudeVotes = returnedAll.slice(0, claudeThunks.length).filter(Boolean)
-const externalReturned = returnedAll.slice(claudeThunks.length)
+const externalRaw = returnedAll.slice(claudeThunks.length)
+const externalReturned = externalRaw.flatMap(splitScriptVotes)
+// Only the script's explicit configured:false means "this machine has no
+// external reviewers"; a failed or garbled courier counts as configured, so it
+// still trips the shortfall instead of passing for a Claude-only machine.
+const externalConfigured = runExternal ? !externalRaw.every((r) => r && r.configured === false) : externalDroppedPre.length > 0
 
 // Partition external returns by the digest-EQUALITY plus vote-shape gate:
 // verdicts, panel counts, and the dedupe fold are built ONLY from Claude votes
@@ -610,15 +634,23 @@ return {
   refuted,
   external: {
     requested: externalRequested,
-    ran: realExternalVotes.map((r) => ({ family: r.family, kind: r.reviewer.kind })),
-    // config failures + not-applicable + failed couriers, each with a reason
-    dropped: [...externalDroppedPre, ...ext.dropped, ...externalDropped],
+    ran: realExternalVotes.map((r) => ({ handle: r.handle, family: r.family, kind: r.reviewer.kind, ...(r.reviewer.model ? { model: r.reviewer.model } : {}) })),
+    // false only when this machine configures no external reviewer that
+    // applies to the artifact (EXTERNAL_REVIEWERS unset or "[]", no Codex).
+    configured: externalConfigured,
+    // config failures + not-applicable + failed reviewers, each with a reason
+    dropped: [...externalDroppedPre, ...externalDropped],
     // Loud-failure hook (advisory: the workflow NEVER blocks on it). Fires by
-    // DEFAULT whenever external review was requested (the default) and zero
-    // external votes counted — config drops included — so a run never silently
-    // degrades to Claude-only. requireExternal:false suppresses it for rounds
+    // DEFAULT whenever external review was requested (the default), the
+    // machine configures external reviewers, and zero external votes counted
+    // (config drops included), so a configured panel never silently degrades
+    // to Claude-only while a machine with none stays quiet.
+    // requireExternal:true fires it even when none are configured (the user
+    // explicitly asked for an external vote); false suppresses it for rounds
     // where external absence is the documented degradation (gated-review
     // forwards false on rounds 2+, where the pinned digest is stale by design).
-    shortfall: art.requireExternal !== false && externalRequested && realExternalVotes.length === 0,
+    shortfall: art.requireExternal === false
+      ? false
+      : externalRequested && realExternalVotes.length === 0 && (art.requireExternal === true || externalConfigured),
   },
 }

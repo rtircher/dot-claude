@@ -1,44 +1,72 @@
 #!/usr/bin/env node
 /**
- * One-shot, read-only third-party reviewer for the adversarial-review skill.
+ * Read-only third-party reviewer dispatcher for the adversarial-review skill.
  *
- * Sends the artifact on stdin to any OpenAI-compatible chat-completions API
- * (OpenAI, most hosted providers, Ollama / llama.cpp locally) with the skill's
- * adversarial framing, and prints schema-validated findings as JSON on stdout —
- * the same finding shape the dev-adversarial-review workflow synthesizes, so
- * the output folds straight into the panel as one more independent vote.
+ * Runs every external reviewer THIS MACHINE configures (none by default) on the
+ * artifact on stdin and prints one vote per reviewer, each schema-validated and
+ * stamped with a sha256 of the exact bytes reviewed, so the workflow can bind
+ * every vote to the caller-pinned artifact. The plugin names no model, vendor
+ * or host: which reviewers exist is entirely the machine's config.
  *
- * Read-only by construction: no tools, no filesystem access, no agent loop.
+ * Reviewer kinds:
+ *   openai-compatible  POST to any chat-completions API (OpenAI, hosted
+ *                      providers, Ollama / llama.cpp / vLLM). No tools, no
+ *                      filesystem access, no agent loop.
+ *   codex              the Codex CLI companion via codex-review.mjs (diffs of
+ *                      the form <ref>...HEAD only; needs --cwd and --range).
  * The artifact travels on stdin, never argv, so it cannot leak through process
  * listings or shell history.
  *
  * Usage:
- *   git diff main...HEAD | \
- *     EXTERNAL_REVIEW_MODEL=gpt-5 EXTERNAL_REVIEW_API_KEY=sk-... \
- *     node external-review.mjs --type diff --target "main...HEAD @ a1b2c3d"
+ *   git diff main...HEAD | node external-review.mjs --type diff \
+ *     --target "main...HEAD @ a1b2c3d" --cwd . --range main...HEAD
  *
- * Env:
- *   EXTERNAL_REVIEW_MODEL     required; refused if it names a Claude model
- *                             (a same-family reviewer adds no independence) —
- *                             override with --allow-same-family
- *   EXTERNAL_REVIEW_BASE_URL  default https://api.openai.com/v1; point at
- *                             http://localhost:11434/v1 for Ollama
- *   EXTERNAL_REVIEW_API_KEY   required unless the base URL host is local
- *   EXTERNAL_REVIEW_TIMEOUT_MS  default 300000
+ * Config (env):
+ *   EXTERNAL_REVIEWERS  JSON array; the complete list when set ("[]" = none):
+ *     {"name":"codex","kind":"codex"}
+ *     {"name":"qwen","kind":"openai-compatible","model":"qwen3.8:27b",
+ *      "baseUrl":"http://gpu-box:11434/v1","private":true}
+ *     {"name":"gpt","kind":"openai-compatible","model":"gpt-5",
+ *      "baseUrl":"https://api.openai.com/v1","apiKeyEnv":"OPENAI_API_KEY"}
+ *   name defaults to the model (or the kind) and must be unique. kind defaults
+ *   to openai-compatible. "private": true declares the endpoint is hardware the
+ *   user controls (no API key needed, no consent stop); loopback is always
+ *   private, anything else without the flag is treated as a hosted vendor.
+ *   Optional "family" (e.g. "google") is echoed for reporting.
+ *
+ *   Unset: the legacy single-reviewer vars below, if present, plus Codex when
+ *   its companion is installed (skipped silently when it is not), so a machine
+ *   with nothing set and no Codex gets a clean "none configured".
+ *     EXTERNAL_REVIEW_MODEL / EXTERNAL_REVIEW_BASE_URL / EXTERNAL_REVIEW_API_KEY
+ *
+ *   EXTERNAL_REVIEW_TIMEOUT_MS  default 300000, per openai-compatible reviewer
+ *
+ * Output: {reviewer:{kind:'external-review-script', mode:'multi'}, configured,
+ *   artifactSha256, votes:[vote | {name, __error} | {name, skipped}]}.
+ *   configured = at least one reviewer applies to this artifact. Exit 0 once
+ *   the config parsed: a failed reviewer is one __error entry, never a lost
+ *   panel.
  *
  * Flags:
  *   --type spec|plan|diff   what the artifact is (default diff)
  *   --target <desc>         required: the range/path + pinned SHA the caller is
  *                           reviewing, echoed back so the run is bound to the
  *                           same artifact as the rest of the panel
+ *   --cwd <repo> / --range <ref>...HEAD   for codex reviewers (diffs)
  *   --focus <note>          optional in-scope note
  *   --out-of-scope <note>   optional exclusions
  *   --allow-same-family     permit a Claude model (defeats cross-family review)
  *
- * Exit codes: 0 ok · 1 usage/env error · 2 API error · 3 unusable response
+ * Exit codes: 0 ok · 1 usage/config error
  */
 
+import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { realpathSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { defaultCompanion } from './codex-review.mjs'
+
+const CODEX_SCRIPT = fileURLToPath(new URL('./codex-review.mjs', import.meta.url))
 
 // Mirrors REVIEW_SCHEMA in workflows/adversarial-review.js — keep in sync.
 const REVIEW_SCHEMA = {
@@ -86,7 +114,7 @@ function fail(code, msg) {
 }
 
 function parseArgs(argv) {
-  const opts = { type: 'diff', target: '', focus: '', outOfScope: '', allowSameFamily: false }
+  const opts = { type: 'diff', target: '', cwd: '', range: '', focus: '', outOfScope: '', allowSameFamily: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => {
@@ -95,6 +123,8 @@ function parseArgs(argv) {
     }
     if (a === '--type') opts.type = next()
     else if (a === '--target') opts.target = next()
+    else if (a === '--cwd') opts.cwd = next()
+    else if (a === '--range') opts.range = next()
     else if (a === '--focus') opts.focus = next()
     else if (a === '--out-of-scope') opts.outOfScope = next()
     else if (a === '--allow-same-family') opts.allowSameFamily = true
@@ -162,78 +192,204 @@ function validate(review) {
   return { findings: review.findings, verdict: { ship: review.verdict.ship, reason: review.verdict.reason } }
 }
 
-const opts = parseArgs(process.argv.slice(2))
-
-const model = process.env.EXTERNAL_REVIEW_MODEL || ''
-if (!model) fail(1, 'EXTERNAL_REVIEW_MODEL is required (e.g. gpt-5, or a local model served via Ollama)')
-if (/claude|anthropic/i.test(model) && !opts.allowSameFamily) {
-  fail(1, `"${model}" is a Claude-family model: it shares the panel's blind spots and adds no independence. Pick a different family, or pass --allow-same-family if you really mean it.`)
+class ReviewError extends Error {
+  constructor(code, message) {
+    super(message)
+    this.code = code
+  }
 }
 
-const baseUrl = process.env.EXTERNAL_REVIEW_BASE_URL || 'https://api.openai.com/v1'
-let host
-try {
-  host = new URL(baseUrl).hostname
-} catch {
-  fail(1, `EXTERNAL_REVIEW_BASE_URL is not a valid URL: "${baseUrl}"`)
-}
-const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1'
-const apiKey = process.env.EXTERNAL_REVIEW_API_KEY || ''
-if (!apiKey && !isLocal) fail(1, `EXTERNAL_REVIEW_API_KEY is required for non-local endpoint ${host}`)
-
-const timeoutMs = Number(process.env.EXTERNAL_REVIEW_TIMEOUT_MS) || 300_000
-
-// Hash the RAW stdin bytes before decoding: for artifacts containing invalid
-// UTF-8 (non-UTF-8 text files, some binary hunks in a diff) the lossy decode
-// changes the bytes, and the digest must stay byte-exact against the caller's
-// raw-byte sha256sum for the workflow's equality gate to hold.
-const artifactBytes = await readStdin()
-const artifactSha256 = createHash('sha256').update(artifactBytes).digest('hex')
-const artifact = artifactBytes.toString('utf8')
-if (!artifact.trim()) fail(1, 'stdin was empty — nothing to review')
-if (artifact.length > MAX_ARTIFACT_CHARS) {
-  fail(1, `artifact is ${artifact.length} chars (max ${MAX_ARTIFACT_CHARS}); narrow the diff range or split the document instead of truncating`)
+export function isLoopback(hostname) {
+  const h = hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  return h === 'localhost' || h === '::1' || /^127\.\d+\.\d+\.\d+$/.test(h)
 }
 
-const prompt = buildPrompt(opts, artifact)
-const baseBody = { model, messages: [{ role: 'user', content: prompt }] }
+// Resolves this machine's reviewer list. Throws ReviewError(1) on a config
+// problem no reviewer could survive (bad JSON, unknown kind, duplicate names);
+// per-reviewer problems (Claude model, bad URL, missing key) come back as
+// `problem` so they are reported as one dropped vote each.
+export function resolveReviewers(env, { allowSameFamily = false, codexAvailable = () => Boolean(defaultCompanion()) } = {}) {
+  let specs
+  const explicit = env.EXTERNAL_REVIEWERS !== undefined && env.EXTERNAL_REVIEWERS.trim() !== ''
+  if (explicit) {
+    try {
+      specs = JSON.parse(env.EXTERNAL_REVIEWERS)
+    } catch {
+      throw new ReviewError(1, 'EXTERNAL_REVIEWERS is not valid JSON')
+    }
+    if (!Array.isArray(specs)) throw new ReviewError(1, 'EXTERNAL_REVIEWERS must be a JSON array ("[]" for none)')
+  } else {
+    specs = []
+    if (env.EXTERNAL_REVIEW_MODEL) {
+      specs.push({ kind: 'openai-compatible', model: env.EXTERNAL_REVIEW_MODEL, baseUrl: env.EXTERNAL_REVIEW_BASE_URL, apiKey: env.EXTERNAL_REVIEW_API_KEY })
+    }
+    if (codexAvailable()) specs.push({ name: 'codex', kind: 'codex' })
+  }
 
-let { status, text } = await callApi(baseUrl, apiKey, {
-  ...baseBody,
-  response_format: { type: 'json_schema', json_schema: { name: 'review', strict: true, schema: REVIEW_SCHEMA } },
-}, timeoutMs)
-
-// Some OpenAI-compatible servers reject response_format outright; retry once
-// with the schema inlined in the prompt instead.
-if (status === 400) {
-  ;({ status, text } = await callApi(baseUrl, apiKey, {
-    ...baseBody,
-    messages: [{
-      role: 'user',
-      content: `${prompt}\n\nRespond with ONLY a JSON object matching this JSON Schema, no prose:\n${JSON.stringify(REVIEW_SCHEMA)}`,
-    }],
-  }, timeoutMs))
+  const seen = new Set()
+  return specs.map((spec, i) => {
+    if (!spec || typeof spec !== 'object') throw new ReviewError(1, `EXTERNAL_REVIEWERS[${i}] must be an object`)
+    const kind = spec.kind || 'openai-compatible'
+    if (kind !== 'openai-compatible' && kind !== 'codex') throw new ReviewError(1, `EXTERNAL_REVIEWERS[${i}] has unknown kind "${kind}" (expected openai-compatible | codex)`)
+    const model = typeof spec.model === 'string' ? spec.model : ''
+    const name = typeof spec.name === 'string' && spec.name ? spec.name : model || (kind === 'codex' ? 'codex' : `reviewer-${i}`)
+    if (seen.has(name)) throw new ReviewError(1, `EXTERNAL_REVIEWERS has two reviewers named "${name}"; names must be unique`)
+    seen.add(name)
+    const r = { name, kind, model, family: typeof spec.family === 'string' ? spec.family : null, problem: null }
+    if (kind === 'codex') {
+      r.companion = typeof spec.companion === 'string' ? spec.companion : ''
+      return r
+    }
+    r.baseUrl = spec.baseUrl || 'https://api.openai.com/v1'
+    r.apiKey = spec.apiKey ?? (spec.apiKeyEnv ? env[spec.apiKeyEnv] || '' : '')
+    if (!model) {
+      r.problem = explicit ? `EXTERNAL_REVIEWERS[${i}] has no model` : 'EXTERNAL_REVIEW_MODEL is required'
+      return r
+    }
+    if (/claude|anthropic/i.test(model) && !allowSameFamily) {
+      r.problem = `"${model}" is a Claude-family model: it shares the panel's blind spots and adds no independence. Pick a different family, or pass --allow-same-family if you really mean it.`
+      return r
+    }
+    try {
+      r.host = new URL(r.baseUrl).hostname
+    } catch {
+      r.problem = `base URL is not a valid URL: "${r.baseUrl}"`
+      return r
+    }
+    r.private = spec.private === true || isLoopback(r.host)
+    if (!r.apiKey && !r.private) {
+      r.problem = `no API key for ${r.host}: set apiKeyEnv, or "private": true if this endpoint runs on hardware you control`
+    }
+    return r
+  })
 }
-if (status !== 200) fail(2, `API returned ${status} from ${host}: ${text.slice(0, 500)}`)
 
-let content
-try {
-  content = JSON.parse(text).choices?.[0]?.message?.content
-} catch {
-  fail(2, `API response from ${host} was not JSON: ${text.slice(0, 200)}`)
+// One openai-compatible reviewer, one review. Throws ReviewError(2) on API
+// failure, (3) on an unusable response.
+async function reviewOne(r, prompt, timeoutMs) {
+  const baseBody = { model: r.model, messages: [{ role: 'user', content: prompt }] }
+  let status, text
+  try {
+    ;({ status, text } = await callApi(r.baseUrl, r.apiKey, {
+      ...baseBody,
+      response_format: { type: 'json_schema', json_schema: { name: 'review', strict: true, schema: REVIEW_SCHEMA } },
+    }, timeoutMs))
+
+    // Some OpenAI-compatible servers reject response_format outright; retry once
+    // with the schema inlined in the prompt instead.
+    if (status === 400) {
+      ;({ status, text } = await callApi(r.baseUrl, r.apiKey, {
+        ...baseBody,
+        messages: [{
+          role: 'user',
+          content: `${prompt}\n\nRespond with ONLY a JSON object matching this JSON Schema, no prose:\n${JSON.stringify(REVIEW_SCHEMA)}`,
+        }],
+      }, timeoutMs))
+    }
+  } catch (e) {
+    throw new ReviewError(2, `request to ${r.host} failed: ${e.message}`)
+  }
+  if (status !== 200) throw new ReviewError(2, `API returned ${status} from ${r.host}: ${text.slice(0, 500)}`)
+
+  let content
+  try {
+    content = JSON.parse(text).choices?.[0]?.message?.content
+  } catch {
+    throw new ReviewError(2, `API response from ${r.host} was not JSON: ${text.slice(0, 200)}`)
+  }
+  if (typeof content !== 'string' || !content) throw new ReviewError(3, `API response from ${r.host} had no message content`)
+
+  const review = validate(extractJson(content))
+  if (!review) throw new ReviewError(3, `model output did not match the findings schema: ${content.slice(0, 500)}`)
+  return review
 }
-if (typeof content !== 'string' || !content) fail(3, 'API response had no message content')
 
-const review = validate(extractJson(content))
-if (!review) fail(3, `model output did not match the findings schema: ${content.slice(0, 500)}`)
+// Codex reviews the range itself (never stdin) and stamps its own digest over
+// `git diff <range>`; its vote passes through unchanged for the workflow's
+// digest gate.
+function runCodex(r, opts) {
+  const args = [CODEX_SCRIPT, '--cwd', opts.cwd, '--range', opts.range, '--target', opts.target]
+  if (r.companion) args.push('--companion', r.companion)
+  return new Promise((resolve) => {
+    execFile(process.execPath, args, { maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) return resolve({ name: r.name, __error: (stderr || err.message).toString().trim() })
+      try {
+        resolve({ ...JSON.parse(stdout), name: r.name })
+      } catch {
+        resolve({ name: r.name, __error: `codex-review printed no JSON: ${stdout.slice(0, 200)}` })
+      }
+    })
+  })
+}
 
-// The digest pins exactly what was reviewed, so the caller can confirm this
-// vote covered the same bytes as the rest of the panel before folding it in.
-process.stdout.write(JSON.stringify({
-  reviewer: { kind: 'external-review-script', model, endpoint: host, family: 'external' },
-  target: opts.target,
-  artifactType: opts.type,
-  artifactSha256,
-  verdict: review.verdict,
-  findings: review.findings,
-}, null, 2) + '\n')
+async function main() {
+  const opts = parseArgs(process.argv.slice(2))
+
+  let reviewers
+  try {
+    reviewers = resolveReviewers(process.env, { allowSameFamily: opts.allowSameFamily })
+  } catch (e) {
+    fail(e.code || 1, e.message)
+  }
+
+  const timeoutMs = Number(process.env.EXTERNAL_REVIEW_TIMEOUT_MS) || 300_000
+
+  // Hash the RAW stdin bytes before decoding: for artifacts containing invalid
+  // UTF-8 (non-UTF-8 text files, some binary hunks in a diff) the lossy decode
+  // changes the bytes, and the digest must stay byte-exact against the caller's
+  // raw-byte sha256sum for the workflow's equality gate to hold.
+  const artifactBytes = await readStdin()
+  const artifactSha256 = createHash('sha256').update(artifactBytes).digest('hex')
+  const artifact = artifactBytes.toString('utf8')
+  if (!artifact.trim()) fail(1, 'stdin was empty — nothing to review')
+  if (artifact.length > MAX_ARTIFACT_CHARS) {
+    fail(1, `artifact is ${artifact.length} chars (max ${MAX_ARTIFACT_CHARS}); narrow the diff range or split the document instead of truncating`)
+  }
+
+  const prompt = buildPrompt(opts, artifact)
+
+  // The digest pins exactly what was reviewed, so the caller can confirm this
+  // vote covered the same bytes as the rest of the panel before folding it in.
+  const vote = (r, review) => ({
+    name: r.name,
+    reviewer: { kind: 'external-review-script', name: r.name, model: r.model, endpoint: r.host, private: r.private, family: r.family || 'external' },
+    target: opts.target,
+    artifactType: opts.type,
+    artifactSha256,
+    verdict: review.verdict,
+    findings: review.findings,
+  })
+
+  const votes = await Promise.all(reviewers.map(async (r) => {
+    if (r.kind === 'codex') {
+      if (opts.type !== 'diff') return { name: r.name, skipped: `not applicable to ${opts.type}` }
+      if (!opts.cwd || !opts.range) return { name: r.name, __error: 'codex needs --cwd and --range' }
+      return runCodex(r, opts)
+    }
+    if (r.problem) return { name: r.name, __error: r.problem }
+    try {
+      return vote(r, await reviewOne(r, prompt, timeoutMs))
+    } catch (e) {
+      return { name: r.name, __error: e.message }
+    }
+  }))
+  process.stdout.write(JSON.stringify({
+    reviewer: { kind: 'external-review-script', mode: 'multi' },
+    configured: votes.some((v) => !v.skipped),
+    target: opts.target,
+    artifactType: opts.type,
+    artifactSha256,
+    votes,
+  }, null, 2) + '\n')
+}
+
+// realpath both sides: the plugin cache and symlinked installs put argv[1]
+// and import.meta.url on different spellings of the same file.
+const invokedDirectly = (() => {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+})()
+if (invokedDirectly) await main()

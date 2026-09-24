@@ -1,10 +1,11 @@
 ---
-description: Guaranteed adversarial review. Claude lens panel plus every available cross-family external reviewer, run for real
+description: Guaranteed adversarial review. Claude lens panel plus every cross-family external reviewer this machine configures, run for real
 allowed-tools: Bash(git:*), Bash(sha256sum:*), Read, Glob, Grep, Workflow
 ---
 
-Run one adversarial-review pass with external review ON by default (all
-reviewers the environment actually has). Takes ONE explicit artifact argument:
+Run one adversarial-review pass with external review ON by default (every
+reviewer this machine's `EXTERNAL_REVIEWERS` config lists; none configured
+means a Claude-only panel). Takes ONE explicit artifact argument:
 a file path (spec/plan), a diff range like `main...HEAD`, or a PR/branch; plus
 an optional "no external" / "claude only" modifier. This command is the
 *guaranteed* path: it always dispatches the `dev-adversarial-review` Workflow
@@ -51,7 +52,10 @@ Steps:
    skillScriptsDir: "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts",
    focus, outOfScope }`.
    Pass `externalReview: false` ONLY if `$ARGUMENTS` explicitly says
-   "no external" or "claude only".
+   "no external" or "claude only". Pass `requireExternal: true` if
+   `$ARGUMENTS` explicitly asks for external review, so a machine with no
+   external reviewer configured reports the shortfall instead of a quiet
+   Claude-only panel.
 5. Present the result per the adversarial-review skill's Output section,
    including `external.ran` and `external.dropped` so the user sees exactly
    which cross-family reviewers weighed in and which were absent and why.
