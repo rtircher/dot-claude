@@ -33,8 +33,8 @@ external review.
 (step 1), if the `Workflow` tool is available, dispatch the whole review pass as
 `Workflow` with `name: "dev-adversarial-review"` and args
 `{artifactPath, artifactType ('spec'|'plan'|'diff'), diffRange, repoDir, focus,
-outOfScope, externalReview, skillScriptsDir, expectedArtifactSha256, pinnedSha,
-tiers}`. `externalReview` defaults to **true**: the workflow itself runs every
+outOfScope, externalReview, externalReviewers, skillScriptsDir,
+expectedArtifactSha256, pinnedSha, tiers}`. `externalReview` defaults to **true**: the workflow itself runs every
 external reviewer this machine configures (`EXTERNAL_REVIEWERS`, see step 5)
 that applies to the artifact alongside the Claude panel, and reports any it
 could not run. A machine that configures none gets a Claude-only panel with
@@ -42,7 +42,10 @@ could not run. A machine that configures none gets a Claude-only panel with
 "no external" / "claude only" from the user. For external review the caller
 must supply `skillScriptsDir` (this skill's `scripts/` dir, absolute) and
 `expectedArtifactSha256` (sha256 of the exact artifact bytes, computed in
-Bash), plus `diffRange` for diffs; the `/dev:review-panel` command does
+Bash), plus `diffRange` for diffs. Pass `externalReviewers` (the names from
+`node <scripts>/external-review.mjs --list`) so each reviewer runs as its own
+`external:<name>` courier step; without it one `external` courier runs them
+all. Couriers are pinned to `sonnet` at low effort; the `/dev:review-panel` command does
 all of this automatically and is the guaranteed entry point. The workflow bakes
 in a fixed routing: `DEFAULT_TIERS` in `workflows/adversarial-review.js` names
 every slot (mechanical lenses sonnet, reasoning lenses and the verify skeptics
@@ -308,7 +311,9 @@ git diff main...HEAD | node <skill-dir>/scripts/external-review.mjs \
   --cwd . --range main...HEAD
 ```
 
-The script runs every entry in parallel and prints
+`--only <name>` runs one entry (an unknown name exits 1 listing the
+configured ones); `--list` prints `{names:[...]}` and exits. The script runs
+every selected entry in parallel and prints
 `{configured, artifactSha256, votes:[...]}`; the workflow folds each vote as its
 own `external:<name>` reviewer. A reviewer that is down, misconfigured, or not
 applicable (Codex on a spec) is one `external.dropped` entry, never a lost

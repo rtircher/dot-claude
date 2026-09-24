@@ -25,6 +25,12 @@
  *                                    // configures (EXTERNAL_REVIEWERS, see
  *                                    // external-review.mjs) runs alongside the Claude
  *                                    // panel; pass false to opt out
+ *   externalReviewers?: string[],    // reviewer names from this machine's config
+ *                                    // (`external-review.mjs --list`); the workflow cannot
+ *                                    // read env or files, so the caller supplies them.
+ *                                    // Non-empty: one `external:<name>` courier per name,
+ *                                    // each running `--only <name>`. Omitted or empty: one
+ *                                    // `external` courier runs them all.
  *   skillScriptsDir?: string,        // absolute path to the adversarial-review skill's
  *                                    // scripts/ dir; plugin commands pass
  *                                    // `${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts`.
@@ -290,7 +296,12 @@ const EXTERNAL_VOTE_SCHEMA = {
 // models, cold loads), past the Bash tool's 2 min default.
 const COURIER_BASH_TIMEOUT = 'Run it with the Bash tool timeout set to 600000 ms (the command can take several minutes; do not background it).'
 
-function externalCourier(art) {
+// Names reach a shell command inside double quotes; config names are model ids
+// or short handles, so anything else is refused rather than escaped.
+const REVIEWER_NAME = /^[\w.:@+\/-]+$/
+
+// name = null runs every configured reviewer in one courier.
+function externalCourier(art, name) {
   const diff = art.artifactType === 'diff'
   const target = diff
     ? `${art.diffRange} @ ${art.pinnedSha || 'HEAD'}`
@@ -299,10 +310,14 @@ function externalCourier(art) {
   // --cwd/--range serve codex entries, which review the range themselves
   // (<ref>...HEAD only) rather than stdin.
   const codexArgs = diff ? ` --cwd "${art.repoDir || '.'}" --range "${art.diffRange}"` : ''
+  const only = name ? ` --only "${name}"` : ''
+  const label = name ? `external:${name}` : 'external'
+  // Couriers only run a shell pipeline, so the cheapest tier is pinned: an
+  // omitted model would inherit the session's.
   return () => agent(
-    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}. ${COURIER_BASH_TIMEOUT}\n\n${feed} | node "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"${codexArgs}`,
-    { label: 'external', phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA },
-  ).then(tag('external', 'external'))
+    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}. ${COURIER_BASH_TIMEOUT}\n\n${feed} | node "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"${codexArgs}${only}`,
+    { label, phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA, model: 'sonnet', effort: 'low' },
+  ).then(tag(label, 'external'))
 }
 
 // Expand the script's {votes:[...]} into one external return per configured
@@ -311,15 +326,21 @@ function externalCourier(art) {
 // name keeps only its first vote, so a courier cannot inflate the panel by
 // duplicating one real vote. family is the tool's self-report, for display
 // only. A courier failure (__error, null, no votes array) passes through
-// untouched and is dropped with its reason.
-function splitScriptVotes(r) {
+// untouched and is dropped with its reason. A per-name courier (expected set)
+// counts only a vote under that name, and an empty return is a drop.
+function splitScriptVotes(r, expected) {
   if (!r || r.__error || !Array.isArray(r.votes)) return [r]
+  if (expected && !r.votes.length) return [{ __error: `courier returned no vote for "${expected}"`, handle: `external:${expected}`, family: 'external' }]
   const seen = new Set()
   const out = []
   for (const [i, v] of r.votes.entries()) {
     const name = (v && (v.name || v.reviewer?.name)) || `#${i}`
     const handle = `external:${name}`
     const family = (v && v.reviewer?.family) || 'external'
+    if (expected && name !== expected) {
+      out.push({ __error: `vote for "${name}" from the "${expected}" courier ignored`, handle: `external:${expected}`, family })
+      continue
+    }
     if (seen.has(name)) {
       out.push({ __error: `duplicate vote for reviewer "${name}" ignored`, handle, family })
       continue
@@ -526,8 +547,15 @@ if (runExternal && art.artifactType === 'diff' && !art.diffRange) {
   externalDroppedPre.push({ kind: 'config', dropReason: 'diffRange not provided for a diff artifact (couriers never guess a range)' })
 }
 
+const externalNames = [...new Set(art.externalReviewers || [])]
+for (const n of externalNames) {
+  if (typeof n !== 'string' || !REVIEWER_NAME.test(n)) throw new Error(`externalReviewers entry ${JSON.stringify(n)} is not a reviewer name (letters, digits, . _ : @ + / - only)`)
+}
+
 phase('Review')
-const ext = { thunks: runExternal ? [externalCourier(art)] : [] }
+// ext.names[i] is the reviewer courier i was dispatched for (null = all of them).
+const ext = { names: runExternal ? (externalNames.length ? externalNames : [null]) : [] }
+ext.thunks = ext.names.map((n) => externalCourier(art, n))
 const claudeThunks = buildReviewers(art)
 const reviewers = [...claudeThunks, ...ext.thunks]
 const dispatched = reviewers.length
@@ -542,10 +570,11 @@ log(`Dispatching ${dispatched} reviewer(s) on ${art.artifactType} ${art.artifact
 const returnedAll = await parallel(reviewers)
 const claudeVotes = returnedAll.slice(0, claudeThunks.length).filter(Boolean)
 const externalRaw = returnedAll.slice(claudeThunks.length)
-const externalReturned = externalRaw.flatMap(splitScriptVotes)
+const externalReturned = externalRaw.flatMap((r, i) => splitScriptVotes(r, ext.names[i]))
 // Only the script's explicit configured:false means "this machine has no
 // external reviewers"; a failed or garbled courier counts as configured, so it
-// still trips the shortfall instead of passing for a Claude-only machine.
+// still trips the shortfall instead of passing for a Claude-only machine. With
+// externalReviewers, an unknown name exits non-zero (__error), so it counts too.
 const externalConfigured = runExternal ? !externalRaw.every((r) => r && r.configured === false) : externalDroppedPre.length > 0
 
 // Partition external returns by the digest-EQUALITY plus vote-shape gate:

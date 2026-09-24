@@ -1,6 +1,6 @@
 ---
 description: Guaranteed adversarial review. Claude lens panel plus every cross-family external reviewer this machine configures, run for real
-allowed-tools: Bash(git:*), Bash(sha256sum:*), Read, Glob, Grep, Workflow
+allowed-tools: Bash(git:*), Bash(sha256sum:*), Bash(node:*), Read, Glob, Grep, Workflow
 ---
 
 Run one adversarial-review pass with external review ON by default (every
@@ -46,9 +46,16 @@ Steps:
    paste it into any prompt, agent instruction, or chat text: the workflow
    holds it and compares each external vote's self-reported sha to it after
    the couriers return. A digest a courier has seen proves nothing.
-4. Invoke the Workflow tool with `name: "dev-adversarial-review"` and args:
+4. List the configured reviewer names:
+
+       node "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts/external-review.mjs" --list
+
+   and pass its `names` as `externalReviewers`, so each reviewer shows as its
+   own `external:<name>` step. If the command fails, omit the arg (one
+   courier runs them all and reports the config error).
+   Invoke the Workflow tool with `name: "dev-adversarial-review"` and args:
    `{ artifactType, artifactPath, diffRange, pinnedSha, repoDir,
-   externalReview: true, expectedArtifactSha256: "<expected>",
+   externalReview: true, externalReviewers, expectedArtifactSha256: "<expected>",
    skillScriptsDir: "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts",
    focus, outOfScope }`.
    Pass `externalReview: false` ONLY if `$ARGUMENTS` explicitly says
