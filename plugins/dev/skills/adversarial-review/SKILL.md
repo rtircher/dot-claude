@@ -305,6 +305,22 @@ single-reviewer vars (`EXTERNAL_REVIEW_MODEL`, `EXTERNAL_REVIEW_BASE_URL`,
 `EXTERNAL_REVIEW_API_KEY`) count as one entry, plus Codex if its companion is
 installed.
 
+**One request per model host.** A self-hosted model server often has the
+memory for one review at a time, and concurrent panels (a review per PR in a
+stack) then time out on every PR. The script queues requests to each private
+endpoint on a per-`host:port` lock file under `~/.cache/external-review/`
+(`$XDG_CACHE_HOME` and `EXTERNAL_REVIEW_LOCK_DIR` override), shared by every
+process, session and workflow on the machine. `"serialize": true|false` on an
+entry overrides the default (on for private endpoints, off for hosted ones);
+Codex never queues. A lock whose holder died, or whose heartbeat stopped, is
+broken automatically. Queue time does not count against
+`EXTERNAL_REVIEW_TIMEOUT_MS` (default 300000, per request); it has its own cap,
+`EXTERNAL_REVIEW_MAX_WAIT_MS` (default 240000), past which the vote drops as
+`queued past max wait`. Keep the two summed under the courier's 10-minute
+Bash cap. The lock only sees callers on this machine, so still set
+`OLLAMA_NUM_PARALLEL=1` (or the server's equivalent) on the model host when
+other machines share it.
+
 ```bash
 git diff main...HEAD | node <skill-dir>/scripts/external-review.mjs \
   --type diff --target "main...HEAD @ $(git rev-parse --short HEAD)" \
