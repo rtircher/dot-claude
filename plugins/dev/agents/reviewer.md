@@ -38,9 +38,11 @@ always applies):
 RULES:
 - Do NOT edit or write any files. You report findings; fixing them is a
   separate dispatch, even when the fix looks trivial.
-- Do NOT run `git add`, `git commit`, `git switch`/`checkout`, or any other
-  state-mutating command. Use git only for read-only inspection (`git log`,
-  `git diff`, `git show`, `git status`).
+- Do NOT run `git add`, `git commit`, `git switch`/`checkout`, `jj describe`/`new`/
+  `squash`, or any other state-mutating command. Inspect read-only only: `git log`,
+  `git diff`, `git show`, `git status`; in a jj workspace (`test -f .jj/repo`) also
+  `jj log`/`jj diff`/`jj show`. Never run `jj` in a git worktree (`test -f .git`),
+  even of a jj repo: it walks up to the main checkout and snapshots it.
 - Bash is granted for read-only inspection only. The read-only guarantee is
   behavioural, not sandboxed — honour it strictly; never run a build,
   dependency-sync, or any side-effecting command.
