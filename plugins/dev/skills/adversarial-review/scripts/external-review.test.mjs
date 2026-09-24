@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { isLoopback, resolveReviewers } from './external-review.mjs'
+import { isLoopback, resolveReviewers, selectReviewers } from './external-review.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./external-review.mjs', import.meta.url))
 
@@ -38,9 +38,9 @@ function stubServer() {
 // No Codex companion unless a test asks for one.
 const NO_CODEX = mkdtempSync(join(tmpdir(), 'no-codex-'))
 
-function run(env, stdin, type = 'diff') {
+function run(env, stdin, type = 'diff', extraArgs = []) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [SCRIPT, '--type', type, '--target', 't'], {
+    const child = spawn(process.execPath, [SCRIPT, '--type', type, '--target', 't', ...extraArgs], {
       env: { PATH: process.env.PATH, CODEX_COMPANION_ROOT: NO_CODEX, ...env },
     })
     let stdout = ''
@@ -150,4 +150,46 @@ test('a config error exits 1 with the reason', async () => {
   const { code, stderr } = await run({ EXTERNAL_REVIEWERS: '[' }, 'x\n')
   assert.equal(code, 1)
   assert.match(stderr, /not valid JSON/)
+})
+
+test('--only runs exactly the named reviewer', async () => {
+  const server = await stubServer()
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/v1`
+    const { code, stdout, stderr } = await run({
+      EXTERNAL_REVIEWERS: JSON.stringify([
+        { name: 'ok', model: 'good', baseUrl: base },
+        { name: 'down', model: 'bad', baseUrl: base },
+      ]),
+    }, 'x\n', 'spec', ['--only', 'ok'])
+    assert.equal(code, 0, stderr)
+    const out = JSON.parse(stdout)
+    assert.deepEqual(out.votes.map((v) => v.name), ['ok'])
+    assert.deepEqual(out.votes[0].verdict, REVIEW.verdict)
+  } finally {
+    server.close()
+  }
+})
+
+test('--only with an unknown name exits 1 naming the configured reviewers', async () => {
+  const { code, stderr } = await run({ EXTERNAL_REVIEWERS: '[{"name":"a","model":"m","baseUrl":"http://localhost/v1"}]' }, 'x\n', 'diff', ['--only', 'nope'])
+  assert.equal(code, 1)
+  assert.match(stderr, /--only names no configured reviewer: "nope" \(configured: a\)/)
+  assert.throws(() => selectReviewers([], ['x']), /configured: none/)
+})
+
+test('--list prints the configured names without reading stdin', async () => {
+  const { code, stdout, stderr } = await new Promise((resolve) => {
+    const child = spawn(process.execPath, [SCRIPT, '--list'], {
+      env: { PATH: process.env.PATH, CODEX_COMPANION_ROOT: NO_CODEX, EXTERNAL_REVIEWERS: '[{"name":"codex","kind":"codex"},{"model":"m","baseUrl":"http://localhost/v1"}]' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (c) => (stdout += c))
+    child.stderr.on('data', (c) => (stderr += c))
+    child.on('close', (code) => resolve({ code, stdout, stderr }))
+  })
+  assert.equal(code, 0, stderr)
+  assert.deepEqual(JSON.parse(stdout), { names: ['codex', 'm'] })
 })

@@ -56,6 +56,10 @@
  *   --focus <note>          optional in-scope note
  *   --out-of-scope <note>   optional exclusions
  *   --allow-same-family     permit a Claude model (defeats cross-family review)
+ *   --only <name>           run only the configured reviewer with this name
+ *                           (repeatable); an unknown name exits 1
+ *   --list                  print {names:[...]} of the configured reviewers and
+ *                           exit (no stdin, no --target)
  *
  * Exit codes: 0 ok · 1 usage/config error
  */
@@ -114,7 +118,7 @@ function fail(code, msg) {
 }
 
 function parseArgs(argv) {
-  const opts = { type: 'diff', target: '', cwd: '', range: '', focus: '', outOfScope: '', allowSameFamily: false }
+  const opts = { type: 'diff', target: '', cwd: '', range: '', focus: '', outOfScope: '', allowSameFamily: false, only: [], list: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => {
@@ -128,8 +132,11 @@ function parseArgs(argv) {
     else if (a === '--focus') opts.focus = next()
     else if (a === '--out-of-scope') opts.outOfScope = next()
     else if (a === '--allow-same-family') opts.allowSameFamily = true
+    else if (a === '--only') opts.only.push(next())
+    else if (a === '--list') opts.list = true
     else fail(1, `unknown flag ${a}`)
   }
+  if (opts.list) return opts
   if (!['spec', 'plan', 'diff'].includes(opts.type)) fail(1, `--type must be spec|plan|diff, got "${opts.type}"`)
   if (!opts.target) fail(1, '--target is required: the range/path + pinned SHA this review is bound to')
   return opts
@@ -264,6 +271,18 @@ export function resolveReviewers(env, { allowSameFamily = false, codexAvailable 
   })
 }
 
+// Narrows the resolved list to the --only names. Throws ReviewError(1) naming
+// the configured reviewers when a requested one does not exist.
+export function selectReviewers(reviewers, only) {
+  if (!only.length) return reviewers
+  const names = reviewers.map((r) => r.name)
+  const unknown = only.filter((n) => !names.includes(n))
+  if (unknown.length) {
+    throw new ReviewError(1, `--only names no configured reviewer: ${unknown.map((n) => `"${n}"`).join(', ')} (configured: ${names.length ? names.join(', ') : 'none'})`)
+  }
+  return reviewers.filter((r) => only.includes(r.name))
+}
+
 // One openai-compatible reviewer, one review. Throws ReviewError(2) on API
 // failure, (3) on an unusable response.
 async function reviewOne(r, prompt, timeoutMs) {
@@ -328,6 +347,11 @@ async function main() {
   let reviewers
   try {
     reviewers = resolveReviewers(process.env, { allowSameFamily: opts.allowSameFamily })
+    if (opts.list) {
+      process.stdout.write(JSON.stringify({ names: reviewers.map((r) => r.name) }) + '\n')
+      return
+    }
+    reviewers = selectReviewers(reviewers, opts.only)
   } catch (e) {
     fail(e.code || 1, e.message)
   }
