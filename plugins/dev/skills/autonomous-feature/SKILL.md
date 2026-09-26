@@ -174,7 +174,7 @@ adversarial-verify pass that demotes only unanimously-refuted findings), wrapped
 by `dev-gated-review` (`workflows/gated-review.js`), which runs the review/fix/re-review
 gate to the confidence cap below. Where the phases below say "the
 `adversarial-review` skill" and the Workflow tool is available, delegate to
-`dev-gated-review` (or `dev-adversarial-review` for a single advisory pass) instead. The
+`dev:dev-gated-review` (or `dev:dev-adversarial-review` for a single advisory pass) instead. The
 coordinator invoking the Workflow is the sanctioned opt-in; it returns one
 consolidated structured result rather than flooding the coordinator with
 per-reviewer chatter, which suits the thin-coordinator discipline above, and its

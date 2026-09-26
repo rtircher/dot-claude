@@ -31,7 +31,7 @@ external review.
 
 **Default: run the pass as one Workflow call.** After identifying the artifact
 (step 1), if the `Workflow` tool is available, dispatch the whole review pass as
-`Workflow` with `name: "dev-adversarial-review"` and args
+`Workflow` with `name: "dev:dev-adversarial-review"` and args
 `{artifactPath, artifactType ('spec'|'plan'|'diff'), diffRange, repoDir, focus,
 outOfScope, externalReview, externalReviewers, skillScriptsDir,
 expectedArtifactSha256, pinnedSha, tiers}`. `externalReview` defaults to **true**: the workflow itself runs every

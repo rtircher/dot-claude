@@ -88,7 +88,7 @@ while (true) {
   round += 1
   phase(`Round ${round}`)
   // Nested one level: dev-gated-review is top-level, dev-adversarial-review is the child.
-  review = await workflow('dev-adversarial-review', round === 1 ? a : { ...a, requireExternal: false })
+  review = await workflow('dev:dev-adversarial-review', round === 1 ? a : { ...a, requireExternal: false })
   history.push({
     round,
     findings: review.findings.length,

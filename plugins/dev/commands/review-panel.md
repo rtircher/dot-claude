@@ -53,7 +53,7 @@ Steps:
    and pass its `names` as `externalReviewers`, so each reviewer shows as its
    own `external:<name>` step. If the command fails, omit the arg (one
    courier runs them all and reports the config error).
-   Invoke the Workflow tool with `name: "dev-adversarial-review"` and args:
+   Invoke the Workflow tool with `name: "dev:dev-adversarial-review"` and args:
    `{ artifactType, artifactPath, diffRange, pinnedSha, repoDir,
    externalReview: true, externalReviewers, expectedArtifactSha256: "<expected>",
    skillScriptsDir: "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts",
