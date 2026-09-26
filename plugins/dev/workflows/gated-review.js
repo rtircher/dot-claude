@@ -1,8 +1,8 @@
 /**
- * Gated review: drive an artifact to "clean" through dev-adversarial-review.
+ * Gated review: drive an artifact to "clean" through review-workflow.
  *
  * The concrete form of autonomous-feature's Phase 2/4/6 loop. Each round runs the
- * `dev-adversarial-review` workflow (nested one level), and if surviving blocker/major
+ * `review-workflow` workflow (nested one level), and if surviving blocker/major
  * findings remain, dispatches a fix agent to address them, then re-reviews the
  * revised artifact. Caps at 3 rounds.
  *
@@ -15,7 +15,7 @@
  * the returned `review.findings` and decides what stops the pipeline. This wrapper
  * owns only the convergence loop and the cap.
  *
- * args: same shape as dev-adversarial-review (tiers included, forwarded to each
+ * args: same shape as review-workflow (tiers included, forwarded to each
  * review round), plus:
  *   maxRounds?: number   // default 3
  *   fixConventions?: string  // optional repo conventions handed to the fix agent
@@ -42,9 +42,9 @@
  * external.shortfall, so this wrapper passes requireExternal:false there.
  */
 export const meta = {
-  name: 'dev-gated-review',
+  name: 'gated-review',
   description:
-    'Drive an artifact to clean through dev-adversarial-review: review, fix, re-review, capped at 3 rounds. Returns clean, or the contested findings for a human when it does not converge.',
+    'Drive an artifact to clean through review-workflow: review, fix, re-review, capped at 3 rounds. Returns clean, or the contested findings for a human when it does not converge.',
   phases: [
     { title: 'Gate', detail: 'review -> fix -> re-review until clean or capped' },
   ],
@@ -87,8 +87,8 @@ let review = null
 while (true) {
   round += 1
   phase(`Round ${round}`)
-  // Nested one level: dev-gated-review is top-level, dev-adversarial-review is the child.
-  review = await workflow('dev:dev-adversarial-review', round === 1 ? a : { ...a, requireExternal: false })
+  // Nested one level: gated-review is top-level, review-workflow is the child.
+  review = await workflow('dev:review-workflow', round === 1 ? a : { ...a, requireExternal: false })
   history.push({
     round,
     findings: review.findings.length,

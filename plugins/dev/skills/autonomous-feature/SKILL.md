@@ -44,7 +44,7 @@ plan, etc.). Mid-phase, both modes behave identically.
 ## Third-party review (`external-review` argument)
 
 The adversarial-review phases inherit external-on by default from
-`dev-adversarial-review`: every available, applicable cross-family reviewer
+`dev:review-workflow`: every available, applicable cross-family reviewer
 runs alongside the Claude panel without a per-phase consent stop. The local
 endpoint reviewer always runs (nothing leaves the machine, no consent needed);
 Codex runs under the user's standing CLAUDE.md consent for their own explicit
@@ -168,20 +168,20 @@ verification skills instead — resolve by capability, not by the exact
 skill), fall back to the inline behavior described for that phase.
 
 **Delegate adversarial review to this plugin's Workflow when the Workflow tool
-is available.** This plugin ships a `dev-adversarial-review` Workflow
+is available.** This plugin ships a `dev:review-workflow` Workflow
 (`workflows/adversarial-review.js`: independent reviewers, structured findings, an
 adversarial-verify pass that demotes only unanimously-refuted findings), wrapped
-by `dev-gated-review` (`workflows/gated-review.js`), which runs the review/fix/re-review
+by `dev:gated-review` (`workflows/gated-review.js`), which runs the review/fix/re-review
 gate to the confidence cap below. Where the phases below say "the
 `adversarial-review` skill" and the Workflow tool is available, delegate to
-`dev:dev-gated-review` (or `dev:dev-adversarial-review` for a single advisory pass) instead. The
+`dev:gated-review` (or `dev:review-workflow` for a single advisory pass) instead. The
 coordinator invoking the Workflow is the sanctioned opt-in; it returns one
 consolidated structured result rather than flooding the coordinator with
 per-reviewer chatter, which suits the thin-coordinator discipline above, and its
 gate maps onto these confidence gates. A Workflow runs headless and cannot pause
 to disambiguate or to ask consent, so pass the full artifact contract up front:
 type, file path or diff range, repo, focus, out-of-scope, plus (because
-gated-review forwards args unchanged into `dev-adversarial-review`) the
+gated-review forwards args unchanged into `dev:review-workflow`) the
 external-review contract:
 `skillScriptsDir: "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts"`
 (`CLAUDE_PLUGIN_ROOT` is set for plugin commands, the same mechanism

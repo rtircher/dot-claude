@@ -36,7 +36,7 @@ non-trivial questions about the code:
       feasibility, security, subtle design judgment: wherever nuance decides the
       answer. Bursty advisor capacity, never an always-on loop; its weekly cap is
       the scarce resource.
-- **Adversarial-review panels route themselves:** `dev-adversarial-review` pins
+- **Adversarial-review panels route themselves:** `dev:review-workflow` pins
   every slot in its `DEFAULT_TIERS` (mechanical lenses sonnet, reasoning lenses
   and verify skeptics fable) and rejects any other alias. Don't restate tiers
   there; pass `tiers` only to override one named key, and never downgrade the

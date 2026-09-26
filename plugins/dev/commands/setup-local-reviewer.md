@@ -147,14 +147,14 @@ git diff HEAD~1..HEAD | \
 
 Success = `configured: true` and a `votes[0]` with schema-valid findings and
 the sha256 artifact binding. That is
-exactly what the `dev-adversarial-review` workflow folds in by default
+exactly what the `dev:review-workflow` workflow folds in by default
 (`externalReview` defaults to true; the caller supplies `skillScriptsDir` and
 `expectedArtifactSha256`, and the workflow accepts the vote only on digest
 equality).
 
 ## 9. Confirm the standing default
 
-External review is on by default in `dev-adversarial-review` for every artifact
+External review is on by default in `dev:review-workflow` for every artifact
 type, and this local reviewer is the always-available cross-family vote (local
 model, so no consent ping). Tell the user that, and write a memory entry naming
 the endpoint, model, and fallback so future sessions discover the reviewer.

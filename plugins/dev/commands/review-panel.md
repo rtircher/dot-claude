@@ -8,7 +8,7 @@ reviewer this machine's `EXTERNAL_REVIEWERS` config lists; none configured
 means a Claude-only panel). Takes ONE explicit artifact argument:
 a file path (spec/plan), a diff range like `main...HEAD`, or a PR/branch; plus
 an optional "no external" / "claude only" modifier. This command is the
-*guaranteed* path: it always dispatches the `dev-adversarial-review` Workflow
+*guaranteed* path: it always dispatches the `dev:review-workflow` Workflow
 with `externalReview: true`, pins the artifact with a digest, and the workflow
 really runs each cross-family reviewer, verifies every returned vote against
 that digest, and reports any reviewer it could not run (never a phantom
@@ -53,7 +53,7 @@ Steps:
    and pass its `names` as `externalReviewers`, so each reviewer shows as its
    own `external:<name>` step. If the command fails, omit the arg (one
    courier runs them all and reports the config error).
-   Invoke the Workflow tool with `name: "dev:dev-adversarial-review"` and args:
+   Invoke the Workflow tool with `name: "dev:review-workflow"` and args:
    `{ artifactType, artifactPath, diffRange, pinnedSha, repoDir,
    externalReview: true, externalReviewers, expectedArtifactSha256: "<expected>",
    skillScriptsDir: "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts",

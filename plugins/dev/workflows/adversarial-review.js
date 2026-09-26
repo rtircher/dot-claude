@@ -75,7 +75,7 @@
  * }
  */
 export const meta = {
-  name: 'dev-adversarial-review',
+  name: 'review-workflow',
   description:
     'Independent adversarial review of a spec, plan, or diff: lens-panel fan-out, schema-validated findings, blind synthesis into one ranked objection list. Advisory, never edits, never blocks.',
   phases: [
