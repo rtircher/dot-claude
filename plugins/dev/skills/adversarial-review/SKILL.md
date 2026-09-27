@@ -23,431 +23,250 @@ matters.
 
 ## Procedure
 
-**The Claude review always runs; a third-party model is only ever added on top of
-it.** The lens panel (steps 3 to 4, for documents) or `/code-review` (step 2, for
-diffs) is the baseline and is never skipped. Step 5's third-party reviewer is an
-optional addition, never a replacement, even when the user explicitly asks for
-external review.
+**The Claude lens panel always runs; a third-party model is only ever added on
+top of it.** Every artifact type (spec, plan, and diff) gets its lens panel, and
+it is never skipped, even when the user explicitly asks for external review.
 
-**Default: run the pass as one Workflow call.** After identifying the artifact
-(step 1), if the `Workflow` tool is available, dispatch the whole review pass as
-`Workflow` with `name: "dev:review-workflow"` and args
-`{artifactPath, artifactType ('spec'|'plan'|'diff'), diffRange, repoDir, focus,
-outOfScope, externalReview, externalReviewers, skillScriptsDir,
-expectedArtifactSha256, pinnedSha, tiers}`. `externalReview` defaults to **true**: the workflow itself runs every
-external reviewer this machine configures (`EXTERNAL_REVIEWERS`, see step 5)
-that applies to the artifact alongside the Claude panel, and reports any it
-could not run. A machine that configures none gets a Claude-only panel with
-`external.configured: false` and no shortfall. Opt out (`externalReview: false`) only on an explicit
-"no external" / "claude only" from the user. For external review the caller
-must supply `skillScriptsDir` (this skill's `scripts/` dir, absolute) and
-`expectedArtifactSha256` (sha256 of the exact artifact bytes, computed in
-Bash), plus `diffRange` for diffs. Pass `externalReviewers` (the names from
-`node <scripts>/external-review.mjs --list`) so each reviewer runs as its own
-`external:<name>` courier step; without it one `external` courier runs them
-all. Couriers are pinned to `sonnet` at low effort; the `/dev:review-panel` command does
-all of this automatically and is the guaranteed entry point. The workflow bakes
-in a fixed routing: `DEFAULT_TIERS` in `workflows/adversarial-review.js` names
-every slot (mechanical lenses sonnet, reasoning lenses and the verify skeptics
-fable) and rejects any other alias. No slot inherits the session model. `tiers`
-overrides one named key (a lens key or `verify`; values `{model, effort}`) and
-needs a concrete reason about this artifact. Never downgrade the verify
-skeptics. The workflow implements steps 2 to 6 deterministically: the per-type lens panel
-(specs, plans, AND diffs — a diff gets `correctness`, `simplicity-yagni`,
-`testing`, and `duplication` lenses),
-real external reviewers (`external-review.mjs`, which runs each configured
-entry and calls `codex-review.mjs` for Codex ones),
-schema-validated findings, a skeptic verify pass on uncorroborated blocker/major
-findings, and synthesis blind to model identity. The workflow *owns* external
-invocation; step 5's manual Bash instructions are the fallback for when the
-Workflow tool is unavailable. Present its returned panel/verdicts/findings
-exactly per the Output section. Steps 2 to 6 below
-are the manual fallback: use them when the Workflow tool is unavailable or the
-workflow run itself errors, never because the manual path feels quicker.
+Use the **Workflow path** (step 2) whenever the `Workflow` tool is available.
+Use the **manual path** (steps 3 to 5) only when it is not (cloud sessions and
+subagents have no Workflow tool) or when the workflow run itself errors, never
+because the manual path feels quicker. Both paths run the same panel and end in
+the same Output. `${CLAUDE_PLUGIN_ROOT}` below is the `dev` plugin root, two
+levels above this skill's directory.
 
-### 1. Identify the artifact
+### 1. Identify and pin the artifact
 
-Determine what is under review and its type:
+Determine what is under review and its type: **spec** (a requirements or design
+document), **plan** (an implementation plan: steps, sequencing, tasks), or
+**diff** (code changes: a branch diff or GitHub PR).
 
-- **Spec / design doc** — a requirements or design document.
-- **Plan** — an implementation plan (steps, sequencing, tasks).
-- **PR / diff** — code changes (a branch diff or GitHub PR).
+An explicit artifact is required: a file path, a diff range like `main...HEAD`,
+or a PR/branch. The only allowed inference is a bare invocation on a branch with
+one unambiguous diff against the trunk (use `<trunk>...HEAD`). Anything else: ask
+which artifact, once, then proceed. Never infer by recency or pick the "most
+recently written" spec or plan.
 
-If the user pointed at a file or PR, use that. If invoked bare, infer from the
-current branch (uncommitted/committed diff) or the most recently written
-spec/plan. If genuinely ambiguous, ask which artifact — one question, then
-proceed.
+For a diff, prefer a COMMITTED range of the exact form `<ref>...HEAD` (Codex
+reviews only that form; other shapes drop the Codex vote with a refusal), and pin
+its SHA with `git rev-parse --short HEAD`. For an UNCOMMITTED working-tree diff,
+warn that any write between digest and review (this session, an editor autosave,
+a hook) will drop the external votes, and offer to commit or stash first.
 
-### 2. PR / diff → delegate (manual fallback)
+Compute the digest from the repo root. It pins the exact bytes every external
+reviewer must have reviewed:
 
-If the artifact is a **PR or code diff**, do not hand-roll code review. Use the
-`/code-review` skill, with effort scaled to diff size (larger or riskier diffs →
-higher effort) — it covers correctness plus simplification/reuse. `/code-review`
-does NOT cover the testing lens, so additionally dispatch one reviewer for it,
-with `model: fable` (the diff row's **testing** lens in step 3's table, framed per step 4). Surface
-all findings. If a third-party model is available, also
-enlist it as an independent reviewer (see "Enlist a third-party model" below):
-a different model family is the most independent second read you can get on a
-diff. On this manual path, synthesize a
-diff on its own terms (step 6, **Diffs**), where `/code-review`, the testing
-reviewer, and any third-party run are the named reviewers. (The Workflow path
-instead reviews a diff with its own three-lens panel — see step 3's table.)
+    expected="$(git diff main...HEAD | sha256sum | cut -d' ' -f1)"   # diff: the exact range
+    expected="$(sha256sum "docs/plans/the-plan.md" | cut -d' ' -f1)" # spec/plan: the file
 
-### 3. Pick lenses scaled to the artifact (manual fallback)
+For an uncommitted diff, re-run it immediately before dispatch (this narrows the
+pin-to-review window; a committed range has none). The digest goes only into the
+Workflow args or your own comparison in step 4, NEVER into any prompt, agent
+instruction, or chat text. A digest a courier or reviewer has seen proves nothing.
 
-Choose independent reviewer lenses by artifact type. Each lens is a distinct
-failure mode, not a redundant copy:
+### 2. Workflow path
 
-| Artifact | Lenses |
-|----------|--------|
-| Spec / design doc | **hidden-assumptions** (what is taken for granted that may not hold) · **gaps & underspecification** (what's undefined, ambiguous, or missing) · **contradiction & feasibility** (internal conflicts, can it actually be built as described) · **scope & YAGNI** (speculative scope, over-generalization, extensibility/config/abstraction the requirements don't justify) |
-| Plan | **sequencing & dependencies** (wrong order, unstated prerequisites, hidden coupling) · **risk & failure modes** (what breaks, what's unrecoverable, what's untested or has no stated test strategy) · **scope & YAGNI** (over-build, gold-plating, work that serves no stated goal) |
-| PR / diff (Workflow path) | **correctness** (bugs, broken invariants, security holes, cross-package coupling, not style) · **simplicity & YAGNI** (needless complexity, a simpler design that does the same, reinvented helpers the codebase already has, abstraction/config/generality this change does not need. For every new class, base class, registry, flag, setting, or extension point ask how many concrete users it has in this diff; one means inline it. Safety floor, per the conventions' "Simplicity never trims the safety floor" rule: never propose trimming input validation at trust boundaries, data-loss error handling, security, accessibility, or migration backfill/lock/rollback code. Tag each finding in suggested_fix `cut now` when it can be deleted or inlined in this change, `follow-up` when it is pre-existing over-build, each with an approximate net-lines figure) · **testing** (judge coverage by decision branches, not line percentage: list each new or changed if/else, match, except, or early return in the production diff and name the test that exercises it; flag branches with none. Curate, don't append, per the conventions' "Test suite discipline: curate, don't append" rule: flag tests that exercise a branch another test already covers, tests that cannot fail such as asserting a mock's return, a snapshot of a constant, or a getter/setter/pass-through, over-mocking that tests the mock, integration or e2e tests that re-assert a unit-covered branch, a missing regression test for the bug being fixed, and brittle tests coupled to implementation detail. For each redundant test name the surviving test and say `delete` or `merge into a parametrize table`; a removal is a finding, same as a gap. Report the suite delta as `tests +N added / ~M edited / -K deleted vs B branches touched`; added far above branches with zero deleted is a major finding by default) · **duplication** (the same logic introduced more than once: copy-pasted or near-identical blocks added within this diff across functions or files that should share one implementation, or logic in this diff that re-implements something the codebase already has elsewhere without reusing it. Distinct from simplicity-yagni's reinvented-helper check, which flags unnecessary abstraction — this lens flags redundant occurrences of the same logic regardless of how simple each occurrence is. For each instance, list every location and name the one that should remain or the extraction point) |
+Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and args:
 
-Use all the lenses for the artifact type. Drop a lens only if it is clearly
-irrelevant to the specific artifact, and say so.
+- `artifactType`; `artifactPath` for a spec/plan; `diffRange`, `pinnedSha`, and
+  `repoDir` for a diff; `focus` / `outOfScope` when given.
+- `expectedArtifactSha256`: the digest from step 1.
+- `skillScriptsDir`: `"${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts"`.
+- `externalReview` defaults to **true**; pass `false` only on an explicit "no
+  external" / "claude only" from the user. Consent (step 4) is the caller's job
+  and comes BEFORE the dispatch; the workflow runs reviewers, it never asks.
+- `requireExternal: true` when the user explicitly asked for external review, so
+  a machine with none configured reports the shortfall instead of a quiet
+  Claude-only panel.
+- `externalReviewers`: the `names` printed by
+  `"$(command -v node || bash -lc 'command -v node')" "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts/external-review.mjs" --list`,
+  so each reviewer runs as its own `external:<name>` courier step. If the command
+  fails, omit the arg: one `external` courier runs them all and reports the
+  config error.
+- `tiers`: normally omitted. `DEFAULT_TIERS` in
+  `${CLAUDE_PLUGIN_ROOT}/workflows/adversarial-review.js` names every slot
+  (mechanical lenses sonnet, reasoning lenses and the verify skeptics fable) and
+  rejects any other alias; no slot inherits the session model. An override
+  replaces one key (a lens key or `verify`; values `{model, effort}`) and needs a
+  concrete reason about this artifact. Never downgrade the verify skeptics.
 
-### 4. Dispatch independent reviewers in parallel (manual fallback)
+The workflow runs the lens panel, every configured external reviewer (couriers
+pinned to sonnet at low effort), schema-validated findings, a skeptic verify pass
+on uncorroborated blocker/major findings, and synthesis blind to model identity.
+Present its result per the Output section. `/dev:review-panel` is a thin command
+over this path.
+
+### 3. Manual path: dispatch the lens panel
+
+The lenses live in one place: `LENS_PANELS` in
+`${CLAUDE_PLUGIN_ROOT}/workflows/adversarial-review.js`, with each lens's model in
+`DEFAULT_TIERS` in the same file. Read the artifact type's panel there and use
+each lens's `key` and `brief`. Each lens is a distinct failure mode, not a
+redundant copy, and all of a type's lenses run.
 
 Dispatch one `Agent` per lens, **all in a single message** so they run
-concurrently with fresh, independent context. Dispatch each as a read-only
-`dev:reviewer` agent — its definition already carries the adversarial stance
-and the findings schema below, so the dispatch prompt only needs the artifact,
-the lens, and any overrides. (Fall back to `dev:researcher`, then
-general-purpose, where `dev:reviewer` is unavailable — in that case paste the
-framing and schema below into the prompt.) Each reviewer gets:
-
-- The full artifact (paste it or give the file path).
-- Its assigned lens, and only that lens.
-- The adversarial framing (below).
-- A request to return structured findings:
-  `{ objection, severity (blocker | major | minor), confidence (verified | speculative), location, suggested_fix }`.
-  **verified** = the reviewer opened the artifact / traced the code and confirmed
-  the problem; **speculative** = inferred from a smell or a partial read, not
-  confirmed. Reviewers must label every finding — a confident-sounding hunch that
-  was never checked is the panel's main failure mode.
-
-**Adversarial framing to give each reviewer (paraphrase into the prompt):**
+concurrently with fresh, independent context, each as a read-only `dev:reviewer`
+agent with `model:` from `DEFAULT_TIERS` for its key (never omitted, never
+`opus`). Its definition carries the adversarial stance and the findings schema,
+so the prompt needs only the artifact (the file path, or for a diff the range,
+repo, and `git diff` command), its one lens `key` and `brief`, and any focus and
+out-of-scope notes. Where `dev:reviewer` is unavailable, fall back to
+`dev:researcher`, then general-purpose, and paste this framing and the schema
+into the prompt:
 
 > Your job is to find what is wrong with this artifact through the lens of
-> {lens}. Assume the author is over-confident. Surface real problems, not style
-> nits. Be specific — point to the exact part. When you are uncertain whether
-> something is a problem, flag it rather than letting it pass. End with a single
-> verdict: ship or don't-ship, with one sentence why.
+> {lens}: {brief}. Assume the author is over-confident. Surface real problems,
+> not style nits. Be specific — point to the exact part. When you are uncertain
+> whether something is a problem, flag it rather than letting it pass. End with
+> a single verdict: ship or don't-ship, with one sentence why.
 
-Tier each lens reviewer from `DEFAULT_TIERS` in `workflows/adversarial-review.js`:
-mechanical lenses `model: sonnet`, reasoning lenses `model: fable`. Never omit
-`model:` (the session is sonnet), never `opus`.
+Findings are
+`{ objection, severity (blocker | major | minor), confidence (verified | speculative), location, suggested_fix }`.
+**verified** = the reviewer opened the artifact / traced the code and confirmed
+it; **speculative** = inferred from a smell or a partial read. Every finding
+carries a label: a confident-sounding hunch that was never checked is the
+panel's main failure mode.
 
-### 5. Enlist a third-party model (additive, when available; applies on BOTH paths)
+### 4. External reviewers (additive; consent and binding apply on both paths)
 
-Consent is the calling agent's job on both paths: on the Workflow path, obtain
-it per this step BEFORE setting `externalReview: true`; the workflow only runs
-the reviewer, it never asks.
+**Additive, never a replacement.** "Use external", or the `external-review`
+flag, means **add** third-party reviewers to the Claude panel, not swap it out. A
+different model family is the most independent reviewer you can add because it
+shares none of Claude's blind spots; a missing or failing one never blocks the
+Claude panel.
 
-**This step is additive and never replaces the Claude review.** The lens panel
-(steps 3 to 4) or `/code-review` (step 2) always runs; a third-party model is an
-*extra* independent reviewer layered on top. Asking to "use external", or the
-`external-review` flag, means **add** a third-party reviewer to the Claude panel,
-not swap the panel out for it. A run that ends with only the third-party's
-findings and no Claude panel is a bug.
-
-A genuinely different model family is the most independent reviewer you can add:
-it shares none of Claude's blind spots, which is exactly why it belongs on top of
-the panel rather than instead of it. Enlisting one is optional, gated on
-availability and on the user's consent; a missing third-party tool never blocks
-the Claude panel.
-
-**Independence lives in the model family, not the harness.** Codex CLI is
-hardwired to OpenAI models, so running it automatically means a cross-family
-vote. Provider-agnostic harnesses (OpenCode, the shipped reviewer script) add
-independence only through the model they are pointed at: one of them running a
-Claude model is not a third-party reviewer, and must not be counted as
-cross-family corroboration in step 6. Always pin a non-Claude model explicitly,
-and record the *model family* that ran — not the tool name — in the private
-source bookkeeping.
-
-**Picking the model — major non-Claude families (as of mid-2026).** Any of
-these counts as a cross-family vote; prefer whichever the user already has
-access to.
-
-| Family | Cloud | Local (Ollama / vLLM) |
-|--------|-------|------------------------|
-| OpenAI | GPT-5.5 (what Codex runs; also reachable from OpenCode or the reviewer script via the OpenAI API) | — |
-| Google | Gemini 3.1 Pro | — |
-| xAI | Grok 4.3 | — |
-| Zhipu | GLM-5.2 (hosted API) | GLM-5.x open weights |
-| Moonshot | Kimi K2.6 (hosted API) | K2.x open weights |
-| DeepSeek | DeepSeek V4 (hosted API) | V4 open weights |
-| Alibaba | Qwen 3.6 Plus (hosted API) | Qwen3-Coder |
-
-On modest local hardware, a small coder model (e.g. Qwen 3.6 27B or Devstral
-Small 2) is still an independent read: weaker, but fully on-machine, so the
-consent stop never applies. The leaderboard churns quarterly — treat these as
-defaults to reach for, not gospel; when a run matters, check what the named
-family's current flagship is rather than assuming this table is fresh.
-
-**Cloud sessions: skip the local-model path.** In a remote session (Claude Code
-on the web), local models are usually impractical: the container is CPU-only
-(a 7-8B model crawls; the table's flagships won't run at all), ephemeral (the
-multi-GB weights re-download every session), and the network policy typically
-blocks the model registries (ollama.com, huggingface.co) outright. Prefer a
-hosted API there — the shipped script plus a key in the environment's env vars,
-with the vendor's domain allowed by the environment's network policy. The
-privacy case for local is also moot in the cloud: the repo already lives in the
-session container, so in-container Ollama keeps the no-egress property but
-protects nothing the session hasn't already seen. Reserve the local-model path
-for sessions on a real machine (GPU or Apple Silicon, persistent disk, code
-that never left home).
-
-**Get consent before any artifact leaves the environment.** Enlisting a
-third-party model sends the reviewed diff or document to an external vendor's API
-(OpenAI for Codex, Cursor for `cursor-agent`, whatever provider OpenCode or the
-reviewer script is configured with — name the actual destination, not the tool).
-Before running one, confirm with
-the user and name where the artifact goes, especially for private repos,
-proprietary code, or diffs that may carry secrets or tenant data. Offer to redact
-sensitive parts or to skip. If the user does not approve, run the Claude panel
-only and report it as Claude-only. Never send an artifact to a third party
-silently. Exception: a reviewer bound to a local model (e.g. OpenCode or the
-reviewer script pointed at Ollama on localhost) sends nothing off the machine,
-so the consent stop does not apply — still report which model ran and that it
-was local. Consent can be granted ahead of time: if an orchestrator or invocation
-flag has pre-authorized third-party review for this run, treat that as the
-confirmation, skip the interactive ask, and enlist the available reviewer
-directly, still reporting in the output that it ran and where the artifact went.
-
-**Codex (first-party plugin).** If the `codex` plugin is installed, the
-`/codex:adversarial-review` command runs a challenge review (it questions the
-approach, assumptions, and tradeoffs, not just defects); `/codex:review` is the
-plainer pass. These are user-invoked commands, so ask the user to run
-`/codex:adversarial-review` (foreground for a tiny diff, `--background` for
-anything larger) and hand back the output, or fold in a run they already have.
-Let the plugin own the Codex invocation and auth; do not hand-roll `codex` CLI
-strings. Codex review is read-only. Codex reviews the git diff of the repo it
-runs in (scoped by `--base`/`--scope`), so if the artifact lives in a different
-repo than your session cwd, run the review from that repo (the companion takes
-`--cwd <path>`); otherwise it reviews the wrong tree and returns an empty or
-irrelevant diff.
-
-Availability: the `/codex:*` commands exist only once the codex plugin is
-installed, and they need the `codex` CLI installed and authenticated. If a run
-reports the CLI is missing, tell the user to run `/codex:setup` (it installs via
-`npm install -g @openai/codex`, then `codex login`). Until then there is no
-Codex reviewer; proceed with the Claude panel.
-
-**Cursor.** There is no first-party Cursor plugin or slash command for Claude
-Code. The direct equivalent is to shell out to Cursor's headless CLI, a one-shot
-reviewer. Keep the artifact out of argv: a diff pasted into a command argument
-leaks through process listings, shell history, and tool logs before it ever
-reaches Cursor. Put only instructions on the command line and feed the artifact
-on stdin (or a mode-600 temp file):
-
-```bash
-cursor-agent -p --output-format text "Adversarially review the diff on stdin.
-Find what is wrong, not what is fine." < /path/to/artifact.diff
-```
-
-Omit `--force` so it can only report, never edit. Requires `cursor-agent` on
-PATH and `CURSOR_API_KEY` set. Check `command -v cursor-agent` first and skip
-this reviewer if it is absent.
-
-**OpenCode (open-source, provider-agnostic).** OpenCode's headless mode makes it
-a one-shot reviewer against any provider it is configured with, including local
-models. Because it is provider-agnostic, the model must be pinned explicitly to
-a non-Claude family (see "Independence lives in the model family" above), and it
-must be run read-only — OpenCode is a full editing agent by default, so use its
-read-only plan agent (or a permissions config denying writes). Same stdin rule
-as Cursor: instructions on the command line, artifact on stdin.
-
-```bash
-opencode run --agent plan --model openai/gpt-5 --format json \
-  "Adversarially review the diff on stdin. Find what is wrong, not what is fine." \
-  < /path/to/artifact.diff
-```
-
-Verify flags against `opencode run --help` — the CLI evolves quickly. Requires
-`opencode` on PATH with the target provider authenticated; check
-`command -v opencode` first and skip this reviewer if absent. For consent, name
-the provider the pinned model resolves to, not "OpenCode". Pointed at a local
-model (e.g. `ollama/qwen3-coder`, on this machine or other hardware the user
-controls), the artifact never leaves the user's hardware and the consent stop
-does not apply.
-
-**Shipped reviewer script (no harness at all).** This skill ships
-`scripts/external-review.mjs` (resolve it relative to this SKILL.md), a
-dependency-free Node script that sends the artifact on stdin to any
-OpenAI-compatible chat-completions endpoint — hosted or local — with the
-adversarial framing baked in, and prints findings in the exact schema the
-workflow synthesizes. It is read-only by construction (no tools, no filesystem
-access), refuses Claude-family models unless overridden, refuses oversized
-artifacts instead of silently truncating, and echoes back the `--target` binding
-plus a sha256 digest of what it reviewed — which satisfies this step's
-artifact-binding requirement mechanically.
-
-**Which external reviewers run is per-machine config, never the plugin's.**
-Set `EXTERNAL_REVIEWERS` (in the machine's `settings.json` env, typically its
-dotfiles) to a JSON array; it is the complete list:
+**Which reviewers run is per-machine config, never the plugin's.**
+`EXTERNAL_REVIEWERS` (in the machine's `settings.json` env, typically its
+dotfiles) is a JSON array and the complete list:
 
 ```json
 "EXTERNAL_REVIEWERS": "[{\"name\":\"codex\",\"kind\":\"codex\"},{\"name\":\"qwen\",\"model\":\"qwen3.8:27b-q8_0\",\"baseUrl\":\"http://gpu-box:11434/v1\",\"private\":true},{\"name\":\"gpt\",\"model\":\"gpt-5\",\"baseUrl\":\"https://api.openai.com/v1\",\"apiKeyEnv\":\"OPENAI_API_KEY\"}]"
 ```
 
-Entries are `{name?, kind?, model, baseUrl, apiKeyEnv?, private?, family?}`.
-`kind` is `openai-compatible` (default: this script calls the endpoint itself)
-or `codex` (the Codex companion via `codex-review.mjs`, diffs only). Set
-`"private": true` only on an endpoint that runs on hardware the user controls
-(their own GPU box, however it is reached): it needs no API key and the consent
-stop does not apply. Loopback is always private; anything else without the flag
-is treated as a hosted vendor, which needs `apiKeyEnv` and consent. `"[]"` means
-no external reviewers. When `EXTERNAL_REVIEWERS` is unset, the legacy
-single-reviewer vars (`EXTERNAL_REVIEW_MODEL`, `EXTERNAL_REVIEW_BASE_URL`,
-`EXTERNAL_REVIEW_API_KEY`) count as one entry, plus Codex if its companion is
-installed.
+Entries are `{name?, kind?, model, baseUrl, apiKeyEnv?, private?, family?, serialize?}`.
+`kind` is `openai-compatible` (default: the script calls the endpoint) or `codex`
+(via `codex-review.mjs`; diffs of the form `<ref>...HEAD` only). Set
+`"private": true` only on an endpoint running on hardware the user controls: no
+API key, no consent stop. Loopback is always private; anything else is a hosted
+vendor, which needs `apiKeyEnv` and consent. `"[]"` means none. When unset, the
+legacy `EXTERNAL_REVIEW_MODEL` / `_BASE_URL` / `_API_KEY` vars count as one
+entry, plus Codex if its companion is installed. The default is **all
+configured** reviewers that apply to the artifact.
 
-**One request per model host.** A self-hosted model server often has the
-memory for one review at a time, and concurrent panels (a review per PR in a
-stack) then time out on every PR. The script queues requests to each private
-endpoint on a per-`host:port` lock file under `~/.cache/external-review/`
-(`$XDG_CACHE_HOME` and `EXTERNAL_REVIEW_LOCK_DIR` override), shared by every
-process, session and workflow on the machine. `"serialize": true|false` on an
-entry overrides the default (on for private endpoints, off for hosted ones);
-Codex never queues. A lock whose holder died, or whose heartbeat stopped, is
-broken automatically. Queue time does not count against
-`EXTERNAL_REVIEW_TIMEOUT_MS` (default 300000, per request); it has its own cap,
-`EXTERNAL_REVIEW_MAX_WAIT_MS` (default 240000), past which the vote drops as
-`queued past max wait`. Keep the two summed under the courier's 10-minute
-Bash cap. The lock only sees callers on this machine, so still set
-`OLLAMA_NUM_PARALLEL=1` (or the server's equivalent) on the model host when
-other machines share it.
+**Independence lives in the model family, not the harness.** Codex runs OpenAI
+models, so it is always cross-family. An `openai-compatible` entry is only as
+independent as the model it points at: a Claude model there is not a third-party
+reviewer and never counts as cross-family corroboration (the script refuses
+Claude-family models unless `--allow-same-family`). Record the *model family*
+that ran, not the tool name, in the private source bookkeeping.
 
-```bash
-git diff main...HEAD | node <skill-dir>/scripts/external-review.mjs \
-  --type diff --target "main...HEAD @ $(git rev-parse --short HEAD)" \
-  --cwd . --range main...HEAD
-```
+**One request per model host.** A self-hosted model server often has the memory
+for one review at a time, so the script queues requests to each private endpoint
+on a per-`host:port` lock shared by every process on the machine (`serialize`
+overrides: on for private, off for hosted; Codex never queues). Queue time has
+its own cap, `EXTERNAL_REVIEW_MAX_WAIT_MS` (default 240000), apart from the
+per-request `EXTERNAL_REVIEW_TIMEOUT_MS` (default 300000); keep the two summed
+under the 10-minute Bash cap. The lock sees only this machine, so still set
+`OLLAMA_NUM_PARALLEL=1` (or the equivalent) on a shared model host.
 
-`--only <name>` runs one entry (an unknown name exits 1 listing the
-configured ones); `--list` prints `{names:[...]}` and exits. The script runs
-every selected entry in parallel and prints
-`{configured, artifactSha256, votes:[...]}`; the workflow folds each vote as its
-own `external:<name>` reviewer. A reviewer that is down, misconfigured, or not
-applicable (Codex on a spec) is one `external.dropped` entry, never a lost
-panel. Requires only `node` (≥ 18) plus whatever each entry needs.
+**Get consent before any artifact leaves the environment.** A hosted reviewer
+sends the diff or document to its provider (OpenAI for Codex, the `baseUrl`
+vendor for an endpoint entry); name that destination, not the tool. Confirm with
+the user first, especially for private repos, proprietary code, or diffs that may
+carry secrets or tenant data, and offer to redact or skip. Without approval, run
+the Claude panel only and report it as Claude-only. Never send an artifact to a
+third party silently. A private or loopback entry sends nothing off the user's
+hardware, so no consent stop; still report which model ran and that it was
+local. Consent can come ahead of time: an orchestrator or invocation flag that
+pre-authorized third-party review, or the user explicitly asking for external
+review in this run, is the confirmation. Either way, report that each reviewer
+ran and where the artifact went.
 
-The default is **all configured** cross-family reviewers, not one: the workflow
-runs every entry the machine configures that applies to the artifact (endpoint
-reviewers for any artifact type; Codex for diffs only, and only for ranges of
-the form `<ref>...HEAD`). Availability and consent
-still gate each reviewer exactly as above; a missing or unauthenticated tool is
-reported as absent, never faked and never a blocker for the rest of the panel.
-Both external kinds are bound **by-digest**: each tool self-reports the sha256
-of the bytes it reviewed, and the workflow accepts a vote only when that digest
-exactly matches the caller's pinned `expectedArtifactSha256` AND the vote
-carries a shape-valid verdict plus findings. When the user _explicitly_
-requested external review in this run, that request is the consent for the
-artifact to reach the named reviewer's provider, and a run where no external
-reviewer participated must say so loudly rather than report the ask as
-satisfied. Do not quietly substitute a lower-friction reviewer and report the
-ask as satisfied.
+**Manual path: run the script.** `scripts/external-review.mjs` is the single
+external entry point: it runs every selected entry in parallel (Codex via
+`codex-review.mjs`), is read-only, refuses oversized artifacts rather than
+truncating, and needs only `node` (>= 18). List the configured names, then run it
+on the same bytes you hashed in step 1, with the Bash timeout at 600000 ms:
+
+    node="$(command -v node || bash -lc 'command -v node')"
+    s="${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts/external-review.mjs"
+    "$node" "$s" --list
+    git diff main...HEAD | "$node" "$s" --type diff \
+      --target "main...HEAD @ $(git rev-parse --short HEAD)" \
+      --cwd "$(git rev-parse --show-toplevel)" --range main...HEAD
+
+For a spec/plan, pipe `cat <file>` with `--type spec|plan --target "<path> @
+<type>"` and no `--cwd`/`--range`. Pass `--focus` / `--out-of-scope` when the
+panel has them, and `--only <name>` (repeatable) to run only the reviewers the
+user consented to. The script prints
+`{configured, artifactSha256, votes:[vote | {name, __error} | {name, skipped}]}`.
+Count a vote only if its `artifactSha256` equals your `expected` digest and it
+has a boolean `verdict.ship`, a `verdict.reason`, and findings with every schema
+field. Anything else (an error, a skip such as Codex on a spec, a digest
+mismatch, a malformed vote) is one dropped reviewer with its reason.
+`configured: false` means none is configured.
+
+**Bind every external run to the same artifact**: the same path or range in the
+same repo, the same focus and out-of-scope notes, the pinned SHA. A vote counts
+only on digest equality; one whose scope does not match the panel's is dropped,
+never folded in as agreement.
 
 **External review requested but no reviewer can run.** When the user asked for
-external review and none of the four options is available (tool missing,
-unauthenticated, or errored), run the Claude panel as always, report it as
-Claude-only — and close with a short setup hint instead of a bare "unavailable":
-name the cheapest paths to a cross-family reviewer next time, drawn from the
-model-family table above. Typically: the shipped script needs only `node` plus
-an API key for any hosted family in the table, or Ollama pulling a local
-open-weight model (no key, no consent stop); `/codex:setup` installs and
-authenticates Codex. Match the hint to the environment: in a cloud session,
-suggest hosted keys, not Ollama (see the cloud-session note above). One or two
-sentences, not a tutorial.
+external review and none could vote (none configured, tool missing,
+unauthenticated, or errored), run the Claude panel as always and say loudly that
+it is Claude-only; never quietly substitute a lower-friction reviewer or report
+the ask as satisfied. Close with a one- or two-sentence setup hint, not a bare
+"unavailable": point at `/dev:setup-local-reviewer`, whose appendix lists the
+non-Claude model families, the cheapest route to each, and why a cloud session
+should use a hosted key rather than a local model.
 
-**Bind every third-party run to the same artifact.** Give the reviewer the
-identical target the Claude panel is reviewing: the file path or `base...HEAD`
-range (or PR), the same focus and out-of-scope exclusions, and a pinned commit
-SHA or diff digest. Require the returned review to state that same target. A
-review whose scope you cannot confirm matches the panel's does not count as an
-independent vote or as cross-family corroboration in step 6: note it separately
-or drop it. A third-party run against the wrong base or repo (see the cwd caveat
-above) must never be folded in as agreement.
+**Blind scoring.** Each counted external vote is one more independent reviewer.
+Record which source raised each finding as private bookkeeping (to count
+independent sources and detect cross-family agreement), but never carry model
+identity into scoring. A lone finding from another family is exactly the blind
+spot you enlisted it to catch, but *which* model said it must not move its rank:
+naming a prestige source biases the synthesizer. The count and the
+cross-family-ness are the signal, the brand name is not.
 
-Treat any third-party output as one more independent reviewer: feed it the same
-adversarial framing, then fold its findings into the synthesis. Record which
-source raised each finding as private bookkeeping — you need it to count
-independent sources and detect cross-family agreement — but do **not** carry
-model identity into the scoring step. Synthesize blind to source (see step 6):
-agreement across independent reviewers is strong signal, and a lone finding from
-a different model family is exactly the blind spot you enlisted it to catch — but
-*which* model said it must not move a finding's rank. Naming a prestige source
-during scoring biases the synthesizer (Claude systematically over-weights some
-third-party models); the count and the cross-family-ness are the signal, the
-brand name is not.
+### 5. Manual path: synthesize
 
-### 6. Synthesize (manual fallback; the Workflow does this internally)
-
-**Score blind to model identity.** Before synthesizing, strip the reviewers'
-model names from their findings — work from anonymized handles (Reviewer A/B/C…)
-plus each finding's lens. Identity is prestige bias: knowing a finding came from a
-particular third-party model makes the synthesizer over- or under-weight it
-regardless of merit. What you keep is *how many independent reviewers* raised a
-finding and *whether that agreement crosses model families* — those are the real
-signals. Re-attach source names only after ranking is fixed, and only if the user
-asked who said what.
-
-Once reviewers return (including any third-party model you enlisted): for a
-document the reviewers are the lens panel; for a diff on this manual path they
-are `/code-review`, the testing reviewer, plus any third-party run.
+Strip model names first and work from anonymized handles (Reviewer A/B/C…) plus
+each finding's lens. Re-attach names only after ranking is fixed, and only if the
+user asks who said what. The reviewers are the lens panel plus every counted
+external vote.
 
 1. **Account for who actually voted.** State the panel that returned versus the
-   panel you dispatched — e.g. "3 of 4 reviewers returned; the minimax reviewer
-   errored and was dropped." A reviewer whose chain failed silently is not a
-   missing finding, it is a missing *vote*; never let the synthesis imply a fuller
-   panel than actually weighed in.
-2. **Dedup** objections that overlap into one entry, recording **how many
+   panel you dispatched — e.g. "5 of 6 reviewers returned; external:qwen queued
+   past max wait and was dropped." A failed reviewer is a missing *vote*, not a
+   missing finding; never imply a fuller panel than weighed in.
+2. **Dedup** overlapping objections into one entry, recording **how many
    independent reviewers** raised it and **whether they span model families**
-   (cross-family agreement is the strongest signal; agreement across lenses within
-   one model is weaker).
+   (cross-family agreement is the strongest signal; agreement across lenses
+   within one model is weaker).
 3. **Rank** by severity (blocker → major → minor), and within a severity put
-   **verified before speculative** — a confirmed major outranks an unchecked hunch.
-   Rank on merit and corroboration count, never on which model spoke.
+   **verified before speculative**. Rank on merit and corroboration count, never
+   on which model spoke.
 4. Produce **one prioritized list**: each entry = objection · severity ·
-   confidence · location · suggested fix · corroboration (how many independent
-   reviewers / lenses, cross-family or not).
-5. **Report verdicts by reviewer.** For a document, report each lens's ship /
-   don't-ship verdict. For a diff on this manual path, report `/code-review`'s
-   overall result, the testing reviewer's verdict, and each third-party
-   reviewer's verdict. Never invent a per-lens verdict for a reviewer that did
-   not produce one.
+   confidence · location · suggested fix · corroboration.
+5. **Report each reviewer's verdict**: each lens's ship / don't-ship, and each
+   external reviewer's. Never invent a verdict for a reviewer that gave none.
 
 ## Output
 
 Present to the user:
 
-- **The panel that actually voted**: how many reviewers were dispatched, how many
-  returned, and which (if any) were dropped because a tool was missing,
-  unauthenticated, or errored mid-run. State this up front so the user knows the
-  weight behind the verdict — never imply a fuller panel than voted. On the
-  Workflow path, ALWAYS surface the result's `external.ran` (which cross-family
-  reviewers really voted), `external.dropped` (each absent reviewer with its
-  reason), and `external.shortfall` (external review was on — the default — the
-  machine configures external reviewers, and nothing external actually voted;
-  it fires even on caller config drops, so a Claude-only degradation is never
-  silent). `external.configured: false` means the machine has none: report the
-  panel as Claude-only, which is not a failure unless the user asked for
-  external review (callers pass `requireExternal: true` then). If the user
-  asked for external review and no third-party reviewer could run, append the
-  setup hint from step 5 (the cheapest paths to a cross-family reviewer, per the
-  model-family table there).
-- The deduped, severity-ranked objection list, leading with verified findings;
-  group speculative ones after so the user can skim them separately. Each entry
-  carries its corroboration (how many independent reviewers / lenses, cross-family
-  or not) rather than model names.
-- The verdicts: per lens (documents and Workflow-path diffs), or per reviewer
-  (`/code-review`, the testing reviewer, plus any third-party run) for a
-  manual-path diff.
-- Source attribution is available on request, but the ranked list stands on
-  merit and corroboration, not on which model raised each point.
+- **The panel that actually voted**, up front: dispatched vs returned, and which
+  reviewers were dropped and why. On the Workflow path, ALWAYS surface
+  `external.ran`, `external.dropped` (each absent reviewer with its reason), and
+  `external.shortfall` (external review was on, the machine configures external
+  reviewers, and nothing external voted; it fires even on caller config drops, so
+  a Claude-only degradation is never silent); on the manual path, report the same
+  facts from your own fold. `external.configured: false` is a Claude-only panel,
+  not a failure unless the user asked for external review; then append step 4's
+  setup hint.
+- The ranked objection list, verified findings first and speculative ones grouped
+  after, each with its corroboration rather than model names.
+- The verdicts: per lens, plus per external reviewer. Source attribution only on
+  request.
 
 Then stop. Do not edit the artifact, do not block any next step, do not
 re-review. The user decides what to act on. If they ask you to address findings,
@@ -461,23 +280,13 @@ that's a separate task.
   the panel. Keep lenses distinct.
 - **Sequential dispatch.** Reviewers must be independent — dispatch them in one
   message, never feed one reviewer's output to the next.
-- **Reinventing code review.** For diffs, delegate to `/code-review`. Don't
-  rebuild it here.
-- **Phantom third-party review.** Never imply a third-party reviewer (Codex,
-  Cursor, OpenCode, the shipped script) weighed in when the tool was unavailable,
-  unauthenticated, or errored. Report the panel as Claude-only instead.
-- **Same-family "third party".** A provider-agnostic harness running a Claude
-  model is not an independent reviewer and never counts as cross-family
-  corroboration. Independence is the model family, not the tool name.
-  The workflow now *enforces* this and the phantom-review anti-pattern
-  mechanically: any external vote whose self-reported digest does not equal the
-  caller-pinned one, or whose verdict/findings are malformed, is dropped and
-  reported in `external.dropped`, never counted.
-- **Prestige-weighted scoring.** Don't let a finding's rank ride on which model
-  raised it. Score blind to model identity; the signal is corroboration count and
-  cross-family agreement, not the brand name attached to a finding.
-- **Third-party instead of the panel.** A third-party reviewer never substitutes
-  for the Claude panel (docs) or `/code-review` (diffs); those always run and the
-  third-party is one more voice on top. "Use external" means add it, not swap it.
-  A run that produced only the external model's findings skipped the panel and is
-  wrong.
+- **Phantom third-party review.** Never imply an external reviewer weighed in
+  when it was unavailable, errored, or dropped; a vote without a matching digest
+  and a well-formed verdict is dropped, never counted.
+- **Same-family "third party".** An endpoint running a Claude model never counts
+  as cross-family corroboration. Independence is the model family, not the tool.
+- **Prestige-weighted scoring.** Score blind to model identity; the signal is
+  corroboration count and cross-family agreement, not the brand name.
+- **Third-party instead of the panel.** An external reviewer never substitutes
+  for the Claude lens panel; "use external" means add it, not swap it. A run with
+  only external findings skipped the panel and is wrong.

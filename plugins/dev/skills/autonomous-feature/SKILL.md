@@ -187,7 +187,7 @@ external-review contract:
 (`CLAUDE_PLUGIN_ROOT` is set for plugin commands, the same mechanism
 `setup-local-reviewer.md` uses; never a repo-relative guess),
 `expectedArtifactSha256` (computed by this coordinator in Bash exactly as the
-`/dev:review-panel` command does: sha256 of `git diff <range>` output for
+`adversarial-review` skill's step 1 does: sha256 of `git diff <range>` output for
 a diff, of the file bytes for spec/plan), and `requireExternal: true` when the
 `external-review` argument was given. Without the first two the workflow skips
 external with a `config` drop, which in a force/confirm run is a round-1
@@ -290,9 +290,9 @@ it gets the same treatment. Reviewing only the upstream documents and trusting
 the build is the asymmetry this phase exists to close — passing tests confirm the
 code does what you told it to, not that what you told it to do is right.
 
-Run the `adversarial-review` skill on the completed work (the branch diff). For a
-code diff it delegates to `/code-review` with effort scaled to diff size/risk —
-let it. External review is on by default; the `external-review` flag forces and
+Run the `adversarial-review` skill on the completed work (the branch diff). Its
+diff panel runs correctness, **simplicity & YAGNI** (the *Bias to simplicity*
+check), testing, and duplication lenses. External review is on by default; the `external-review` flag forces and
 confirms round-1 participation (`requireExternal: true`, ping on round-1
 `external.shortfall`), and a code diff is the
 strongest case for a different model family. For a **multi-task** plan, also run the final cross-implementation
