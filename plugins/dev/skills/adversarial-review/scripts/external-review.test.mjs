@@ -36,6 +36,27 @@ function stubServer() {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)))
 }
 
+// Stub OpenAI-compatible server: model "good" returns a valid review and
+// records every parsed request body so the test can inspect the prompt sent.
+function recordingStubServer() {
+  const bodies = []
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', (c) => (body += c))
+    req.on('end', () => {
+      const parsed = JSON.parse(body)
+      bodies.push(parsed)
+      if (parsed.model !== 'good') {
+        res.writeHead(500).end('boom')
+        return
+      }
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(REVIEW) } }] }))
+    })
+  })
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, url: `http://127.0.0.1:${server.address().port}/v1`, bodies })))
+}
+
 // Stub whose "good" responses take delayMs; records peak concurrent requests.
 async function slowServer(delayMs) {
   const stats = { inFlight: 0, peak: 0, requests: 0 }
@@ -291,6 +312,47 @@ test('a host busy past the max wait drops the vote as queued past max wait', asy
   } finally {
     server.close()
   }
+})
+
+test('--focus-file and --out-of-scope-file reach the reviewer prompt verbatim', async () => {
+  const { server, url, bodies } = await recordingStubServer()
+  const dir = mkdtempSync(join(tmpdir(), 'focus-'))
+  const focus = join(dir, 'focus.md')
+  const oos = join(dir, 'oos.md')
+  writeFileSync(focus, '- Migrations: backfill safety\n- Flag "state" rows\n')
+  writeFileSync(oos, 'generated/ files\n')
+  const env = { EXTERNAL_REVIEWERS: JSON.stringify([{ name: 'good', model: 'good', baseUrl: url, private: true }]) }
+  const r = await run(env, 'diff --git a b', 'diff', ['--focus-file', focus, '--out-of-scope-file', oos])
+  server.close()
+  assert.equal(r.code, 0, r.stderr)
+  const prompt = JSON.stringify(bodies[0].messages)
+  assert.match(prompt, /Migrations: backfill safety/)
+  assert.match(prompt, /Flag \\"state\\" rows/)
+  assert.match(prompt, /Out of scope \(ignore\): generated\/ files/)
+})
+
+test('--focus with --focus-file exits 1', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'focus-'))
+  const focus = join(dir, 'f.md')
+  writeFileSync(focus, 'x')
+  const r = await run({ EXTERNAL_REVIEWERS: '[]' }, 'd', 'diff', ['--focus', 'y', '--focus-file', focus])
+  assert.equal(r.code, 1)
+  assert.match(r.stderr, /mutually exclusive/)
+})
+
+test('--out-of-scope with --out-of-scope-file exits 1', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oos-'))
+  const oos = join(dir, 'o.md')
+  writeFileSync(oos, 'x')
+  const r = await run({ EXTERNAL_REVIEWERS: '[]' }, 'd', 'diff', ['--out-of-scope', 'y', '--out-of-scope-file', oos])
+  assert.equal(r.code, 1)
+  assert.match(r.stderr, /mutually exclusive/)
+})
+
+test('an unreadable --focus-file exits 1 naming the path', async () => {
+  const r = await run({ EXTERNAL_REVIEWERS: '[]' }, 'd', 'diff', ['--focus-file', '/nonexistent/focus.md'])
+  assert.equal(r.code, 1)
+  assert.match(r.stderr, /\/nonexistent\/focus\.md/)
 })
 
 test('a lock left by a dead process or with a stale heartbeat is recovered', async () => {

@@ -63,7 +63,11 @@
  *                           same artifact as the rest of the panel
  *   --cwd <repo> / --range <ref>...HEAD   for codex reviewers (diffs)
  *   --focus <note>          optional in-scope note
+ *   --focus-file <path>     read the in-scope note from a file instead
+ *                           (trimmed); mutually exclusive with --focus
  *   --out-of-scope <note>   optional exclusions
+ *   --out-of-scope-file <path>  read the exclusions from a file instead
+ *                           (trimmed); mutually exclusive with --out-of-scope
  *   --allow-same-family     permit a Claude model (defeats cross-family review)
  *   --only <name>           run only the configured reviewer with this name
  *                           (repeatable); an unknown name exits 1
@@ -75,7 +79,7 @@
 
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { realpathSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defaultCompanion } from './codex-review.mjs'
 import { acquireHostLock, defaultLockDir, hostKey } from './host-lock.mjs'
@@ -133,7 +137,7 @@ function fail(code, msg) {
 }
 
 function parseArgs(argv) {
-  const opts = { type: 'diff', target: '', cwd: '', range: '', focus: '', outOfScope: '', allowSameFamily: false, only: [], list: false }
+  const opts = { type: 'diff', target: '', cwd: '', range: '', focus: '', outOfScope: '', focusFile: '', outOfScopeFile: '', allowSameFamily: false, only: [], list: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => {
@@ -146,10 +150,21 @@ function parseArgs(argv) {
     else if (a === '--range') opts.range = next()
     else if (a === '--focus') opts.focus = next()
     else if (a === '--out-of-scope') opts.outOfScope = next()
+    else if (a === '--focus-file') opts.focusFile = next()
+    else if (a === '--out-of-scope-file') opts.outOfScopeFile = next()
     else if (a === '--allow-same-family') opts.allowSameFamily = true
     else if (a === '--only') opts.only.push(next())
     else if (a === '--list') opts.list = true
     else fail(1, `unknown flag ${a}`)
+  }
+  for (const [flag, fileKey, key] of [['--focus', 'focusFile', 'focus'], ['--out-of-scope', 'outOfScopeFile', 'outOfScope']]) {
+    if (!opts[fileKey]) continue
+    if (opts[key]) fail(1, `${flag} and ${flag}-file are mutually exclusive`)
+    try {
+      opts[key] = readFileSync(opts[fileKey], 'utf8').trim()
+    } catch (e) {
+      fail(1, `cannot read ${flag}-file ${opts[fileKey]}: ${e.code || e.message}`)
+    }
   }
   if (opts.list) return opts
   if (!['spec', 'plan', 'diff'].includes(opts.type)) fail(1, `--type must be spec|plan|diff, got "${opts.type}"`)
