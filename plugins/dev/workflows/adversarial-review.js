@@ -21,10 +21,13 @@
  *                                    // Needed when the orchestrator runs outside that repo.
  *   focus?: string,                  // optional in-scope note, bound to every reviewer
  *   outOfScope?: string,             // optional exclusions, bound to every reviewer
- *   focusFile?: string,              // absolute path holding focus, written by the caller;
- *                                    // couriers pass it to external-review.mjs
- *   outOfScopeFile?: string,         // absolute path holding outOfScope, written by the
- *                                    // caller; couriers pass it to external-review.mjs
+ *   focusFile?: string,              // absolute path holding the SAME text as focus, written
+ *                                    // by the caller; couriers pass it to external-review.mjs
+ *                                    // so lenses and externals see identical scope
+ *   outOfScopeFile?: string,         // absolute path holding the SAME text as outOfScope,
+ *                                    // written by the caller; couriers pass it to
+ *                                    // external-review.mjs so lenses and externals see
+ *                                    // identical scope
  *   externalReview?: boolean,        // defaults TRUE: every external reviewer this machine
  *                                    // configures (EXTERNAL_REVIEWERS, see
  *                                    // external-review.mjs) runs alongside the Claude
@@ -205,14 +208,19 @@ const BATCH_VERDICT_SCHEMA = {
 
 const SEVERITY_RANK = { blocker: 0, major: 1, minor: 2 }
 
-function adversarialPreamble(art) {
-  const scope = [
+// Shared scope wording for every prompt that binds a reviewer or skeptic to
+// the caller's focus/outOfScope, so the two never drift apart.
+function scopeText(art) {
+  return [
     art.focus && `In scope: ${art.focus}.`,
     art.outOfScope && `Out of scope (ignore): ${art.outOfScope}.`,
   ]
     .filter(Boolean)
     .join(' ')
-  return `You are an adversarial reviewer. Assume the author is over-confident. Find what is WRONG, not what is fine; surface real problems, not style nits. When unsure whether something is a problem, flag it rather than let it pass. Label each finding's confidence honestly: "verified" only if you opened the artifact / traced the code and confirmed it; "speculative" if inferred from a smell or a partial read. ${scope}`.trim()
+}
+
+function adversarialPreamble(art) {
+  return `You are an adversarial reviewer. Assume the author is over-confident. Find what is WRONG, not what is fine; surface real problems, not style nits. When unsure whether something is a problem, flag it rather than let it pass. Label each finding's confidence honestly: "verified" only if you opened the artifact / traced the code and confirmed it; "speculative" if inferred from a smell or a partial read. ${scopeText(art)}`.trim()
 }
 
 function lensPrompt(lens, art) {
@@ -486,12 +494,7 @@ function verifyPrompt(batch, art) {
   const items = batch
     .map(({ f, index }) => `Finding ${index} [${f.severity}]:\nObjection: ${f.objection}\nLocation: ${f.location}`)
     .join('\n\n')
-  const scope = [
-    art.focus && `In scope: ${art.focus}.`,
-    art.outOfScope && `Out of scope (ignore): ${art.outOfScope}.`,
-  ]
-    .filter(Boolean)
-    .join(' ')
+  const scope = scopeText(art)
   const scopeLine = scope ? `\n\nReview scope the reviewers were given: ${scope} Judge each finding against this scope.` : ''
   return `Reviewers raised the following blocker/major objections. Adjudicate EACH one independently — do not let a verdict on one color another.
 
@@ -553,6 +556,14 @@ for (const key of ['focusFile', 'outOfScopeFile']) {
   if (art[key] && UNSAFE_SHELL_PATH.test(art[key])) {
     throw new Error(`args.${key} contains a character that could break out of the courier's shell quoting (", $, backtick, or newline)`)
   }
+}
+// A *File arg with no matching text arg would leave lenses (which read the
+// text arg) and externals (which read the file) seeing different scope.
+if (art.focusFile && !art.focus) {
+  throw new Error('args.focusFile is set but args.focus is empty: lenses and external reviewers would see different scope')
+}
+if (art.outOfScopeFile && !art.outOfScope) {
+  throw new Error('args.outOfScopeFile is set but args.outOfScope is empty: lenses and external reviewers would see different scope')
 }
 
 // External review is ON by default; opt out with externalReview:false (or "no-external").
