@@ -1,25 +1,7 @@
----
-name: adversarial-review
-description: Use when you want independent, adversarial review of a plan, spec/design doc, or PR/diff before committing to it — reviewers prompted to find what's wrong, not rubber-stamp. Triggers on "adversarial review", "independent review", "poke holes in this", "red-team this plan/spec/PR", or when a plan/spec is finalized and about to become implementation.
----
+# Full tier
 
-# Adversarial Review
-
-Run independent, skeptical reviewers against a plan, spec, or diff and return one
-deduped, severity-ranked list of objections. Reviewers are told to find what is
-**wrong** — not to approve. Advisory only: this skill never edits files and never
-blocks.
-
-## When this applies
-
-- A plan, spec, or design doc is finalized and about to drive implementation.
-- A PR / branch diff is ready and you want a hostile read before merge.
-- The user explicitly asks to red-team / poke holes in / independently review an
-  artifact.
-
-If the user just wants a quick opinion, that's not this — this dispatches
-multiple independent reviewers and costs tokens. Use it when the artifact
-matters.
+The router (`SKILL.md`) has already resolved the input, loaded focus, and picked
+this tier; this procedure runs the full panel from there.
 
 ## Procedure
 
@@ -39,17 +21,13 @@ the same Output. `<plugin>` below is the `dev` plugin root: two levels above thi
 skill's base directory (shown when the skill loads). Substitute its absolute path
 into commands; `${CLAUDE_PLUGIN_ROOT}` may be unset when this loads as a skill.
 
-### 1. Identify and pin the artifact
+### 1. Pin the artifact
 
-Determine what is under review and its type: **spec** (a requirements or design
-document), **plan** (an implementation plan: steps, sequencing, tasks), or
-**diff** (code changes: a branch diff or GitHub PR).
-
-An explicit artifact is required: a file path, a diff range like `main...HEAD`,
-a branch, or a PR number or URL. The only allowed inference is a bare invocation on a branch with
-one unambiguous diff against the trunk (use `<trunk>...HEAD`). Anything else: ask
-which artifact, once, then proceed. Never infer by recency or pick the "most
-recently written" spec or plan.
+The router has already resolved the artifact (spec, plan, or diff) and, for a
+PR, run `gh pr view`. A PR URL for a repo other than the one in cwd: called
+with `unattended: true` (`dev:gated-review` and autonomous-feature always pass
+it) fails closed with a clear error instead of asking; otherwise ask once (or
+use an obvious local clone of it).
 
 For a diff, settle `<repoDir>` (absolute; the repo toplevel for a local diff)
 and `<range>`: every git command below runs as `git -C <repoDir> ...`, since the
@@ -60,14 +38,11 @@ HEAD`. For an UNCOMMITTED working-tree diff, warn that any write between digest
 and review (this session, an editor autosave, a hook) will drop the external
 votes, and offer to commit or stash first.
 
-A **GitHub PR number or URL** is a `diff`. Resolve it with
-`gh pr view <num|url> --json number,headRefOid,baseRefName,url,isCrossRepository`;
-a URL for a repo other than this checkout means ask once (or use an obvious local
-clone of it). `<remote>` is the `git remote` whose URL matches the PR's repo, not
-an assumed `origin`. Always `git fetch <remote> <baseRefName>` and set `<range>`
-to `<remote>/<baseRefName>...HEAD` and `pinnedSha` to `headRefOid`. If HEAD
-already equals `headRefOid`, `<repoDir>` is this checkout. Otherwise never check
-out or switch branches in the user's tree (some machines' hooks deny it):
+For a **GitHub PR**, `<remote>` is the `git remote` whose URL matches the PR's
+repo, not an assumed `origin`. Always `git fetch <remote> <baseRefName>` and set
+`<range>` to `<remote>/<baseRefName>...HEAD` and `pinnedSha` to `headRefOid`. If
+HEAD already equals `headRefOid`, `<repoDir>` is this checkout. Otherwise never
+check out or switch branches in the user's tree (some machines' hooks deny it):
 `git fetch <remote> <headRefOid>` (`pull/<n>/head` for a fork head or if that
 fails), then `git worktree add --detach <tmp> <headRefOid>` with `<tmp>` outside
 the repo (the session scratchpad or `mktemp -d`), and `<repoDir>` is `<tmp>`. A
@@ -97,6 +72,11 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
 
 - `artifactType`; `artifactPath` for a spec/plan; `diffRange`, `pinnedSha`, and
   `repoDir` for a diff (`diffRange` = `<range>`); `focus` / `outOfScope` when given.
+- `focusFile` / `outOfScopeFile`: write the focus and out-of-scope text to
+  `<scratchpad>/review-focus.md` / `review-oos.md` (the session scratchpad,
+  else `mktemp -d`) and pass their absolute paths, alongside the `focus` /
+  `outOfScope` text above; the courier passes the paths to
+  `external-review.mjs`.
 - `expectedArtifactSha256`: the digest from step 1.
 - `skillScriptsDir`: `<plugin>/skills/adversarial-review/scripts`, absolute.
 - `externalReview` defaults to **true**; pass `false` only on an explicit "no
@@ -122,6 +102,15 @@ pinned to sonnet at low effort), schema-validated findings, a skeptic verify pas
 on uncorroborated blocker/major findings, and synthesis blind to model identity.
 Present its result per the Output section. `/dev:review-panel` is a thin command
 over this path.
+
+**Extra lens.** When the loaded focus declares `Extra lens: <skill>`, run one
+direct agent alongside the Workflow (or the manual panel), the way deep-review
+runs Alloy today: a `dev:reviewer`-style agent, model sonnet unless `<skill>`
+says otherwise, dispatched from that skill's gate and prompt template at
+`~/.claude/skills/<name>/SKILL.md`, with `repoDir` set to the detached
+worktree. If that path does not exist, print `extra lens: <name>: not_run
+(skill not found)`. Either way, print the mandatory `extra lens:` line (see
+Output).
 
 ### 3. Manual path: dispatch the lens panel
 
@@ -220,8 +209,9 @@ on the same bytes you hashed in step 1, with the Bash timeout at 600000 ms:
     git -C <repoDir> diff <range> | node <plugin>/skills/adversarial-review/scripts/external-review.mjs --type diff --target "<range> @ <pinnedSha>" --cwd <repoDir> --range <range>
 
 For a spec/plan, pipe `cat <absolute path>` with `--type spec|plan --target
-"<path> @ <type>"` and no `--cwd`/`--range`. Pass `--focus` / `--out-of-scope`
-when the panel has them (the Workflow path's couriers do not pass them yet), and `--only <name>` (repeatable) to run only the reviewers the
+"<path> @ <type>"` and no `--cwd`/`--range`. Pass `--focus-file` /
+`--out-of-scope-file` with the same focus/out-of-scope files the Workflow path
+writes to the scratchpad, and `--only <name>` (repeatable) to run only the reviewers the
 user consented to. The script prints
 `{configured, artifactSha256, votes:[vote | {name, __error} | {name, skipped}]}`.
 Count a vote only if its `artifactSha256` equals your `expected` digest and it
@@ -281,7 +271,8 @@ external vote.
 
 ## Output
 
-Present to the user:
+Present per the router's output contract (`SKILL.md`), full-tier lines. That
+contract's panel line draws on this detail:
 
 - **The panel that actually voted**, up front: dispatched vs returned, and which
   reviewers were dropped and why. On the Workflow path, ALWAYS surface
@@ -302,21 +293,5 @@ Then stop. Do not edit the artifact, do not block any next step, do not
 re-review. The user decides what to act on. If they ask you to address findings,
 that's a separate task.
 
-## Anti-patterns
-
-- **Agreeable review.** If reviewers come back with "looks good, minor nits,"
-  the framing was too soft. Reviewers must hunt for real problems.
-- **Redundant lenses.** Three reviewers finding the same class of issue wastes
-  the panel. Keep lenses distinct.
-- **Sequential dispatch.** Reviewers must be independent — dispatch them in one
-  message, never feed one reviewer's output to the next.
-- **Phantom third-party review.** Never imply an external reviewer weighed in
-  when it was unavailable, errored, or dropped; a vote without a matching digest
-  and a well-formed verdict is dropped, never counted.
-- **Same-family "third party".** An endpoint running a Claude model never counts
-  as cross-family corroboration. Independence is the model family, not the tool.
-- **Prestige-weighted scoring.** Score blind to model identity; the signal is
-  corroboration count and cross-family agreement, not the brand name.
-- **Third-party instead of the panel.** An external reviewer never substitutes
-  for the Claude lens panel; "use external" means add it, not swap it. A run with
-  only external findings skipped the panel and is wrong.
+End the output with: `Cheaper next time: say "quick pass" (1 to 4 agents,
+unverified).`
