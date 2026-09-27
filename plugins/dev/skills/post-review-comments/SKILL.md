@@ -1,7 +1,12 @@
+---
+name: post-review-comments
+description: Post review findings as inline GitHub PR comments that land on the right lines (SHA-pinned anchors, one comment per finding, verified via diff_hunk). Use when the user says "post these comments", "post the review", or "post inline comments on the PR", after any review (adversarial-review, a manual read, or another review skill). Posts only on an explicit ask.
+---
+
 # Posting review comments
 
 Reference for turning a finding list into inline GitHub review comments that land on the
-**right lines**. Used whenever review findings get posted to a PR. Work-agnostic (any GitHub repo).
+**right lines**. Used after `adversarial-review` (either tier) or any other review whose findings the user asks to post. Work-agnostic (any GitHub repo).
 
 ## Why this exists
 

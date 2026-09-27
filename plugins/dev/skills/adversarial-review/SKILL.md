@@ -98,7 +98,7 @@ Read `full.md` or `quick.md` (absolute path beside this file, in this skill's ba
 7. A verdict, led by verified findings. Quick: `ship (quick, unverified)` or `don't-ship (quick)`, never a bare `ship`. Full: `ship` or `don't-ship`.
 8. The next-step offer. Full tier: end with `Cheaper next time: say "quick pass" (1 to 4 agents, unverified).`
 
-Chat only. Nothing is posted without an explicit "post"; on that, follow `posting.md` in this directory.
+Chat only. Nothing is posted without an explicit "post"; on that, use the `dev:post-review-comments` skill.
 
 ## Anti-patterns
 
