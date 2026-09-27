@@ -135,5 +135,5 @@ produced in the same task; hand back instead.
 ## No `gh` auth
 
 Without `gh` auth, this tier cannot resolve a PR at all. Fall back to the
-router's local-diff read (4.4 step 4: `git diff <remote>/<default>...HEAD`),
+router's local-diff read (Step 0 item 3: `git diff <remote>/<default>...HEAD`),
 or report that it cannot read the PR.
