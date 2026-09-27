@@ -35,8 +35,9 @@ and pass it as `commit_id`; a comment pinned to a sha stays correctly anchored e
 newer push arrives (GitHub marks it outdated, not misplaced).
 
 **2. Get line numbers from the real file content at that sha, never from `gh pr diff`.**
+`<remote>` is the git remote whose URL matches the PR's repo, per the router (`SKILL.md`), never an assumed `origin`.
 ```bash
-git fetch -q origin <sha>
+git fetch -q <remote> <sha>
 git show <sha>:<path> | grep -nE '<pattern for the line>'
 ```
 `git show <sha>:<file>` is authoritative: its line numbers ARE the file lines GitHub's

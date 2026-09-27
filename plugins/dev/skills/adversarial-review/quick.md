@@ -39,8 +39,9 @@ belongs to the router.
      <headRefOid>:<path>` for context; with no clone (2b), the saved `gh pr
      diff` path plus that area's file list, context via `gh api
      repos/{o}/{r}/contents/<path>?ref=<headRefOid>`.
-   - **Extra lens (scoped, not general).** If the focus declares one gated
-     lens (`Extra lens: <skill>`), resolve it at
+   - **Extra lens (scoped, not general).** `<name>` is the first token after
+     `Extra lens:`; any parenthetical is a note. If the focus declares one
+     gated lens (`Extra lens: <name>`), resolve it at
      `~/.claude/skills/<name>/SKILL.md`; if missing, report `extra lens:
      <name>: not_run (skill not found)`. That skill must supply a gate
      section and a prompt template. The main session applies the gate itself,
@@ -53,10 +54,14 @@ belongs to the router.
      artifact dir at the scratchpad, never the user's tree, and remove the
      worktree afterwards. Dispatch the one extra agent from that skill's
      prompt template as a **second wave after the area reviewers return**,
-     never alongside them, so no more than 3 agents ever run in parallel.
-     This is the only way this tier exceeds 3 agents; the cap with it is 4
-     total. In the no-clone case (2b), the gate cannot run at all: report
-     `extra lens: <name>: not_run (no clone)`.
+     never alongside them, so no more than 3 agents ever run in parallel: use
+     the agent type, model, and tools per the declared skill's Dispatch
+     section (e.g. a lens that writes model files needs a writing agent);
+     default to `dev:reviewer` with `model: "sonnet"` only when the skill
+     names none. This overrides any same-message instruction in the skill's
+     Dispatch section. This is the only way this tier exceeds 3 agents; the
+     cap with it is 4 total. In the no-clone case (2b), the gate cannot run
+     at all: report `extra lens: <name>: not_run (no clone)`.
 
    Each reviewer's brief is fixed: the four diff-lens concerns as one
    checklist, in code order.

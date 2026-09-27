@@ -24,10 +24,10 @@ into commands; `${CLAUDE_PLUGIN_ROOT}` may be unset when this loads as a skill.
 ### 1. Pin the artifact
 
 The router has already resolved the artifact (spec, plan, or diff) and, for a
-PR, run `gh pr view`. A PR URL for a repo other than the one in cwd: called
-with `unattended: true` (`dev:gated-review` and autonomous-feature always pass
-it) fails closed with a clear error instead of asking; otherwise ask once (or
-use an obvious local clone of it).
+PR, run `gh pr view`. A PR URL for a repo other than the one in cwd: a caller
+that invokes this skill with `unattended: true` (no user to answer) fails
+closed with a clear error; otherwise ask once (or use an obvious local clone
+of it).
 
 For a diff, settle `<repoDir>` (absolute; the repo toplevel for a local diff)
 and `<range>`: every git command below runs as `git -C <repoDir> ...`, since the
@@ -72,11 +72,12 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
 
 - `artifactType`; `artifactPath` for a spec/plan; `diffRange`, `pinnedSha`, and
   `repoDir` for a diff (`diffRange` = `<range>`); `focus` / `outOfScope` when given.
-- `focusFile` / `outOfScopeFile`: write the focus and out-of-scope text to
-  `<scratchpad>/review-focus.md` / `review-oos.md` (the session scratchpad,
-  else `mktemp -d`) and pass their absolute paths, alongside the `focus` /
-  `outOfScope` text above; the courier passes the paths to
-  `external-review.mjs`.
+- `focusFile` / `outOfScopeFile`: only when `focus` / `outOfScope` is
+  non-empty, write that text to `<scratchpad>/review-focus.md` /
+  `review-oos.md` (the session scratchpad, else `mktemp -d`) and pass its
+  absolute path, alongside the `focus` / `outOfScope` text above; the courier
+  passes the path to `external-review.mjs`. Never write or pass a `*File` arg
+  for an empty text arg: the workflow throws on a file without matching text.
 - `expectedArtifactSha256`: the digest from step 1.
 - `skillScriptsDir`: `<plugin>/skills/adversarial-review/scripts`, absolute.
 - `externalReview` defaults to **true**; pass `false` only on an explicit "no
@@ -104,10 +105,13 @@ Present its result per the Output section. `/dev:review-panel` is a thin command
 over this path.
 
 **Extra lens.** When the loaded focus declares `Extra lens: <skill>`, run one
-direct agent alongside the Workflow (or the manual panel), the way deep-review
-runs Alloy today: a `dev:reviewer`-style agent, model sonnet unless `<skill>`
-says otherwise, dispatched from that skill's gate and prompt template at
-`~/.claude/skills/<name>/SKILL.md`, with `repoDir` set to `<repoDir>` from
+direct agent alongside the Workflow (or the manual panel), the way a declared
+extra lens always ran alongside the panel: agent type, model, and tools per
+the declared skill's Dispatch section (e.g. a lens that writes model files
+needs a writing agent); default to `dev:reviewer` with `model: "sonnet"` only
+when the skill names none. This overrides any same-message instruction in the
+skill's Dispatch section. Dispatch from that skill's gate and prompt template
+at `~/.claude/skills/<name>/SKILL.md`, with `repoDir` set to `<repoDir>` from
 step 1. The main session applies the skill's gate before dispatch, as in the
 quick tier. If that path does not exist, print `extra lens: <name>: not_run
 (skill not found)`. Either way, print the mandatory `extra lens:` line (see
@@ -211,9 +215,10 @@ on the same bytes you hashed in step 1, with the Bash timeout at 600000 ms:
 
 For a spec/plan, pipe `cat <absolute path>` with `--type spec|plan --target
 "<path> @ <type>"` and no `--cwd`/`--range`. Pass `--focus-file` /
-`--out-of-scope-file` with the same focus/out-of-scope files the Workflow path
-writes to the scratchpad, and `--only <name>` (repeatable) to run only the reviewers the
-user consented to. The script prints
+`--out-of-scope-file`, only when the corresponding text is non-empty, with the
+same focus/out-of-scope files the Workflow path writes to the scratchpad
+(never pass either flag pointing at an empty file), and `--only <name>`
+(repeatable) to run only the reviewers the user consented to. The script prints
 `{configured, artifactSha256, votes:[vote | {name, __error} | {name, skipped}]}`.
 Count a vote only if its `artifactSha256` equals your `expected` digest and it
 has a boolean `verdict.ship`, a `verdict.reason`, and findings with every schema

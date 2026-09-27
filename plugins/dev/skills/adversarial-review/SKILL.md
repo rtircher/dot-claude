@@ -35,7 +35,7 @@ Determine the artifact type: **spec** (a requirements or design document), **pla
 
 An explicit artifact is required: a file path, a diff range like `main...HEAD`, a branch, or a PR number or URL. The only allowed inference is a bare invocation on a branch with one unambiguous diff against the trunk (use `<trunk>...HEAD`). Anything else: ask which artifact, once, then proceed. Never infer by recency or pick the "most recently written" spec or plan.
 
-1. **Resolve.** Run `gh pr view <n|url> --json number,url,headRefOid,headRefName,baseRefName,files,additions,deletions,isDraft,title`. A URL for a repo other than cwd: the quick tier proceeds remotely (2b); the full tier needs a checkout, reading via a detached worktree, see `full.md` step 1 (fails closed under `unattended: true`, else asks once).
+1. **Resolve.** Run `gh pr view <n|url> --json number,url,headRefOid,headRefName,baseRefName,files,additions,deletions,isDraft,title`. A URL for a repo other than cwd: the quick tier proceeds remotely (2b); the full tier needs a checkout, reading via a detached worktree, see `full.md` step 1 (a caller that invokes this skill with `unattended: true`, no user to answer, fails closed with a clear error on a PR URL for another repo; otherwise ask once).
 2. **Quick reads, no checkout:**
    - a. In a clone: `<remote>` is the `git remote` matching the PR's repo, never an assumed `origin`. `git fetch <remote> <headRefOid>` (fall back to `pull/<n>/head`) and fetch the base. Reviewers read slices with `git diff <remote>/<base>...<headRefOid> -- <files>` and context with `git show <headRefOid>:<path>`. Save the full `git diff` once to the scratchpad, unused unless the extra lens (`quick.md`) fires.
    - b. Not in a clone (including cloud on a different repo): save `gh pr diff <n>` once to the scratchpad; each area reviewer gets that path plus its file list. Context files come from `gh api repos/{o}/{r}/contents/<path>?ref=<headRefOid>`.
@@ -45,11 +45,11 @@ An explicit artifact is required: a file path, a diff range like `main...HEAD`, 
 
 A `## Review focus` heading in an existing root context file. Check, in order, `CLAUDE.local.md`, then `AGENTS.md`, then `CLAUDE.md`; the **first one with the heading wins**, no concatenation.
 
-Tracked files are always read at the PR's base, never head, never whatever is checked out: in a clone (2a), `git show <remote>/<baseRefName>:<file>`; no clone (2b), `gh api repos/{o}/{r}/contents/<file>?ref=<baseRefName>`; local diff (3), `git show <remote>/<default>:<file>`; full's worktree, the same base read. If the base ref is not present locally, fetch it first; if that fetch fails, read the tracked file from the working tree and print `focus: read from working tree`.
+Tracked files are always read at the PR's base, never head, never whatever is checked out: in a clone (2a), `git show <remote>/<baseRefName>:<file>`; no clone (2b), `gh api repos/{o}/{r}/contents/<file>?ref=<baseRefName>`; local diff (3), `git show <remote>/<default>:<file>`; full's worktree, the same base read. If the base ref is not present locally, fetch it first; if that fetch fails, read the tracked file from the working tree and record `focus: read from working tree` for the output contract's first-line `focus:` field.
 
-`CLAUDE.local.md` is untracked, so it is read from disk at the cwd repo root whatever is on disk right now, including in the full-tier worktree case (read from the original cwd repo root, not the detached worktree, which would not carry an untracked file). In the no-clone case there is no disk to read it from: it is skipped, Areas/Migrations/Extra lens fall back to none declared, and the tier line prints `focus: unavailable (no clone)`.
+`CLAUDE.local.md` is untracked, so it is read from disk at the cwd repo root whatever is on disk right now, including in the full-tier worktree case (read from the original cwd repo root, not the detached worktree, which would not carry an untracked file). In the no-clone case there is no disk to read it from: it is skipped, Areas/Migrations/Extra lens fall back to none declared, and the output contract's first-line `focus:` field reads `unavailable (no clone)`. Otherwise that field names the file the focus came from (`CLAUDE.local.md`, `AGENTS.md`, or `CLAUDE.md`), or `none` when no file had the heading.
 
-The section is prose bullets plus optional `Areas:`, `Migrations:`, `Extra lens: <skill>` lines. Split those three out; pass the rest verbatim as `focus`. `Areas:`/`Migrations:` feed only the quick tier's bucketing; `Extra lens:` feeds the gated extra agent on either tier. Warn, never truncate, past 40 lines.
+The section is prose bullets plus optional `Areas:`, `Migrations:`, `Extra lens: <name>` lines; `<name>` is the first token after `Extra lens:`, and any parenthetical is a note. Split those three out; pass the rest verbatim as `focus`. `Areas:`/`Migrations:` feed only the quick tier's bucketing; `Extra lens:` feeds the gated extra agent on either tier. Warn, never truncate, past 40 lines.
 
 Caller-supplied focus (an explicit `focus` arg from `dev:gated-review` or autonomous-feature) is appended to the section above.
 
@@ -62,8 +62,8 @@ Top to bottom, first match wins.
 | Called by `dev:gated-review`, `dev:review-workflow`, autonomous-feature, or `/dev:review-panel` | full |
 | Artifact is a spec, plan, or design doc | full (quick is diff-only) |
 | The user says adversarial, independent, red-team, poke holes, panel, external, "full review", or "deep review" | full |
-| A bare PR URL or number, "review this PR", "code review" | full |
 | The user says "quick pass", "quick review", "quick look", or "quick check" | quick |
+| A bare PR URL or number, "review this PR", "code review" | full |
 | Anything else that asks to review a diff | full |
 
 - A bare PR URL or number defaults to full; quick fires only on its explicit phrase and never escalates on its own.
@@ -89,7 +89,7 @@ Read `full.md` or `quick.md` (absolute path beside this file, in this skill's ba
 
 ## Output contract
 
-1. First line: `tier: quick|full · agents: N · <single-pass|areas: a, b, c> · externals: <who | none (quick) | shortfall (reason)>`. `N` includes the focus-declared extra lens when it fired.
+1. First line: `tier: quick|full · agents: N · <single-pass|areas: a, b, c> · externals: <who | none (quick) | shortfall (reason)> · focus: <file it came from | none | unavailable (no clone) | read from working tree>`. `N` includes the focus-declared extra lens when it fired.
 2. Full tier only: `panel: dispatched N lenses, returned M; missing: …`. A missing lens caps the verdict at don't-ship-yet.
 3. Whenever the focus declares an `Extra lens:`, a mandatory line: `extra lens: <name>: ran | not applicable (<reason>) | not_run (<reason>)`.
 4. A reviewer orientation list of 3 to 6 `file:line` spots, written by the main session from the PR metadata and diff it already fetched, emitted in the same message as the dispatch, before agents return.

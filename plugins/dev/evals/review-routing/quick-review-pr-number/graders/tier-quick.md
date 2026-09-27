@@ -2,6 +2,7 @@
 type: regex
 target: last_message
 pattern: "^tier: quick"
+flags: m
 weight: 1
 ---
 

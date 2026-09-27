@@ -10,7 +10,7 @@ built-in `/code-review` skill is never invoked while deciding the tier.
 Run it with:
 
 ```
-claude plugin eval plugins/dev --case 'review-routing/*'
+claude plugin eval plugins/dev --tag review-routing
 ```
 
 Each run spawns real, billed Claude agent runs (3 runs per case by default).

@@ -1,6 +1,6 @@
 ---
 description: Guaranteed adversarial review. Claude lens panel plus every cross-family external reviewer this machine configures, run for real
-allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(sha256sum:*), Bash(shasum:*), Bash(node:*), Bash(cat:*), Bash(mktemp:*), Read, Glob, Grep, Workflow, Agent
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh api:*), Bash(gh repo view:*), Bash(sha256sum:*), Bash(shasum:*), Bash(node:*), Bash(cat:*), Bash(mktemp:*), Read, Write, Glob, Grep, Workflow, Agent
 ---
 
 Run one adversarial-review pass with external review ON by default (every
