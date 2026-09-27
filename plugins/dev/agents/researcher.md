@@ -1,6 +1,7 @@
 ---
 name: researcher
 description: Read-only research and analysis agent — no file edits, no git mutations
+model: sonnet
 tools:
   - Read
   - Glob

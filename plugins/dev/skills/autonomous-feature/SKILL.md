@@ -256,7 +256,8 @@ defaulting: `dev:coder` (worktree-isolated) for implementer tasks
 that edit files in parallel, `dev:reviewer` for review tasks (adversarial
 stance and findings schema baked in), `dev:researcher` or `Explore` for
 read-only research and search. Tiers follow the conventions' routing table
-(omit `model:` for sonnet, `model: fable` for hard reasoning, never `opus`);
+(sonnet by default, `model: fable` for hard reasoning, `model: opus` only as
+an escalation);
 review phases route themselves. Follow the
 project's own conventions (TDD, verification) as those skills direct.
 

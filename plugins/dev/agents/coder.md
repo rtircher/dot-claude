@@ -1,6 +1,7 @@
 ---
 name: coder
 description: Coding agent with worktree isolation for parallel-safe file edits and commits
+model: sonnet
 isolation: worktree
 tools:
   - Read

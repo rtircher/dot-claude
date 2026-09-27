@@ -21,26 +21,34 @@ non-trivial questions about the code:
 
 ## Model selection
 
-- Refer to models by **unversioned alias** (`fable`, `sonnet`), never a
+- Refer to models by **unversioned alias** (`opus`, `sonnet`, `fable`), never a
   version-pinned id, including in config and docs. The Agent tool accepts only
-  aliases. Never `opus`: it resolves to Opus 5, which regressed on our work.
-  Never `haiku`.
+  aliases. Never `haiku`.
 <!-- main-session-only: start -->
-- **Fixed routing, not per-dispatch judgment.** Two tiers exist:
-    - **Omit `model:` for sonnet.** The main session runs sonnet (since
-      2026-09-15: faster and fewer hallucinations than Opus 4.8 on our work), so
-      omitting `model:` gives sonnet: orchestration, implementation, research,
-      debugging, mechanical work. Our `coder`/`researcher` agent defs carry no
-      `model:` frontmatter for this reason.
+- **Fixed routing, not per-dispatch judgment.** The main session (coordinator)
+  runs `opus` (Opus 5.5, since 2026-09-27: clearly better than Opus 5 and
+  Sonnet 5 at orchestration and judgment). Subagents use three tiers:
+    - **`sonnet` is the subagent default:** implementation, research,
+      debugging, mechanical work, cheap loops. Omitting `model:` gives sonnet,
+      *not* the session's opus, because `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` is
+      set in settings and our `coder`/`researcher` defs carry `model: sonnet`.
+      Built-in agent types without their own model only get sonnet through
+      that env var, so on a machine without it pass `model: sonnet` explicitly.
     - **Pass `model: fable` for hard reasoning.** Cross-cutting review,
       feasibility, security, subtle design judgment: wherever nuance decides the
       answer. Bursty advisor capacity, never an always-on loop; its weekly cap is
       the scarce resource.
+    - **Pass `model: opus` as the escalation between them,** never as a
+      default: a sonnet task that hit a reasoning ceiling (a BLOCKED
+      re-dispatch), or fable-grade work while fable's cap is tight.
+- **Usage is the binding constraint.** Every opus or fable dispatch spends the
+  same limits the coordinator runs on; over-dispatching has hit them before.
+  Opus is opt-in by name, never reached by omission.
 - **Adversarial-review panels route themselves:** `dev:review-workflow` pins
   every slot in its `DEFAULT_TIERS` (mechanical lenses sonnet, reasoning lenses
-  and verify skeptics fable) and rejects any other alias. Don't restate tiers
-  there; pass `tiers` only to override one named key, and never downgrade the
-  verify skeptics.
+  and verify skeptics fable) and accepts only `fable`/`opus`/`sonnet`. Don't
+  restate tiers there; pass `tiers` only to override one named key, and never
+  downgrade the verify skeptics.
 
 ## Delegation
 

@@ -61,9 +61,9 @@
  *                                    // degradation (gated-review rounds 2+, stale digest).
  *                                    // Advisory only: the workflow never blocks on it.
  *   tiers?: {                        // optional override of one DEFAULT_TIERS key;
- *     [key: string]: {               // normally omitted. Any alias other than 'fable' or 'sonnet' throws.
- *       model?: string,              // unversioned alias ('fable' | 'sonnet'); never 'opus',
- *                                    // which resolves to Opus 5
+ *     [key: string]: {               // normally omitted. Any alias other than 'fable', 'opus', or 'sonnet' throws.
+ *       model?: string,              // unversioned alias ('fable' | 'opus' | 'sonnet'); 'opus'
+ *                                    // is an override only (e.g. fable's cap is tight), never a default
  *       effort?: string,             // 'low'|'medium'|'high'|'xhigh'|'max'
  *     },                             // keys: a lens key (see LENS_PANELS; diffs have
  *   },                               // their own panel) or 'verify' (skeptics).
@@ -230,8 +230,8 @@ function gitPrefix(art) {
 // Fixed routing, every slot named (conventions, "Model selection"): mechanical
 // lenses on sonnet; reasoning lenses, the diff correctness and testing lenses,
 // and the verify skeptics on fable. Nothing inherits: the main session runs
-// sonnet, so an omitted model would be a downgrade, not the stronger tier it
-// once meant. args.tiers overrides one key; never downgrade the verify skeptics.
+// opus, so an omitted model would put every slot on the coordinator tier and
+// multiply usage across the fan-out. args.tiers overrides one key; never downgrade the verify skeptics.
 const DEFAULT_TIERS = {
   'hidden-assumptions': { model: 'fable' },
   gaps: { model: 'sonnet' },
@@ -250,8 +250,8 @@ const DEFAULT_TIERS = {
 // caller-supplied override for the same key.
 function tierOpts(art, key) {
   const t = { ...(DEFAULT_TIERS[key] || {}), ...((art.tiers || {})[key] || {}) }
-  // The only two tiers that exist for reviewers; enforced here so prose need not repeat it.
-  if (t.model && !['fable', 'sonnet'].includes(t.model)) throw new Error(`tiers.${key}.model must be 'fable' or 'sonnet' (got '${t.model}'); 'opus' resolves to Opus 5`)
+  // The only tiers that exist for reviewers; enforced here so prose need not repeat it.
+  if (t.model && !['fable', 'opus', 'sonnet'].includes(t.model)) throw new Error(`tiers.${key}.model must be 'fable', 'opus', or 'sonnet' (got '${t.model}')`)
   return { ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}) }
 }
 

@@ -19,7 +19,7 @@
  * review round), plus:
  *   maxRounds?: number   // default 3
  *   fixConventions?: string  // optional repo conventions handed to the fix agent
- *   tiers?.fix: { model?, effort? }  // omit for sonnet; 'fable' for a fix pass over reasoning-heavy findings; never 'opus'
+ *   tiers?.fix: { model?, effort? }  // default sonnet; 'fable' for a fix pass over reasoning-heavy findings, 'opus' as the escalation between them
  *
  * NOTE: the fix step MUTATES the artifact (edits the doc, or code in repoDir). For
  * a diff whose range is two committed branches, the fix agent must commit for the
@@ -113,11 +113,13 @@ while (true) {
   // agent needs write tools. In autonomous-feature the coordinator runs this whole
   // loop inside one worktree, so isolation is handled there, not per fix agent.
   const fixTier = (a.tiers || {}).fix || {}
-  if (fixTier.model && !['fable', 'sonnet'].includes(fixTier.model)) throw new Error(`tiers.fix.model must be 'fable' or 'sonnet' (got '${fixTier.model}')`)
+  if (fixTier.model && !['fable', 'opus', 'sonnet'].includes(fixTier.model)) throw new Error(`tiers.fix.model must be 'fable', 'opus', or 'sonnet' (got '${fixTier.model}')`)
   await agent(fixPrompt(a, blockers, round), {
     label: `fix:round${round}`,
     phase: `Round ${round}`,
-    ...(fixTier.model ? { model: fixTier.model } : {}),
+    // Pinned, never inherited: the session runs opus, so an omitted model would
+    // silently put every fix pass on the coordinator tier.
+    model: fixTier.model || 'sonnet',
     ...(fixTier.effort ? { effort: fixTier.effort } : {}),
   })
 }

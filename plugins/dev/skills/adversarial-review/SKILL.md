@@ -113,7 +113,7 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
 - `tiers`: normally omitted. `DEFAULT_TIERS` in
   `<plugin>/workflows/adversarial-review.js` names every slot
   (mechanical lenses sonnet, reasoning lenses and the verify skeptics fable) and
-  rejects any other alias; no slot inherits the session model. An override
+  accepts only `fable`/`opus`/`sonnet`; no slot inherits the session model. An override
   replaces one key (a lens key or `verify`; values `{model, effort}`) and needs a
   concrete reason about this artifact. Never downgrade the verify skeptics.
 
@@ -134,7 +134,7 @@ redundant copy, and all of a type's lenses run.
 Dispatch one `Agent` per lens, **all in a single message** so they run
 concurrently with fresh, independent context, each as a read-only `dev:reviewer`
 agent with `model:` from `DEFAULT_TIERS` for its key (never omitted, never
-`opus`). Its definition carries the adversarial stance and the findings schema,
+inherited from the opus session). Its definition carries the adversarial stance and the findings schema,
 so the prompt needs only the artifact (the file path, or for a diff: run
 `git -C <repoDir> diff <range>` and read files by absolute path under
 `<repoDir>`), its one lens `key` and `brief`, and any focus and
