@@ -41,7 +41,7 @@ document), **plan** (an implementation plan: steps, sequencing, tasks), or
 **diff** (code changes: a branch diff or GitHub PR).
 
 An explicit artifact is required: a file path, a diff range like `main...HEAD`,
-or a PR/branch. The only allowed inference is a bare invocation on a branch with
+a branch, or a PR number or URL. The only allowed inference is a bare invocation on a branch with
 one unambiguous diff against the trunk (use `<trunk>...HEAD`). Anything else: ask
 which artifact, once, then proceed. Never infer by recency or pick the "most
 recently written" spec or plan.
@@ -51,6 +51,21 @@ reviews only that form; other shapes drop the Codex vote with a refusal), and pi
 its SHA with `git rev-parse --short HEAD`. For an UNCOMMITTED working-tree diff,
 warn that any write between digest and review (this session, an editor autosave,
 a hook) will drop the external votes, and offer to commit or stash first.
+
+A **GitHub PR number or URL** is a `diff`. Resolve it with
+`gh pr view <num|url> --json number,headRefOid,headRefName,baseRefName,url`; a URL
+for a repo other than this checkout means ask once (or use an obvious local clone
+of it). If HEAD already equals `headRefOid`, review this checkout as is.
+Otherwise never check out or switch branches in the user's tree (some machines'
+hooks deny it): `git fetch origin <headRefOid>` (or `pull/<n>/head` if that
+fails), `git fetch origin <baseRefName>`, then
+`git worktree add --detach <scratch path> <headRefOid>`. Set `repoDir` to that
+worktree, the range to `origin/<baseRefName>...HEAD`, and `pinnedSha` to
+`headRefOid`; compute the digest below from inside it, and
+`git worktree remove <scratch path>` once the review returns. Gated review
+commits fixes, so it needs the PR branch checked out in the working tree: if HEAD
+is not the PR head, ask the user to check it out with their own tooling (e.g.
+`gt co`) rather than switching it yourself.
 
 Compute the digest from the repo root. It pins the exact bytes every external
 reviewer must have reviewed:

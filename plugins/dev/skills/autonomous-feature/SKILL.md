@@ -180,7 +180,9 @@ consolidated structured result rather than flooding the coordinator with
 per-reviewer chatter, which suits the thin-coordinator discipline above, and its
 gate maps onto these confidence gates. A Workflow runs headless and cannot pause
 to disambiguate or to ask consent, so pass the full artifact contract up front:
-type, file path or diff range, repo, focus, out-of-scope, plus (because
+type, file path or diff range, repo, focus, out-of-scope (a PR artifact
+resolves per the skill's step 1, but gated review commits fixes, so ask the
+user to check out the PR branch if HEAD is not its head), plus (because
 gated-review forwards args unchanged into `dev:review-workflow`) the
 external-review contract:
 `skillScriptsDir: "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts"`

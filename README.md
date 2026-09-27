@@ -19,7 +19,7 @@ holds only what generalizes.
 | You want | Use | Where it runs |
 | -------- | --- | ------------- |
 | A quick review; you decide the fixes | Just ask ("poke holes in this plan", "adversarially review this diff"). The `adversarial-review` skill runs the `dev:review-workflow` engine when the Workflow tool exists, else its manual path. | Local and cloud |
-| A guaranteed full review | `/dev:review-panel <file \| main...HEAD>`: no artifact guessing, external reviewers on, reports exactly who voted. | Local and cloud (manual path there) |
+| A guaranteed full review | `/dev:review-panel <file \| main...HEAD \| PR number/URL>`: no artifact guessing, external reviewers on, reports exactly who voted. | Local and cloud (manual path there) |
 | Review and fix until clean | Ask for a gated review: the `dev:gated-review` workflow loops review, fix, re-review for up to 3 rounds and returns clean or the contested findings. | Local only (needs the Workflow tool) |
 | A whole feature end to end | `/dev:autonomous-feature`, which runs gated review on the spec, the plan, and the diff itself. | Local and cloud |
 

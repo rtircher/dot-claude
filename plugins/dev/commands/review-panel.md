@@ -1,6 +1,6 @@
 ---
 description: Guaranteed adversarial review. Claude lens panel plus every cross-family external reviewer this machine configures, run for real
-allowed-tools: Bash(git:*), Bash(sha256sum:*), Bash(node:*), Bash(cat:*), Read, Glob, Grep, Workflow, Agent
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(sha256sum:*), Bash(node:*), Bash(cat:*), Read, Glob, Grep, Workflow, Agent
 ---
 
 Run one adversarial-review pass with external review ON by default (every
@@ -12,7 +12,9 @@ digest, and any reviewer that could not run is reported, never a phantom
 Contract, stricter than a bare use of the skill:
 
 - `$ARGUMENTS` names ONE explicit artifact: a file path (spec/plan), a diff
-  range like `main...HEAD`, or a PR/branch; plus an optional "no external" /
+  range like `main...HEAD`, a branch, or a GitHub PR number or URL (resolved
+  per the skill's step 1, in a temporary worktree, never by switching the
+  user's branch); plus an optional "no external" /
   "claude only" modifier. The only allowed inference is a bare invocation on a
   branch with one unambiguous diff against the trunk. Anything else: ask once,
   then proceed.
