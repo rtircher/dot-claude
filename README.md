@@ -14,6 +14,20 @@ holds only what generalizes.
 | `conventions` | Always-on working-style rules (TDD, git hygiene, review gates, no-heredoc, model selection), injected into every session via a `SessionStart` hook and, minus the orchestration sections, into code-writing and code-judging subagents (the `dev` plugin's `coder`/`researcher`/`reviewer` and the built-in `general-purpose`) via a `SubagentStart` hook whose `matcher` in [`hooks.json`](plugins/conventions/hooks/hooks.json) selects those agent types; Explore, Plan, and lens reviewers get nothing. Edit [`conventions.md`](plugins/conventions/conventions.md). |
 | `dev`         | On-demand software-development tooling: the `design-doc`, `adversarial-review`, and `autonomous-feature` **skills**, the `/dev:babysit`, `/dev:pr-pruner`, and `/dev:post-merge-sweeper` PR-loop **commands** plus the `/dev:handover` + `/dev:takeover` + `/dev:respawn` session-continuity ones (respawn works from cloud sessions too, handing over via a pushed `handover/<slug>` branch and a copy-paste resume prompt) and the `/dev:init-cloud-parity` **cloud-parity scaffold**, the `/dev:setup-local-reviewer` **local-reviewer provisioner** (Ollama + OpenCode sized to the machine, feeding adversarial-review's external-review path), and the `coder` (worktree-isolated) + `researcher` (read-only) **agents** for parallel subagent work. |
 
+## Adversarial review: which entry point
+
+| You want | Use | Where it runs |
+| -------- | --- | ------------- |
+| A quick review; you decide the fixes | Just ask ("poke holes in this plan", "adversarially review this diff"). The `adversarial-review` skill runs the `dev:review-workflow` engine when the Workflow tool exists, else its manual path. | Local and cloud |
+| A guaranteed full review | `/dev:review-panel <file \| main...HEAD>`: no artifact guessing, external reviewers on, reports exactly who voted. | Local and cloud (manual path there) |
+| Review and fix until clean | Ask for a gated review: the `dev:gated-review` workflow loops review, fix, re-review for up to 3 rounds and returns clean or the contested findings. | Local only (needs the Workflow tool) |
+| A whole feature end to end | `/dev:autonomous-feature`, which runs gated review on the spec, the plan, and the diff itself. | Local and cloud |
+
+Don't pick `dev:review-workflow` from the skill list directly: it needs the args
+(artifact digest, reviewer names) that the skill and `/dev:review-panel` assemble.
+In cloud sessions neither workflow can run (there is no Workflow tool), even though
+both appear in the skill list.
+
 ## Enable it
 
 Register the marketplace and turn on the plugins in a `settings.json` —
