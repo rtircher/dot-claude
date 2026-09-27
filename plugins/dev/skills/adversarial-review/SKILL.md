@@ -31,21 +31,21 @@ Rounds exist only in gated review; the full tier's per-invocation budget is not 
 
 `<plugin>` below is the `dev` plugin root: two levels above this skill's base directory. Substitute its absolute path into commands; `${CLAUDE_PLUGIN_ROOT}` may be unset when this loads as a skill.
 
+Determine the artifact type: **spec** (a requirements or design document), **plan** (an implementation plan: steps, sequencing, tasks), or **diff** (code changes: a branch diff or GitHub PR).
+
 An explicit artifact is required: a file path, a diff range like `main...HEAD`, a branch, or a PR number or URL. The only allowed inference is a bare invocation on a branch with one unambiguous diff against the trunk (use `<trunk>...HEAD`). Anything else: ask which artifact, once, then proceed. Never infer by recency or pick the "most recently written" spec or plan.
 
-1. **Resolve.** Run `gh pr view <n|url> --json number,url,headRefOid,headRefName,baseRefName,files,additions,deletions,isDraft,title`. A URL for a repo other than cwd: the quick tier proceeds remotely (2b); the full tier needs a checkout (`full.md` step 1: fails closed under `unattended: true`, else asks once).
+1. **Resolve.** Run `gh pr view <n|url> --json number,url,headRefOid,headRefName,baseRefName,files,additions,deletions,isDraft,title`. A URL for a repo other than cwd: the quick tier proceeds remotely (2b); the full tier needs a checkout, reading via a detached worktree, see `full.md` step 1 (fails closed under `unattended: true`, else asks once).
 2. **Quick reads, no checkout:**
    - a. In a clone: `<remote>` is the `git remote` matching the PR's repo, never an assumed `origin`. `git fetch <remote> <headRefOid>` (fall back to `pull/<n>/head`) and fetch the base. Reviewers read slices with `git diff <remote>/<base>...<headRefOid> -- <files>` and context with `git show <headRefOid>:<path>`. Save the full `git diff` once to the scratchpad, unused unless the extra lens (`quick.md`) fires.
    - b. Not in a clone (including cloud on a different repo): save `gh pr diff <n>` once to the scratchpad; each area reviewer gets that path plus its file list. Context files come from `gh api repos/{o}/{r}/contents/<path>?ref=<headRefOid>`.
-4. **Local diff, no PR:** `git diff <remote>/<default>...HEAD` in cwd, where `<default>` is `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` and `<remote>` is `origin`. The size gate uses `--numstat`.
-
-(Step 3, full's detached-worktree checkout, lives in `full.md`; only full needs it.)
+3. **Local diff, no PR:** `git diff <remote>/<default>...HEAD` in cwd, where `<default>` is `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` and `<remote>` is `origin`. The size gate uses `--numstat`.
 
 ## Load focus
 
 A `## Review focus` heading in an existing root context file. Check, in order, `CLAUDE.local.md`, then `AGENTS.md`, then `CLAUDE.md`; the **first one with the heading wins**, no concatenation.
 
-Tracked files are always read at the PR's base, never head, never whatever is checked out: in a clone (2a), `git show <remote>/<baseRefName>:<file>`; no clone (2b), `gh api repos/{o}/{r}/contents/<file>?ref=<baseRefName>`; local diff (4), `git show <remote>/<default>:<file>`; full's worktree, the same base read. If the base ref is not present locally, fetch it first; if that fetch fails, read the tracked file from the working tree and print `focus: read from working tree`.
+Tracked files are always read at the PR's base, never head, never whatever is checked out: in a clone (2a), `git show <remote>/<baseRefName>:<file>`; no clone (2b), `gh api repos/{o}/{r}/contents/<file>?ref=<baseRefName>`; local diff (3), `git show <remote>/<default>:<file>`; full's worktree, the same base read. If the base ref is not present locally, fetch it first; if that fetch fails, read the tracked file from the working tree and print `focus: read from working tree`.
 
 `CLAUDE.local.md` is untracked, so it is read from disk at the cwd repo root whatever is on disk right now, including in the full-tier worktree case (read from the original cwd repo root, not the detached worktree, which would not carry an untracked file). In the no-clone case there is no disk to read it from: it is skipped, Areas/Migrations/Extra lens fall back to none declared, and the tier line prints `focus: unavailable (no clone)`.
 
@@ -75,9 +75,13 @@ Top to bottom, first match wins.
 | Context | Quick | Full |
 |---|---|---|
 | Local main session | as designed | Workflow path |
-| Cloud main session (no `Workflow`) | as designed; uses only `Agent`, `gh`, `git` | manual path: lens agents, externals via Bash when configured, no verify; single-reviewer blockers marked `unverified` |
+| Cloud main session (no `Workflow`) | as designed; uses only `Agent`, `gh`, `git` | manual path: lens agents, externals via Bash when configured, no verify; single-reviewer blockers marked `unverified (single reviewer, manual path)` |
 | Subagent (no `Agent`) | inline single pass, labelled `tier: quick (inline, 0 agents)`; only for someone else's PR, never a self-review (hand back instead) | stop and tell the caller to run it from the main session |
 | Gated review | n/a | local only |
+
+- A single pass is honest only when labelled: quick's subagent row is the one place this design lets a single pass stand in, and only because it says so.
+- Self-review stays refused either way; it defeats the adversarial stance.
+- Cloud without `gh` auth: quick falls back to the local-diff step above, or reports it cannot read the PR.
 
 ## Run the tier
 

@@ -107,8 +107,9 @@ over this path.
 direct agent alongside the Workflow (or the manual panel), the way deep-review
 runs Alloy today: a `dev:reviewer`-style agent, model sonnet unless `<skill>`
 says otherwise, dispatched from that skill's gate and prompt template at
-`~/.claude/skills/<name>/SKILL.md`, with `repoDir` set to the detached
-worktree. If that path does not exist, print `extra lens: <name>: not_run
+`~/.claude/skills/<name>/SKILL.md`, with `repoDir` set to `<repoDir>` from
+step 1. The main session applies the skill's gate before dispatch, as in the
+quick tier. If that path does not exist, print `extra lens: <name>: not_run
 (skill not found)`. Either way, print the mandatory `extra lens:` line (see
 Output).
 
@@ -271,27 +272,18 @@ external vote.
 
 ## Output
 
-Present per the router's output contract (`SKILL.md`), full-tier lines. That
-contract's panel line draws on this detail:
-
-- **The panel that actually voted**, up front: dispatched vs returned, and which
-  reviewers were dropped and why. On the Workflow path, ALWAYS surface
-  `external.ran`, `external.dropped` (each absent reviewer with its reason), and
-  `external.shortfall` (external review was on, the machine configures external
-  reviewers, and nothing external voted; it fires even on caller config drops, so
-  a Claude-only degradation is never silent); on the manual path, report the same
-  facts from your own fold. `external.configured: false` is a Claude-only panel,
-  not a failure unless the user asked for external review; then append step 4's
-  setup hint.
-- The ranked objection list, verified findings first and speculative ones grouped
-  after, each with its corroboration rather than model names, and on the manual
-  path the step 5 `unverified (single reviewer, manual path)` mark.
-- The verdicts: per lens, plus per external reviewer. Source attribution only on
-  request.
+Present per the router's output contract (`SKILL.md`), full-tier lines. Item 2
+(the panel line) carries this full-tier detail: on the Workflow path, ALWAYS
+surface `external.ran`, `external.dropped` (each absent reviewer with its
+reason), and `external.shortfall` (external review was on, the machine
+configures external reviewers, and nothing external voted; it fires even on
+caller config drops, so a Claude-only degradation is never silent); on the
+manual path, report the same facts from your own fold. `external.configured:
+false` is a Claude-only panel, not a failure unless the user asked for
+external review; then append step 4's setup hint. Item 3 is the mandatory
+extra-lens line above. The step 5 `unverified (single reviewer, manual path)`
+mark feeds the contract's punch list on the manual path.
 
 Then stop. Do not edit the artifact, do not block any next step, do not
 re-review. The user decides what to act on. If they ask you to address findings,
 that's a separate task.
-
-End the output with: `Cheaper next time: say "quick pass" (1 to 4 agents,
-unverified).`
