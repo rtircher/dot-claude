@@ -28,9 +28,13 @@ top of it.** Every artifact type (spec, plan, and diff) gets its lens panel, and
 it is never skipped, even when the user explicitly asks for external review.
 
 Use the **Workflow path** (step 2) whenever the `Workflow` tool is available.
-Use the **manual path** (steps 3 to 5) only when it is not (cloud sessions and
-subagents have no Workflow tool) or when the workflow run itself errors, never
-because the manual path feels quicker. Both paths run the same panel and end in
+Use the **manual path** (steps 3 to 5) only when it is not (cloud sessions have
+no Workflow tool) or when the workflow run itself errors, never because the
+manual path feels quicker. The manual path needs the `Agent` tool. If neither
+`Workflow` nor `Agent` is available (as in `dev:coder`, `dev:reviewer`,
+`dev:researcher` subagents), do not attempt a single-pass substitute review: stop
+and tell the caller, naming the artifact, that the review must run from the main
+session (or `/dev:review-panel` there). Both paths run the same panel and end in
 the same Output. `${CLAUDE_PLUGIN_ROOT}` below is the `dev` plugin root, two
 levels above this skill's directory.
 
@@ -261,7 +265,10 @@ external vote.
    **verified before speculative**. Rank on merit and corroboration count, never
    on which model spoke.
 4. Produce **one prioritized list**: each entry = objection · severity ·
-   confidence · location · suggested fix · corroboration.
+   confidence · location · suggested fix · corroboration. Mark every blocker or
+   major raised by only one reviewer `unverified (single reviewer, manual path)`:
+   the Workflow path sends exactly these to skeptics, and the manual path skips
+   that pass to bound agent spend, so callers must weigh them as unverified.
 5. **Report each reviewer's verdict**: each lens's ship / don't-ship, and each
    external reviewer's. Never invent a verdict for a reviewer that gave none.
 
@@ -279,7 +286,8 @@ Present to the user:
   not a failure unless the user asked for external review; then append step 4's
   setup hint.
 - The ranked objection list, verified findings first and speculative ones grouped
-  after, each with its corroboration rather than model names.
+  after, each with its corroboration rather than model names, and on the manual
+  path the step 5 `unverified (single reviewer, manual path)` mark.
 - The verdicts: per lens, plus per external reviewer. Source attribution only on
   request.
 
