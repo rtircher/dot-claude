@@ -1,0 +1,10 @@
+---
+description: The phrase "quick review" of a PR number must route to the quick tier.
+tags: [review-routing]
+max_turns: 5
+allowed_tools: [Read, Glob, Grep, Skill]
+---
+
+quick review of PR 20 in rtircher/dot-claude
+
+Only decide and print the tier line as your first line, then stop: do not dispatch reviewers, run workflows, or call external tools beyond reading the skill.
