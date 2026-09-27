@@ -256,7 +256,7 @@ defaulting: `dev:coder` (worktree-isolated) for implementer tasks
 that edit files in parallel, `dev:reviewer` for review tasks (adversarial
 stance and findings schema baked in), `dev:researcher` or `Explore` for
 read-only research and search. Tiers follow the conventions' routing table
-(sonnet by default, `model: fable` for hard reasoning, `model: opus` only as
+(pass `model: sonnet` by default, `model: fable` for hard reasoning, `model: opus` only as
 an escalation);
 review phases route themselves. Follow the
 project's own conventions (TDD, verification) as those skills direct.
@@ -299,7 +299,7 @@ check), testing, and duplication lenses. External review is on by default; the `
 confirms round-1 participation (`requireExternal: true`, ping on round-1
 `external.shortfall`), and a code diff is the
 strongest case for a different model family. For a **multi-task** plan, also run the final cross-implementation
-symmetry pass (sonnet+) over the full branch diff to catch type asymmetry,
+symmetry pass (`model: sonnet`, `opus` for a large or subtle diff) over the full branch diff to catch type asymmetry,
 parallel-structure drift, undocumented behavior, and cross-package coupling that
 per-task work misses.
 

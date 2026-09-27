@@ -1,6 +1,7 @@
 ---
 name: reviewer
 description: Read-only adversarial review agent — hunts for what is wrong in a diff, plan, spec, or doc and returns structured findings; never edits, never fixes
+model: sonnet
 tools:
   - Read
   - Glob

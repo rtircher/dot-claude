@@ -29,11 +29,13 @@ non-trivial questions about the code:
   runs `opus` (Opus 5.5, since 2026-09-27: clearly better than Opus 5 and
   Sonnet 5 at orchestration and judgment). Subagents use three tiers:
     - **`sonnet` is the subagent default:** implementation, research,
-      debugging, mechanical work, cheap loops. Omitting `model:` gives sonnet,
-      *not* the session's opus, because `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` is
-      set in settings and our `coder`/`researcher` defs carry `model: sonnet`.
-      Built-in agent types without their own model only get sonnet through
-      that env var, so on a machine without it pass `model: sonnet` explicitly.
+      debugging, mechanical work, cheap loops. **Always pass `model:`
+      explicitly**; an omitted model inherits the session's opus. Two safety
+      nets exist, never rely on them: our `coder`/`researcher`/`reviewer` defs
+      carry `model: sonnet`, and local settings set
+      `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`. Cloud sessions do not set that env
+      var, so there built-in types (general-purpose, Explore, Plan) inherit
+      opus unless you pass `model:`.
     - **Pass `model: fable` for hard reasoning.** Cross-cutting review,
       feasibility, security, subtle design judgment: wherever nuance decides the
       answer. Bursty advisor capacity, never an always-on loop; its weekly cap is
@@ -41,9 +43,10 @@ non-trivial questions about the code:
     - **Pass `model: opus` as the escalation between them,** never as a
       default: a sonnet task that hit a reasoning ceiling (a BLOCKED
       re-dispatch), or fable-grade work while fable's cap is tight.
-- **Usage is the binding constraint.** Every opus or fable dispatch spends the
-  same limits the coordinator runs on; over-dispatching has hit them before.
-  Opus is opt-in by name, never reached by omission.
+- **Usage is the binding constraint.** Every dispatch spends the same limits
+  the coordinator runs on, and opus and fable burn them fastest;
+  over-dispatching has hit them before. Opus is opt-in by name, never reached
+  by omission.
 - **Adversarial-review panels route themselves:** `dev:review-workflow` pins
   every slot in its `DEFAULT_TIERS` (mechanical lenses sonnet, reasoning lenses
   and verify skeptics fable) and accepts only `fable`/`opus`/`sonnet`. Don't

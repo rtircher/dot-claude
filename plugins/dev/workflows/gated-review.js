@@ -83,6 +83,9 @@ When done, briefly state per finding what you changed (or why it was already han
 const history = []
 let round = 0
 let review = null
+// Validated before round 1 so a bad tier fails fast, not after a paid review round.
+const fixTier = (a.tiers || {}).fix || {}
+if (fixTier.model && !['fable', 'opus', 'sonnet'].includes(fixTier.model)) throw new Error(`tiers.fix.model must be 'fable', 'opus', or 'sonnet' (got '${fixTier.model}')`)
 
 while (true) {
   round += 1
@@ -112,8 +115,6 @@ while (true) {
   // result; rounds are sequential, so there are no cross-agent file races. The fix
   // agent needs write tools. In autonomous-feature the coordinator runs this whole
   // loop inside one worktree, so isolation is handled there, not per fix agent.
-  const fixTier = (a.tiers || {}).fix || {}
-  if (fixTier.model && !['fable', 'opus', 'sonnet'].includes(fixTier.model)) throw new Error(`tiers.fix.model must be 'fable', 'opus', or 'sonnet' (got '${fixTier.model}')`)
   await agent(fixPrompt(a, blockers, round), {
     label: `fix:round${round}`,
     phase: `Round ${round}`,
