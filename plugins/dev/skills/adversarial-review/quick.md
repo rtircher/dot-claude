@@ -15,15 +15,17 @@ belongs to the router.
 1. **Size gate.** Use the PR metadata already resolved (`gh pr view`'s
    `files`/`additions`/`deletions`, or `git diff --numstat` for a local diff).
    Run a **single pass** when fewer than 10 files changed and fewer than 200
-   lines added plus deleted, or when all files map to one area. Otherwise fan
-   out by area.
+   lines added plus deleted, or when all files map to one area (area mapping:
+   step 2). Otherwise fan out by area.
 
 2. **Areas.** `Areas:` is a plain list of path prefixes. Each file maps to the
-   longest matching prefix, else its top-level directory. If the focus names
-   a `Migrations:` prefix, that prefix always takes one of the 3 area slots
-   and never merges into `misc`. Remaining areas merge smallest-first into
-   `misc` until they fit the remaining 2 slots. The cap of 3 area reviewers
-   always holds, Migrations included.
+   longest matching prefix, else its top-level directory. Absent an `Areas:`
+   line, each file's area is its top-level directory; the one-area test in
+   step 1 uses that grouping. If the focus names a `Migrations:` prefix, that
+   prefix always takes one of the 3 area slots and never merges into `misc`.
+   Remaining areas merge smallest-first into `misc` until they fit the
+   remaining 2 slots. The cap of 3 area reviewers always holds, Migrations
+   included.
 
 3. **Reviewers.** Each reviewer is a `dev:reviewer` agent, dispatched with
    `model: "sonnet"` explicit on every call. Before dispatch, write the
@@ -44,20 +46,22 @@ belongs to the router.
      section and a prompt template. The main session applies the gate itself,
      against the diff already saved to the scratchpad (2a saves a full `git
      diff` for this; 2b's saved `gh pr diff` output is the same artifact
-     there). When the gate fires, create a detached worktree at `headRefOid`
-     (quick is otherwise checkout-free), pass it as the lens's `repoDir`,
-     point its artifact dir at the scratchpad, never the user's tree, and
-     remove the worktree afterwards. Dispatch the one extra agent from that
-     skill's prompt template as a **second wave after the area reviewers
-     return**, never alongside them, so no more than 3 agents ever run in
-     parallel. This is the only way this tier exceeds 3 agents; the cap with
-     it is 4 total. In the no-clone case (2b), skip the extra lens outright:
-     `extra lens: skipped (no clone)`.
+     there). If a clone exists but the gate does not fire, report `extra
+     lens: <name>: not applicable (<gate reason>)`, with no second wave. When
+     the gate fires, create a detached worktree at `headRefOid` (quick is
+     otherwise checkout-free), pass it as the lens's `repoDir`, point its
+     artifact dir at the scratchpad, never the user's tree, and remove the
+     worktree afterwards. Dispatch the one extra agent from that skill's
+     prompt template as a **second wave after the area reviewers return**,
+     never alongside them, so no more than 3 agents ever run in parallel.
+     This is the only way this tier exceeds 3 agents; the cap with it is 4
+     total. In the no-clone case (2b), the gate cannot run at all: report
+     `extra lens: <name>: not_run (no clone)`.
 
    Each reviewer's brief is fixed: the four diff-lens concerns as one
    checklist, in code order.
 
-   <!-- copied from LENS_PANELS.diff in workflows/adversarial-review.js; keep in sync -->
+   <!-- adapted from LENS_PANELS.diff in workflows/adversarial-review.js (dashes replaced); keep in sync -->
    - correctness: bugs, broken invariants, security holes, cross-package
      coupling, not style
    - simplicity-yagni: needless complexity, a simpler design that does the
@@ -92,10 +96,10 @@ belongs to the router.
      this diff that re-implements something the codebase already has
      elsewhere (a validator, a parser, a business rule) without reusing it.
      Distinct from simplicity-yagni's reinvented-helper check, which flags
-     unnecessary abstraction and complexity (this lens flags redundant
+     unnecessary abstraction and complexity: this lens flags redundant
      OCCURRENCES of the same logic regardless of how simple each occurrence
-     is). For each instance, list every location it appears and name the one
-     that should remain or the extraction point
+     is. For each instance, list every location it appears and name the one
+     that should remain or the extraction point.
 
    The brief also carries the focus text, the findings schema
    (`{ objection, severity (blocker | major | minor), confidence (verified |
