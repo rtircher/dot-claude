@@ -13,7 +13,7 @@ Contract, stricter than a bare use of the skill:
 
 - `$ARGUMENTS` names ONE explicit artifact: a file path (spec/plan), a diff
   range like `main...HEAD`, a branch, or a GitHub PR number or URL (resolved
-  per the skill's step 1, never by switching the
+  per the router's Step 0, never by switching the
   user's branch); plus an optional "no external" /
   "claude only" modifier. The only allowed inference is a bare invocation on a
   branch with one unambiguous diff against the trunk. Anything else: ask once,
@@ -24,12 +24,14 @@ Contract, stricter than a bare use of the skill:
   so a machine with no external reviewer configured reports the shortfall
   instead of a quiet Claude-only panel.
 
-With that contract, follow the adversarial-review skill
-(`${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/SKILL.md`): step 1 to identify
-and pin the artifact, then its **Workflow path** (step 2). When the Workflow
-tool is unavailable or the run errors, follow the skill's manual path (steps 3 to 5) with the same
-external contract instead of failing. Present the result per the skill's Output
-section, including which cross-family reviewers weighed in and which were absent
-and why.
+With that contract, follow the router
+(`${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/SKILL.md`): its Step 0 to
+resolve the artifact and its focus loader to load any review focus, forcing
+the **full tier** regardless of what Step 0 would otherwise pick. Then follow
+`full.md`'s step 1 to pin the artifact and its **Workflow path** (step 2). When
+the Workflow tool is unavailable or the run errors, follow `full.md`'s manual
+path (steps 3 to 5) with the same external contract instead of failing.
+Present the result per the router's output contract, including which
+cross-family reviewers weighed in and which were absent and why.
 
 Do not edit the artifact. Do not block. The user decides what to act on.

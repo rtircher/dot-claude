@@ -196,6 +196,9 @@ subagents.
 - **Adversarial review before committing.** When a plan/spec is finalized or a
   PR/diff is ready, run independent skeptical review: find what's wrong, not
   rubber-stamp. (See the `dev` plugin's `adversarial-review` skill.)
+- **PR and diff review goes through `dev:adversarial-review`** (full tier by
+  default; "quick pass" for the cheap tier). `/code-review` runs only when the
+  user types it.
 - **Never push or commit to `main` without explicit approval.** Gate irreversible or
   outward-facing actions (pushes, merges, branch/tag/worktree deletion) on an
   explicit go-ahead. Treat terse or ambiguous confirmations as needing clarification,

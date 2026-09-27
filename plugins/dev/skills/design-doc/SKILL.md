@@ -20,8 +20,8 @@ into steps) then implement.
 
 Not this: a quick exploratory conversation with no artifact yet (use
 brainstorming), turning an already-agreed design into ordered implementation
-steps (use writing-plans), or reviewing existing code or a PR (use your
-code-review skill).
+steps (use writing-plans), or reviewing existing code or a PR (use
+`adversarial-review`).
 
 ## How to use the template
 
