@@ -96,7 +96,7 @@ Read `full.md` or `quick.md` (absolute path beside this file, in this skill's ba
 5. A punch list, blocker / major / minor. Within a severity, verified before speculative. Duplicates collapse into one entry marked `x2`.
 6. A `## Simplify` section with `cut now` or `follow-up` per item; these never move the verdict.
 7. A verdict, led by verified findings. Quick: `ship (quick, unverified)` or `don't-ship (quick)`, never a bare `ship`. Full: `ship` or `don't-ship`.
-8. The next-step offer.
+8. The next-step offer. Full tier: end with `Cheaper next time: say "quick pass" (1 to 4 agents, unverified).`
 
 Chat only. Nothing is posted without an explicit "post"; on that, follow `posting.md` in this directory.
 
