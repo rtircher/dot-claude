@@ -199,6 +199,9 @@ subagents.
 - **PR and diff review goes through `dev:adversarial-review`** (full tier by
   default; "quick pass" for the cheap tier). `/code-review` runs only when the
   user types it.
+- **Review findings go on a PR only through `dev:post-review-comments`**
+  (inline, anchored), never as a top-level PR comment, however the ask is
+  phrased.
 - **Never push or commit to `main` without explicit approval.** Gate irreversible or
   outward-facing actions (pushes, merges, branch/tag/worktree deletion) on an
   explicit go-ahead. Treat terse or ambiguous confirmations as needing clarification,
