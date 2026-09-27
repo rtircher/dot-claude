@@ -35,8 +35,9 @@ manual path feels quicker. The manual path needs the `Agent` tool. If neither
 `dev:researcher` subagents), do not attempt a single-pass substitute review: stop
 and tell the caller, naming the artifact, that the review must run from the main
 session (or `/dev:review-panel` there). Both paths run the same panel and end in
-the same Output. `${CLAUDE_PLUGIN_ROOT}` below is the `dev` plugin root, two
-levels above this skill's directory.
+the same Output. `<plugin>` below is the `dev` plugin root: two levels above this
+skill's base directory (shown when the skill loads). Substitute its absolute path
+into commands; `${CLAUDE_PLUGIN_ROOT}` may be unset when this loads as a skill.
 
 ### 1. Identify and pin the artifact
 
@@ -50,32 +51,40 @@ one unambiguous diff against the trunk (use `<trunk>...HEAD`). Anything else: as
 which artifact, once, then proceed. Never infer by recency or pick the "most
 recently written" spec or plan.
 
-For a diff, prefer a COMMITTED range of the exact form `<ref>...HEAD` (Codex
-reviews only that form; other shapes drop the Codex vote with a refusal), and pin
-its SHA with `git rev-parse --short HEAD`. For an UNCOMMITTED working-tree diff,
-warn that any write between digest and review (this session, an editor autosave,
-a hook) will drop the external votes, and offer to commit or stash first.
+For a diff, settle `<repoDir>` (absolute; the repo toplevel for a local diff)
+and `<range>`: every git command below runs as `git -C <repoDir> ...`, since the
+Bash cwd resets between calls. Prefer a COMMITTED range of the exact form
+`<ref>...HEAD` (Codex reviews only that form; other shapes drop the Codex vote
+with a refusal), and pin `pinnedSha` with `git -C <repoDir> rev-parse --short
+HEAD`. For an UNCOMMITTED working-tree diff, warn that any write between digest
+and review (this session, an editor autosave, a hook) will drop the external
+votes, and offer to commit or stash first.
 
 A **GitHub PR number or URL** is a `diff`. Resolve it with
-`gh pr view <num|url> --json number,headRefOid,headRefName,baseRefName,url`; a URL
-for a repo other than this checkout means ask once (or use an obvious local clone
-of it). If HEAD already equals `headRefOid`, review this checkout as is.
-Otherwise never check out or switch branches in the user's tree (some machines'
-hooks deny it): `git fetch origin <headRefOid>` (or `pull/<n>/head` if that
-fails), `git fetch origin <baseRefName>`, then
-`git worktree add --detach <scratch path> <headRefOid>`. Set `repoDir` to that
-worktree, the range to `origin/<baseRefName>...HEAD`, and `pinnedSha` to
-`headRefOid`; compute the digest below from inside it, and
-`git worktree remove <scratch path>` once the review returns. Gated review
-commits fixes, so it needs the PR branch checked out in the working tree: if HEAD
-is not the PR head, ask the user to check it out with their own tooling (e.g.
-`gt co`) rather than switching it yourself.
+`gh pr view <num|url> --json number,headRefOid,baseRefName,url,isCrossRepository`;
+a URL for a repo other than this checkout means ask once (or use an obvious local
+clone of it). `<remote>` is the `git remote` whose URL matches the PR's repo, not
+an assumed `origin`. Always `git fetch <remote> <baseRefName>` and set `<range>`
+to `<remote>/<baseRefName>...HEAD` and `pinnedSha` to `headRefOid`. If HEAD
+already equals `headRefOid`, `<repoDir>` is this checkout. Otherwise never check
+out or switch branches in the user's tree (some machines' hooks deny it):
+`git fetch <remote> <headRefOid>` (`pull/<n>/head` for a fork head or if that
+fails), then `git worktree add --detach <tmp> <headRefOid>` with `<tmp>` outside
+the repo (the session scratchpad or `mktemp -d`), and `<repoDir>` is `<tmp>`. A
+branch that is not checked out works the same way (a detached worktree at its
+tip, `<range>` = `<trunk>...HEAD`), or ask. Run `git worktree remove --force
+<tmp>` on every exit path: after the review returns, after a workflow error only
+once the manual fallback finishes, and on abort. Gated review commits fixes, so
+it needs the PR branch checked out in the working tree: if HEAD is not the PR
+head, ask the user to check it out with their own tooling (e.g. `gt co`) rather
+than switching it yourself.
 
-Compute the digest from the repo root. It pins the exact bytes every external
-reviewer must have reviewed:
+Compute the digest, the hex before the space in the output (`shasum -a 256`
+where `sha256sum` is missing). It pins the exact bytes every external reviewer
+must have reviewed:
 
-    expected="$(git diff main...HEAD | sha256sum | cut -d' ' -f1)"   # diff: the exact range
-    expected="$(sha256sum "docs/plans/the-plan.md" | cut -d' ' -f1)" # spec/plan: the file
+    git -C <repoDir> diff <range> | sha256sum      # diff
+    sha256sum <absolute path to the file>           # spec/plan
 
 For an uncommitted diff, re-run it immediately before dispatch (this narrows the
 pin-to-review window; a committed range has none). The digest goes only into the
@@ -87,9 +96,9 @@ instruction, or chat text. A digest a courier or reviewer has seen proves nothin
 Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and args:
 
 - `artifactType`; `artifactPath` for a spec/plan; `diffRange`, `pinnedSha`, and
-  `repoDir` for a diff; `focus` / `outOfScope` when given.
+  `repoDir` for a diff (`diffRange` = `<range>`); `focus` / `outOfScope` when given.
 - `expectedArtifactSha256`: the digest from step 1.
-- `skillScriptsDir`: `"${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts"`.
+- `skillScriptsDir`: `<plugin>/skills/adversarial-review/scripts`, absolute.
 - `externalReview` defaults to **true**; pass `false` only on an explicit "no
   external" / "claude only" from the user. Consent (step 4) is the caller's job
   and comes BEFORE the dispatch; the workflow runs reviewers, it never asks.
@@ -97,12 +106,12 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
   a machine with none configured reports the shortfall instead of a quiet
   Claude-only panel.
 - `externalReviewers`: the `names` printed by
-  `"$(command -v node || bash -lc 'command -v node')" "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts/external-review.mjs" --list`,
+  `node <plugin>/skills/adversarial-review/scripts/external-review.mjs --list`,
   so each reviewer runs as its own `external:<name>` courier step. If the command
   fails, omit the arg: one `external` courier runs them all and reports the
   config error.
 - `tiers`: normally omitted. `DEFAULT_TIERS` in
-  `${CLAUDE_PLUGIN_ROOT}/workflows/adversarial-review.js` names every slot
+  `<plugin>/workflows/adversarial-review.js` names every slot
   (mechanical lenses sonnet, reasoning lenses and the verify skeptics fable) and
   rejects any other alias; no slot inherits the session model. An override
   replaces one key (a lens key or `verify`; values `{model, effort}`) and needs a
@@ -117,7 +126,7 @@ over this path.
 ### 3. Manual path: dispatch the lens panel
 
 The lenses live in one place: `LENS_PANELS` in
-`${CLAUDE_PLUGIN_ROOT}/workflows/adversarial-review.js`, with each lens's model in
+`<plugin>/workflows/adversarial-review.js`, with each lens's model in
 `DEFAULT_TIERS` in the same file. Read the artifact type's panel there and use
 each lens's `key` and `brief`. Each lens is a distinct failure mode, not a
 redundant copy, and all of a type's lenses run.
@@ -126,8 +135,9 @@ Dispatch one `Agent` per lens, **all in a single message** so they run
 concurrently with fresh, independent context, each as a read-only `dev:reviewer`
 agent with `model:` from `DEFAULT_TIERS` for its key (never omitted, never
 `opus`). Its definition carries the adversarial stance and the findings schema,
-so the prompt needs only the artifact (the file path, or for a diff the range,
-repo, and `git diff` command), its one lens `key` and `brief`, and any focus and
+so the prompt needs only the artifact (the file path, or for a diff: run
+`git -C <repoDir> diff <range>` and read files by absolute path under
+`<repoDir>`), its one lens `key` and `brief`, and any focus and
 out-of-scope notes. Where `dev:reviewer` is unavailable, fall back to
 `dev:researcher`, then general-purpose, and paste this framing and the schema
 into the prompt:
@@ -206,16 +216,12 @@ external entry point: it runs every selected entry in parallel (Codex via
 truncating, and needs only `node` (>= 18). List the configured names, then run it
 on the same bytes you hashed in step 1, with the Bash timeout at 600000 ms:
 
-    node="$(command -v node || bash -lc 'command -v node')"
-    s="${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts/external-review.mjs"
-    "$node" "$s" --list
-    git diff main...HEAD | "$node" "$s" --type diff \
-      --target "main...HEAD @ $(git rev-parse --short HEAD)" \
-      --cwd "$(git rev-parse --show-toplevel)" --range main...HEAD
+    node <plugin>/skills/adversarial-review/scripts/external-review.mjs --list
+    git -C <repoDir> diff <range> | node <plugin>/skills/adversarial-review/scripts/external-review.mjs --type diff --target "<range> @ <pinnedSha>" --cwd <repoDir> --range <range>
 
-For a spec/plan, pipe `cat <file>` with `--type spec|plan --target "<path> @
-<type>"` and no `--cwd`/`--range`. Pass `--focus` / `--out-of-scope` when the
-panel has them, and `--only <name>` (repeatable) to run only the reviewers the
+For a spec/plan, pipe `cat <absolute path>` with `--type spec|plan --target
+"<path> @ <type>"` and no `--cwd`/`--range`. Pass `--focus` / `--out-of-scope`
+when the panel has them (the Workflow path's couriers do not pass them yet), and `--only <name>` (repeatable) to run only the reviewers the
 user consented to. The script prints
 `{configured, artifactSha256, votes:[vote | {name, __error} | {name, skipped}]}`.
 Count a vote only if its `artifactSha256` equals your `expected` digest and it
@@ -225,7 +231,8 @@ mismatch, a malformed vote) is one dropped reviewer with its reason.
 `configured: false` means none is configured.
 
 **Bind every external run to the same artifact**: the same path or range in the
-same repo, the same focus and out-of-scope notes, the pinned SHA. A vote counts
+same repo and the pinned SHA (and, on the manual path, the same focus and
+out-of-scope notes). A vote counts
 only on digest equality; one whose scope does not match the panel's is dropped,
 never folded in as agreement.
 
