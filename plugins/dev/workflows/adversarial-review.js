@@ -21,6 +21,10 @@
  *                                    // Needed when the orchestrator runs outside that repo.
  *   focus?: string,                  // optional in-scope note, bound to every reviewer
  *   outOfScope?: string,             // optional exclusions, bound to every reviewer
+ *   focusFile?: string,              // absolute path holding focus, written by the caller;
+ *                                    // couriers pass it to external-review.mjs
+ *   outOfScopeFile?: string,         // absolute path holding outOfScope, written by the
+ *                                    // caller; couriers pass it to external-review.mjs
  *   externalReview?: boolean,        // defaults TRUE: every external reviewer this machine
  *                                    // configures (EXTERNAL_REVIEWERS, see
  *                                    // external-review.mjs) runs alongside the Claude
@@ -304,6 +308,10 @@ const COURIER_BASH_TIMEOUT = 'Run it with the Bash tool timeout set to 600000 ms
 // or short handles, so anything else is refused rather than escaped.
 const REVIEWER_NAME = /^[\w.:@+\/-]+$/
 
+// focusFile/outOfScopeFile reach a shell command inside double quotes too;
+// refuse anything that could break out of the quoting rather than escape it.
+const UNSAFE_SHELL_PATH = /["$`\n]/
+
 // name = null runs every configured reviewer in one courier.
 function externalCourier(art, name) {
   const diff = art.artifactType === 'diff'
@@ -315,11 +323,12 @@ function externalCourier(art, name) {
   // (<ref>...HEAD only) rather than stdin.
   const codexArgs = diff ? ` --cwd "${art.repoDir || '.'}" --range "${art.diffRange}"` : ''
   const only = name ? ` --only "${name}"` : ''
+  const scope = (art.focusFile ? ` --focus-file "${art.focusFile}"` : '') + (art.outOfScopeFile ? ` --out-of-scope-file "${art.outOfScopeFile}"` : '')
   const label = name ? `external:${name}` : 'external'
   // Couriers only run a shell pipeline, so the cheapest tier is pinned: an
   // omitted model would inherit the session's.
   return () => agent(
-    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}. ${COURIER_BASH_TIMEOUT}\n\n${feed} | ${NODE_BIN} "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"${codexArgs}${only}`,
+    `You are a COURIER, not a reviewer. Run EXACTLY this pipeline and return the script's stdout parsed as JSON via the structured output tool. Do not review anything yourself; do not alter the findings. If the command errors or prints no JSON, return {"__error":"<stderr>"}. ${COURIER_BASH_TIMEOUT}\n\n${feed} | ${NODE_BIN} "${art.skillScriptsDir}/external-review.mjs" --type ${art.artifactType} --target "${target}"${codexArgs}${only}${scope}`,
     { label, phase: 'Review', schema: EXTERNAL_VOTE_SCHEMA, model: 'sonnet', effort: 'low' },
   ).then(tag(label, 'external'))
 }
@@ -477,9 +486,16 @@ function verifyPrompt(batch, art) {
   const items = batch
     .map(({ f, index }) => `Finding ${index} [${f.severity}]:\nObjection: ${f.objection}\nLocation: ${f.location}`)
     .join('\n\n')
+  const scope = [
+    art.focus && `In scope: ${art.focus}.`,
+    art.outOfScope && `Out of scope (ignore): ${art.outOfScope}.`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const scopeLine = scope ? `\n\nReview scope the reviewers were given: ${scope} Judge each finding against this scope.` : ''
   return `Reviewers raised the following blocker/major objections. Adjudicate EACH one independently — do not let a verdict on one color another.
 
-${items}
+${items}${scopeLine}
 
 For each finding, judge whether a REAL underlying issue exists, independent of how precisely the objection is worded. ${inspect} Trace the actual control flow and facts, then return one verdict per finding (carrying its finding number as "index"):
 - "confirmed": a real issue exists essentially as described.
@@ -532,6 +548,11 @@ if (typeof args === 'string') {
 }
 if (art.artifactType !== 'diff' && !art.artifactPath) {
   throw new Error('adversarial-review requires args.artifactPath (or artifactType "diff" with diffRange)')
+}
+for (const key of ['focusFile', 'outOfScopeFile']) {
+  if (art[key] && UNSAFE_SHELL_PATH.test(art[key])) {
+    throw new Error(`args.${key} contains a character that could break out of the courier's shell quoting (", $, backtick, or newline)`)
+  }
 }
 
 // External review is ON by default; opt out with externalReview:false (or "no-external").
