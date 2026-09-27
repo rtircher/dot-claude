@@ -89,7 +89,7 @@ its own line as `` `/rename <name>` `` and ask the user to run it.
 
 Only when the repo matches, the named branch exists in this repo, and you are not
 already on it: switch to it using this repo's convention (`git switch <branch>`, or
-`gt co <branch>` where Graphite is in use). If that branch already lives in another
+`jj new <bookmark>` in a jj repo). If that branch already lives in another
 worktree, work from that path instead. Never switch branches on a repo mismatch. A
 respawned session is already on its branch, so this is a no-op for it.
 
