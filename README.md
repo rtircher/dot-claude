@@ -108,7 +108,15 @@ claude plugin validate ./plugins/dev          # plugin.json + skill frontmatter
 
 An *installed* plugin is pinned to a marketplace commit (see `claude plugin list`),
 so new commits are **not** picked up automatically — not even from a local
-`directory` source. To pull the latest into an installed copy:
+`directory` source. On the owner's Mac, run `scripts/update-plugins.sh`: it
+fast-forwards the marketplace checkout, refreshes the marketplace index, bumps
+each installed `@dot-claude` plugin at user scope, and prunes stale
+project-scope entries. Repos that commit `enabledPlugins` for `@dot-claude` get
+a project-scope entry pinned to the version current when it was created, and
+`claude plugin update --scope user` never touches it; pruning lets Claude Code
+recreate it at the new version on that repo's next session.
+
+The equivalent manual commands, useful as a fallback or on another machine:
 
 ```sh
 claude plugin marketplace update dot-claude     # re-read the marketplace from its source
