@@ -20,6 +20,7 @@
  *   maxRounds?: number   // default 3
  *   fixConventions?: string  // optional repo conventions handed to the fix agent
  *   tiers?.fix: { model?, effort? }  // default sonnet; 'fable' for a fix pass over reasoning-heavy findings, 'opus' as the escalation between them
+ *   modelMap?: { [alias]: alias }    // forwarded to each review round and applied to the fix tier
  *
  * NOTE: the fix step MUTATES the artifact (edits the doc, or code in repoDir). For
  * a diff whose range is two committed branches, the fix agent must commit for the
@@ -80,12 +81,25 @@ ${items}
 When done, briefly state per finding what you changed (or why it was already handled). A later re-review will check your work, so do not claim a fix you did not make.`
 }
 
+// Resolves a tier alias through args.modelMap, the escape hatch for an account
+// that lacks an alias (e.g. {"fable": "opus"} without fable access). A remap
+// never targets sonnet, so a reasoning slot cannot drop to the worker tier.
+// Self-contained: this is a copy of adversarial-review.js's, and the tests eval both.
+function resolveModel(model, map, where) {
+  const aliases = ['fable', 'opus', 'sonnet']
+  if (!aliases.includes(model)) throw new Error(`${where} must be 'fable', 'opus', or 'sonnet' (got '${model}')`)
+  const to = (map || {})[model]
+  if (to === undefined) return model
+  if (to !== 'fable' && to !== 'opus') throw new Error(`modelMap.${model} must be 'fable' or 'opus' (got '${to}'): a remap never targets sonnet`)
+  return to
+}
+
 const history = []
 let round = 0
 let review = null
 // Validated before round 1 so a bad tier fails fast, not after a paid review round.
 const fixTier = (a.tiers || {}).fix || {}
-if (fixTier.model && !['fable', 'opus', 'sonnet'].includes(fixTier.model)) throw new Error(`tiers.fix.model must be 'fable', 'opus', or 'sonnet' (got '${fixTier.model}')`)
+const fixModel = resolveModel(fixTier.model || 'sonnet', a.modelMap, 'tiers.fix.model')
 
 while (true) {
   round += 1
@@ -118,9 +132,9 @@ while (true) {
   await agent(fixPrompt(a, blockers, round), {
     label: `fix:round${round}`,
     phase: `Round ${round}`,
-    // Pinned, never inherited: the session runs opus, so an omitted model would
-    // silently put every fix pass on the coordinator tier.
-    model: fixTier.model || 'sonnet',
+    // Pinned, never inherited: an omitted model would silently put every fix
+    // pass on the coordinator tier.
+    model: fixModel,
     ...(fixTier.effort ? { effort: fixTier.effort } : {}),
   })
 }

@@ -97,6 +97,10 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
   accepts only `fable`/`opus`/`sonnet`; no slot inherits the session model. An override
   replaces one key (a lens key or `verify`; values `{model, effort}`) and needs a
   concrete reason about this artifact. Never downgrade the verify skeptics.
+- `modelMap`: pass the parsed value of `DOT_CLAUDE_MODEL_MAP` when that env var
+  is set (check with `printenv DOT_CLAUDE_MODEL_MAP`), otherwise omit it. It
+  remaps an alias the account lacks, e.g. `{"fable":"opus"}`, and never targets
+  sonnet.
 
 The workflow runs the lens panel, every configured external reviewer (couriers
 pinned to sonnet at low effort), schema-validated findings, a skeptic verify pass

@@ -260,7 +260,7 @@ that edit files in parallel, `dev:reviewer` for review tasks (adversarial
 stance and findings schema baked in), `dev:researcher` or `Explore` for
 read-only research and search. Tiers follow the conventions' routing table
 (pass `model: sonnet` by default, `model: fable` for hard reasoning, `model: opus` only as
-an escalation);
+an escalation, each remapped through `DOT_CLAUDE_MODEL_MAP` when it is set);
 review phases route themselves. Follow the
 project's own conventions (TDD, verification) as those skills direct.
 

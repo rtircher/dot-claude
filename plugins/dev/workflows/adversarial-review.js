@@ -79,6 +79,8 @@
  *                                    // sonnet, reasoning lenses and the verify skeptics on
  *                                    // fable, all at session effort. Nothing inherits the
  *                                    // session model. Explicit tiers override per key.
+ *   modelMap?: { [alias]: alias },   // remap applied after tiers, for an account without
+ *                                    // an alias: {"fable": "opus"}. Never targets sonnet.
  * }
  */
 export const meta = {
@@ -240,9 +242,9 @@ function gitPrefix(art) {
 }
 
 // Fixed routing, every slot named (conventions, "Model selection"): mechanical
-// lenses on sonnet; reasoning lenses, the diff correctness and testing lenses,
-// and the verify skeptics on fable. Nothing inherits: the main session runs
-// opus, so an omitted model would put every slot on the coordinator tier and
+// lenses on the worker tier (sonnet); reasoning lenses, the diff correctness and
+// testing lenses, and the verify skeptics on the reasoning tier (fable). Nothing
+// inherits: the coordinator runs a stronger tier, so an omitted model would put every slot on the coordinator tier and
 // multiply usage across the fan-out. args.tiers overrides one key; never downgrade the verify skeptics.
 const DEFAULT_TIERS = {
   'hidden-assumptions': { model: 'fable' },
@@ -258,12 +260,24 @@ const DEFAULT_TIERS = {
   verify: { model: 'fable' },
 }
 
+// Resolves a tier alias through args.modelMap, the escape hatch for an account
+// that lacks an alias (e.g. {"fable": "opus"} without fable access). A remap
+// never targets sonnet, so a reasoning slot cannot drop to the worker tier.
+// Self-contained: gated-review.js carries a copy, and the tests eval both.
+function resolveModel(model, map, where) {
+  const aliases = ['fable', 'opus', 'sonnet']
+  if (!aliases.includes(model)) throw new Error(`${where} must be 'fable', 'opus', or 'sonnet' (got '${model}')`)
+  const to = (map || {})[model]
+  if (to === undefined) return model
+  if (to !== 'fable' && to !== 'opus') throw new Error(`modelMap.${model} must be 'fable' or 'opus' (got '${to}'): a remap never targets sonnet`)
+  return to
+}
+
 // Effective tiering for one reviewer slot: DEFAULT_TIERS under any
-// caller-supplied override for the same key.
+// caller-supplied override for the same key, then args.modelMap.
 function tierOpts(art, key) {
   const t = { ...(DEFAULT_TIERS[key] || {}), ...((art.tiers || {})[key] || {}) }
-  // The only tiers that exist for reviewers; enforced here so prose need not repeat it.
-  if (t.model && !['fable', 'opus', 'sonnet'].includes(t.model)) throw new Error(`tiers.${key}.model must be 'fable', 'opus', or 'sonnet' (got '${t.model}')`)
+  if (t.model) t.model = resolveModel(t.model, art.modelMap, `tiers.${key}.model`)
   return { ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}) }
 }
 
@@ -559,6 +573,9 @@ for (const key of ['focusFile', 'outOfScopeFile']) {
 }
 // A *File arg with no matching text arg would leave lenses (which read the
 // text arg) and externals (which read the file) seeing different scope.
+// Validate modelMap up front so a bad remap fails before any paid dispatch.
+for (const k of Object.keys(art.modelMap || {})) resolveModel(k, art.modelMap, 'modelMap key')
+
 if (art.focusFile && !art.focus) {
   throw new Error('args.focusFile is set but args.focus is empty: lenses and external reviewers would see different scope')
 }

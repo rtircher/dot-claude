@@ -23,35 +23,38 @@ non-trivial questions about the code:
 
 - Refer to models by **unversioned alias** (`opus`, `sonnet`, `fable`), never a
   version-pinned id, including in config and docs. The Agent tool accepts only
-  aliases. Never `haiku`.
+  aliases. Never `haiku`: no tier is cheap enough to justify it.
 <!-- main-session-only: start -->
-- **Fixed routing, not per-dispatch judgment.** The main session (coordinator)
-  runs `opus` (Opus 5.5, since 2026-09-27: clearly better than Opus 5 and
-  Sonnet 5 at orchestration and judgment). Subagents use three tiers:
-    - **`sonnet` is the subagent default:** implementation, research,
+- **Fixed routing by role, not per-dispatch judgment.** Four roles, each with a
+  default alias:
+    - **Coordinator (the main session): `opus`.** Orchestration and judgment.
+    - **Worker: `sonnet`, the subagent default.** Implementation, research,
       debugging, mechanical work, cheap loops. **Always pass `model:`
-      explicitly**; an omitted model inherits the session's opus. Two safety
-      nets exist, never rely on them: our `coder`/`researcher`/`reviewer` defs
-      carry `model: sonnet`, and local settings set
-      `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`. Cloud sessions do not set that env
-      var, so there built-in types (general-purpose, Explore, Plan) inherit
-      opus unless you pass `model:`.
-    - **Pass `model: fable` for hard reasoning.** Cross-cutting review,
-      feasibility, security, subtle design judgment: wherever nuance decides the
-      answer. Bursty advisor capacity, never an always-on loop; its weekly cap is
-      the scarce resource.
-    - **Pass `model: opus` as the escalation between them,** never as a
-      default: a sonnet task that hit a reasoning ceiling (a BLOCKED
-      re-dispatch), or fable-grade work while fable's cap is tight.
+      explicitly**; an omitted model inherits the coordinator's tier. The
+      `dev:coder`/`researcher`/`reviewer` defs carry `model: sonnet` as a
+      safety net (so does `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` if you set it);
+      never rely on either. Built-in types (general-purpose, Explore, Plan)
+      inherit unless you pass `model:`.
+    - **Reasoning: `fable`.** Cross-cutting review, feasibility, security,
+      subtle design judgment: wherever nuance decides the answer. Bursty
+      advisor capacity, never an always-on loop; its cap is the scarce resource.
+    - **Escalation: `opus`, never a default.** A worker task that hit a
+      reasoning ceiling (a BLOCKED re-dispatch), or reasoning-grade work while
+      the reasoning tier's cap is tight.
+- **Missing alias: fall back up, never down.** If your account lacks an alias,
+  the role takes the next tier up (reasoning without `fable` runs on `opus`);
+  a reasoning or escalation role never drops to `sonnet`. Set
+  `DOT_CLAUDE_MODEL_MAP` to a JSON remap (e.g. `{"fable":"opus"}`) and apply it
+  to every `model:` you pass; the review workflows take it as `modelMap`.
 - **Usage is the binding constraint.** Every dispatch spends the same limits
-  the coordinator runs on, and opus and fable burn them fastest;
-  over-dispatching has hit them before. Opus is opt-in by name, never reached
-  by omission.
+  the coordinator runs on, and the stronger tiers burn them fastest. The
+  escalation tier is opt-in by name, never reached by omission.
 - **Adversarial-review panels route themselves:** `dev:review-workflow` pins
-  every slot in its `DEFAULT_TIERS` (mechanical lenses sonnet, reasoning lenses
-  and verify skeptics fable) and accepts only `fable`/`opus`/`sonnet`. Don't
-  restate tiers there; pass `tiers` only to override one named key, and never
-  downgrade the verify skeptics.
+  every slot in its `DEFAULT_TIERS` (mechanical lenses on the worker tier,
+  reasoning lenses and verify skeptics on the reasoning tier) and accepts only
+  `fable`/`opus`/`sonnet`. Don't restate tiers there; pass `tiers` only to
+  override one named key, pass `modelMap` when `DOT_CLAUDE_MODEL_MAP` is set,
+  and never downgrade the verify skeptics.
 
 ## Delegation
 

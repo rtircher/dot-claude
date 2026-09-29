@@ -73,9 +73,9 @@ if [ -z "$conv_present" ]; then
     printf "The shared conventions plugin isn't on disk this session, so its SessionStart injection won't fire.\n\n"
   fi
   printf "Cross-project reminders that live only in the plugin:\n"
-  printf -- "- Model routing (unversioned alias, never a pinned id): coordinator opus; pass model: sonnet for workers (never let a subagent inherit opus), model: fable for hard reasoning, model: opus only to escalate; the review workflow pins its own tiers.\n"
+  printf -- "- Model routing (unversioned alias, never a pinned id): coordinator opus; pass model: sonnet for workers (never let a subagent inherit the coordinator), model: fable for hard reasoning, model: opus only to escalate; the review workflow pins its own tiers. A missing alias falls back up (fable to opus), never down to sonnet; DOT_CLAUDE_MODEL_MAP holds the remap.\n"
   printf -- "- Pin language runtimes/tools via a committed \`.mise.toml\` (single source of truth for local dev, CI, and cloud setup).\n"
-  printf -- "- TDD-first; adversarial review before committing; never push or commit to main without explicit approval.\n"
+  printf -- "- TDD-first; adversarial review before committing; never push or commit to the default branch without explicit approval.\n"
 fi
 
 prewarm_log="${TMPDIR:-/tmp}/plugin-prewarm.log"
