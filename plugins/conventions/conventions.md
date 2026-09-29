@@ -202,12 +202,14 @@ subagents.
 - **Review findings go on a PR only through `dev:post-review-comments`**
   (inline, anchored), never as a top-level PR comment, however the ask is
   phrased.
-- **Never push or commit to `main` without explicit approval.** Gate irreversible or
+- **Never push or commit to the default branch without explicit approval.** Read it
+  with `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` (`main`,
+  `dev`, whatever the repo uses); `<default>` below means that name. Gate irreversible or
   outward-facing actions (pushes, merges, branch/tag/worktree deletion) on an
   explicit go-ahead. Treat terse or ambiguous confirmations as needing clarification,
   not a green light.
-- **Git history hygiene.** `git fetch` and rebase onto fresh `origin/main`, never a
-  stale local `main`. Prefer fast-forward / linear history: one commit per
+- **Git history hygiene.** `git fetch` and rebase onto fresh `origin/<default>` (or the
+  PR's base for a stacked branch), never a stale local copy. Prefer fast-forward / linear history: one commit per
   reviewable unit; before review, squash doc-evolution thrash and fold in-branch
   reverts into their target. Never cite commit short-hashes in docs or PR bodies
   (rebases churn them). Before deleting branches/worktrees, verify merge status

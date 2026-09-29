@@ -238,9 +238,6 @@ re-checking its constraint:
 
 ## Cloud flow: branch-carried respawn (no spawn_task, pushable origin)
 
-Validated by hand in a private repo (branches
-`handover/example` + `feat/example`).
-
 ### C1. Gather state and check preconditions
 
 As local step 1, minus the worktree commands. Additionally read the origin URL with

@@ -138,7 +138,7 @@ vendor() {
   echo "    does not touch enabledPlugins). Run --check to confirm they agree."
   echo "  - If this repo has a toolchain, keep each installer in scripts/ (wired as a"
   echo "    Makefile prerequisite) and add a repo-authored $CLOUD_DIR/ensure-tools.sh that"
-  echo "    delegates to them, one line per tool (my-app: $CLOUD_DIR/ensure-tools.sh"
+  echo "    delegates to them, one line per tool (e.g. $CLOUD_DIR/ensure-tools.sh"
   echo "    calls scripts/ensure-node.sh)."
   echo "  - Paste $CLOUD_DIR/cloud-setup.sh into the cloud environment's Setup script field."
   echo "  - Set all four of GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL and GIT_COMMITTER_NAME/"

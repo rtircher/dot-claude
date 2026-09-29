@@ -22,7 +22,7 @@ This runs unattended on a timer. Those three properties are what keep that safe:
   found nothing actionable, end with a single terse line (or silence) — do not
   re-summarise PRs that did not change.
 - **Bounded blast radius.** You operate only on open PRs **you authored**. You push
-  only to a PR's *own* branch, never to `main`. You never force-push, rewrite shared
+  only to a PR's *own* branch, never to its base or the repo's default branch. You never force-push, rewrite shared
   history, merge, or close a PR on your own. Those are pings, not actions.
 
 ### When to stop and ping (same contract as `autonomous-feature`)
@@ -65,7 +65,8 @@ Work a PR only when it shows one of these. Otherwise leave it untouched.
   one-line reason and resolve it — do not leave it dangling. Ambiguous threads are a
   ping, not a guess.
 - **Behind base / merge conflict.** `git fetch origin` then rebase the PR branch onto
-  fresh `origin/main` (never a stale local `main`). Resolve only *mechanical*
+  fresh `origin/<baseRefName>` from `gh pr view --json baseRefName` (never a stale
+  local copy; a stacked PR rebases onto its parent branch, not the trunk). Resolve only *mechanical*
   conflicts; a semantic conflict is a ping. Re-verify after rebasing, then push.
 - **Red CI.** Read the failing job's logs and diagnose. Fix only clear, in-scope
   failures (lint, formatting, an obvious bug, an import). A genuinely flaky check may

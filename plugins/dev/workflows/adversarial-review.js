@@ -160,8 +160,8 @@ const REVIEW_SCHEMA = {
 //
 // Fan-out is BOUNDED. The naive shape (VERIFY_VOTES agents per finding) is
 // unbounded in the finding count and has blown up in practice: a spec review
-// with 21 uncorroborated blocker/major findings dispatched 63 verify agents
-//. Instead, skeptics adjudicate BATCHES: findings are
+// with 21 uncorroborated blocker/major findings dispatched 63 verify agents.
+// Instead, skeptics adjudicate BATCHES: findings are
 // ranked, chunked into groups of VERIFY_BATCH, and each chunk gets VERIFY_VOTES
 // skeptics, capped at MAX_VERIFY_AGENTS dispatches total. Findings beyond the
 // cap are kept, annotated as contested-unverified (they still gate ship), and

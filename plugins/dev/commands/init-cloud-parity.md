@@ -37,7 +37,7 @@ After running, with the user:
    per tool. Repo tooling references repo tooling (the Makefile targets sit next to
    the installers), while cloud scaffolding references repo tools, never the reverse.
    `ensure-tools.sh` runs in-session as the non-root session user, so it only covers
-   userspace. Reference: my-app's `.claude/cloud/ensure-tools.sh` delegating to
+   userspace. Example: an `ensure-tools.sh` that calls
    `scripts/ensure-node.sh`.
 4. If setup needs ROOT at container-build time (apt system packages, a native build
    toolchain, frozen installs), add an OPTIONAL `.claude/cloud/cloud-setup-local.sh`. The

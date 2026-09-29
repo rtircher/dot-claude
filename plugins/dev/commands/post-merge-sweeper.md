@@ -49,10 +49,11 @@ thread. Those are handled.
    one-line description of the follow-up.
 4. **Act per mode.**
    - *Default:* report the list, grouped by PR, each with a recommended next step.
-   - *`pr`:* for each actionable item, branch from fresh `origin/main`, make the
+   - *`pr`:* for each actionable item, branch from fresh `origin/<default>` (from
+     `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`), make the
      change, verify with the project's own tests, open a focused PR, then reply on the
      originating thread linking it and resolve the thread. Honor the conventions: one
-     comment per PR, never touch `main`, ping on ambiguity, security, or scope.
+     comment per PR, never touch the default branch, ping on ambiguity, security, or scope.
 5. **Report the delta.** What you surfaced (and any PRs opened). A clean sweep is one
    line, or silence. Do not restate merged PRs with no loose ends.
 

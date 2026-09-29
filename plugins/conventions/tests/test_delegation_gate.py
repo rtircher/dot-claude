@@ -12,8 +12,8 @@ spec = importlib.util.spec_from_file_location("delegation_gate", SCRIPT)
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
-# Real offenders lifted from a transcript audit (each landed 10k+ chars in
-# main context) plus the plain forms they reduce to.
+# Bulk-read shapes that land 10k+ chars in main context, plus the plain forms
+# they reduce to.
 BULK = [
     "cat foo.py",
     "cd /home/me/repo && git diff 9a5d5d4e00 e0459e131d -- src/app/auth/token.py",

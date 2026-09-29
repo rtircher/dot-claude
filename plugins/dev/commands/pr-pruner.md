@@ -27,7 +27,7 @@ otherwise only flag (use once you trust it). Default is conservative.
 Close, after leaving a one-line audit comment that says why, when a PR is provably
 obsolete:
 
-- **Already merged.** Its head is fully contained in `origin/main` (including via
+- **Already merged.** Its head is fully contained in `origin/<baseRefName>` (including via
   squash-merge — compare the diff, not just the merge commit), yet the PR is still
   open.
 - **Superseded.** Another open or merged PR clearly replaces it (same branch
@@ -54,7 +54,7 @@ flag, never an auto-close.
    number,title,headRefName,baseRefName,isDraft,updatedAt,url`. Scope to a single PR
    if a number is passed alongside the mode.
 2. **Classify** each against the buckets above. For the "already merged" test, fetch
-   and compare against fresh `origin/main`; do not trust a stale local ref.
+   and compare against fresh `origin/<baseRefName>`; do not trust a stale local ref.
 3. **Act.** Auto-close the unambiguous ones with an audit comment. Collect the
    judgment calls. Under `close`, close those too (comment first); otherwise leave
    them open and flagged.
