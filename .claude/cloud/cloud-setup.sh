@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vendored from dot-claude @ 3185d0fb465d5024e3caeff5163c39a304e4b883. Re-sync with /dev:init-cloud-parity; do not edit here
+# vendored from dot-claude @ 365b74c6dbed2c68e528ab26c6814d9336302628. Re-sync with /dev:init-cloud-parity; do not edit here
 #
 # Claude Code on the web: environment setup script (generic, repo-agnostic).
 #
@@ -54,7 +54,7 @@ fi
 #    system packages, a native build toolchain, frozen installs) CAN'T run in the
 #    non-root in-session hooks, so a repo puts it in an OPTIONAL committed script.
 #    This is the setup-time, root, once-cached counterpart to the in-session
-#    ensure-<tool>.sh convention. The repo is already checked out at $PWD here (the
+#    ensure-tools.sh toolchain convention. The repo is already checked out at $PWD here (the
 #    setup phase runs in the repo root), so a present hook is run by path. A repo
 #    that needs nothing ships none. Not guarded with `|| true`: a real failure in
 #    repo setup (e.g. a missing apt package) should fail loudly, not cache a broken
