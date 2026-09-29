@@ -21,7 +21,10 @@ What is gated (only when armed):
     so `cd repo && git diff a b -- f` is judged on the diff.
 
 What is never gated:
-  - Subagent (sidechain) tool calls — subagents are the delegates
+  - Subagent tool calls — subagents are the delegates. Claude Code sets
+    `agent_id` in the hook input only for them; subagent turns are written to
+    their own subagents/*.jsonl, so transcript_path still names the parent's
+    transcript and its context would otherwise be judged
   - Targeted reads (offset+limit), compact greps, Glob
   - Bash that writes (redirect, heredoc, sed -i, find -delete/-exec), that is
     bounded (head/tail/wc/sed -n small range, --stat, -n N), or that feeds a
@@ -292,6 +295,8 @@ def main():
         payload = json.load(sys.stdin)
     except json.JSONDecodeError:
         return
+    if payload.get("agent_id"):
+        return  # a subagent's call; transcript_path is the parent's
     tool_name = payload.get("tool_name", "")
     if not is_bulk_read(tool_name, payload.get("tool_input")):
         return
@@ -304,8 +309,8 @@ def main():
     if not entries:
         return
 
-    # If the newest assistant entry is a sidechain, this call is (almost
-    # certainly) a subagent's — never gate the delegates.
+    # Fallback for clients that predate agent_id: a sidechain newest
+    # assistant entry means the call is (almost certainly) a subagent's.
     newest_assistant = next(
         (e for e in entries if e.get("type") == "assistant"), None
     )
