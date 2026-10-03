@@ -89,8 +89,12 @@ subagents.
   offset+limit or a Grep of that path. Never resume the agent (SendMessage) to
   re-emit what is already on disk; one such re-emit was the single largest
   report in a transcript audit, at 31k characters.
-- **At most 3 parallel subagents.** Each completion notification lands in main
-  context. Prefer sequential dispatch when results feed into each other.
+- **Dispatch independent subagents together, in one message.** Prefer
+  sequential dispatch when results feed into each other. Each completion
+  notification lands in main context.
+- **At most 3 concurrent agents that mutate a worktree or run builds/tests**
+  (they contend for memory and CPU); queue the rest. Read-only research and
+  review agents may exceed that, up to about 6.
 - **Long sessions are a cost bug.** Keep the orchestrator's working memory in a
   maintained task list, not the transcript. When the `context-watch` hook warns,
   finish the current step, then delegate the rest. Before respawning, estimate
