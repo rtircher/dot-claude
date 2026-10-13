@@ -1,15 +1,30 @@
 ---
-description: Shepherd my open PRs one pass at a time (address review comments, rebase, chase CI) — safe to run unattended on a /loop
-allowed-tools: Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr review:*), Bash(gh api:*), Bash(git fetch:*), Bash(git rebase:*), Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git switch:*), Bash(git push:*), Read, Edit, Write, Grep, Glob
+description: Shepherd my open PRs until merge-ready (address review comments, rebase, chase CI); loops by default, `once` for a single pass
+allowed-tools: Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr review:*), Bash(gh api:*), Bash(git fetch:*), Bash(git rebase:*), Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git switch:*), Bash(git push:*), Skill, Read, Edit, Write, Grep, Glob
 ---
 
-Make **one pass** over my open PRs and nudge each one closer to merge: address new
-review comments, rebase what has fallen behind, and chase down red CI. Built to be
-driven by `/loop` (e.g. `/loop 5m /dev:babysit`), so the overriding design rule is
-that running it when there is nothing to do is a harmless no-op.
+Keep my open PRs moving toward merge: address new review comments, rebase what has
+fallen behind, and chase down red CI. Each pass runs unattended on a timer, so the
+overriding design rule is that a pass with nothing to do is a harmless no-op.
 
-Optional argument: a single PR number scopes the pass to just that PR. With no
-argument, it sweeps every open PR you authored.
+Arguments, in any order, all optional:
+
+- a **PR number** scopes every pass to that PR; without one, a pass sweeps every open
+  PR you authored.
+- an **interval** (`10m`, `1h`) overrides the default of `15m` between passes.
+- **`once`** runs a single pass and stops.
+
+## Looping (default)
+
+Without `once`, run one pass now (below), then keep it going: invoke the `loop` skill
+with `<interval> /dev:babysit once [<PR>]`. The inner `once` is what stops each pass
+from scheduling another loop. Say in one line that the loop is running and how to stop
+it. If the host cannot loop (no `loop` skill), say so and suggest re-running on demand.
+
+If the host offers an event-driven monitor for a PR (for example a desktop app that
+wakes the session on CI failures, conflicts and review comments), that beats polling:
+for a scoped PR, offer to enable it instead of looping. Never loop on a PR that
+monitor already watches.
 
 ## The loop contract — read before acting
 
@@ -22,8 +37,9 @@ This runs unattended on a timer. Those three properties are what keep that safe:
   found nothing actionable, end with a single terse line (or silence) — do not
   re-summarise PRs that did not change.
 - **Bounded blast radius.** You operate only on open PRs **you authored**. You push
-  only to a PR's *own* branch, never to its base or the repo's default branch. You never force-push, rewrite shared
-  history, merge, or close a PR on your own. Those are pings, not actions.
+  only to a PR's *own* branch, never to its base or the repo's default branch. You never force-push (beyond the
+  guarded form a repo allows for a rebase, below), rewrite shared history, merge, or
+  close a PR on your own. Those are pings, not actions.
 
 ### When to stop and ping (same contract as `autonomous-feature`)
 
@@ -64,11 +80,16 @@ Work a PR only when it shows one of these. Otherwise leave it untouched.
   re-fire next pass. If you decline a suggestion, reply on the thread with the
   one-line reason and resolve it — do not leave it dangling. Ambiguous threads are a
   ping, not a guess.
-- **Behind base / merge conflict.** `git fetch origin` then rebase the PR branch onto
+- **Behind base / merge conflict.** Act only on a conflict, or when the base's
+  branch protection requires an up-to-date branch (merge state `BEHIND`); merely
+  trailing the base is not a signal. `git fetch origin` then rebase the PR branch onto
   fresh `origin/<baseRefName>` from `gh pr view --json baseRefName` (never a stale
   local copy; a stacked PR rebases onto its parent branch, not the trunk). Resolve only *mechanical*
-  conflicts; a semantic conflict is a ping. Re-verify after rebasing, then push.
-- **Red CI.** Read the failing job's logs and diagnose. Fix only clear, in-scope
+  conflicts; a semantic conflict is a ping. Re-verify after rebasing. Pushing a rebase
+  rewrites the branch, so it is a ping unless the repo's instructions allow a guarded
+  force form (such as a lease pinned to the remote tip you just read); use only that.
+- **Red CI.** Read the failing job's logs and diagnose (the repo's instructions may
+  name a log-fetch tool for its CI; use it). Fix only clear, in-scope
   failures (lint, formatting, an obvious bug, an import). A genuinely flaky check may
   be re-run once. A real design failure, or one still red after two fix attempts, is
   a ping per the contract.
