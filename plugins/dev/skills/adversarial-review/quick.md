@@ -28,7 +28,7 @@ belongs to the router.
    included.
 
 3. **Reviewers.** Each reviewer is a `dev:reviewer` agent, dispatched with
-   `model: "sonnet"` explicit on every call. Before dispatch, write the
+   `model: "sonnet"` and `effort: "high"` explicit on every call. Before dispatch, write the
    reviewer orientation list (output contract item 4) from the PR metadata
    and diff already fetched, emitted in the same message as the dispatch. All
    area reviewers go out together in one message.
@@ -57,8 +57,8 @@ belongs to the router.
      never alongside them, so no more than 3 agents ever run in parallel: use
      the agent type, model, and tools per the declared skill's Dispatch
      section (e.g. a lens that writes model files needs a writing agent);
-     default to `dev:reviewer` with `model: "sonnet"` only when the skill
-     names none. This overrides any same-message instruction in the skill's
+     default to `dev:reviewer` with `model: "sonnet"` and `effort: "high"`
+     only when the skill names none. This overrides any same-message instruction in the skill's
      Dispatch section. This is the only way this tier exceeds 3 agents; the
      cap with it is 4 total. In the no-clone case (2b), the gate cannot run
      at all: report `extra lens: <name>: not_run (no clone)`.

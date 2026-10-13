@@ -19,7 +19,7 @@
  * review round), plus:
  *   maxRounds?: number   // default 3
  *   fixConventions?: string  // optional repo conventions handed to the fix agent
- *   tiers?.fix: { model?, effort? }  // default sonnet; 'fable' for a fix pass over reasoning-heavy findings, 'opus' as the escalation between them
+ *   tiers?.fix: { model?, effort? }  // default sonnet at high effort; 'fable' for a fix pass over reasoning-heavy findings, 'opus' as the escalation between them
  *   modelMap?: { [alias]: alias }    // forwarded to each review round and applied to the fix tier
  *
  * NOTE: the fix step MUTATES the artifact (edits the doc, or code in repoDir). For
@@ -132,9 +132,9 @@ while (true) {
   await agent(fixPrompt(a, blockers, round), {
     label: `fix:round${round}`,
     phase: `Round ${round}`,
-    // Pinned, never inherited: an omitted model would silently put every fix
-    // pass on the coordinator tier.
+    // Pinned, never inherited: an omitted model or effort would silently put
+    // every fix pass on the coordinator's settings.
     model: fixModel,
-    ...(fixTier.effort ? { effort: fixTier.effort } : {}),
+    effort: fixTier.effort || 'high',
   })
 }

@@ -77,8 +77,10 @@
  *                                    // DEFAULT_TIERS names every slot: mechanical lenses
  *                                    // (scope-yagni, gaps, simplicity-yagni, duplication) on
  *                                    // sonnet, reasoning lenses and the verify skeptics on
- *                                    // fable, all at session effort. Nothing inherits the
- *                                    // session model. Explicit tiers override per key.
+ *                                    // fable. Effort is pinned too: medium on the mechanical
+ *                                    // lenses, high on reasoning lenses and verify, xhigh on
+ *                                    // diff correctness. Nothing inherits the session model
+ *                                    // or effort. Explicit tiers override per key.
  *   modelMap?: { [alias]: alias },   // remap applied after tiers, for an account without
  *                                    // an alias: {"fable": "opus"}. Never targets sonnet.
  * }
@@ -245,19 +247,23 @@ function gitPrefix(art) {
 // lenses on the worker tier (sonnet); reasoning lenses, the diff correctness and
 // testing lenses, and the verify skeptics on the reasoning tier (fable). Nothing
 // inherits: the coordinator runs a stronger tier, so an omitted model would put every slot on the coordinator tier and
-// multiply usage across the fan-out. args.tiers overrides one key; never downgrade the verify skeptics.
+// multiply usage across the fan-out. Effort is pinned for the same reason: an
+// omitted effort falls to the agent definition's default (dev:researcher, which
+// the skeptics run as, is medium). Correctness gets xhigh because it is the one
+// lens whose misses ship as bugs. args.tiers overrides one key; never downgrade
+// the verify skeptics.
 const DEFAULT_TIERS = {
-  'hidden-assumptions': { model: 'fable' },
-  gaps: { model: 'sonnet' },
-  'contradiction-feasibility': { model: 'fable' },
-  'scope-yagni': { model: 'sonnet' },
-  sequencing: { model: 'fable' },
-  risk: { model: 'fable' },
-  correctness: { model: 'fable' },
-  'simplicity-yagni': { model: 'sonnet' },
-  testing: { model: 'fable' },
-  duplication: { model: 'sonnet' },
-  verify: { model: 'fable' },
+  'hidden-assumptions': { model: 'fable', effort: 'high' },
+  gaps: { model: 'sonnet', effort: 'medium' },
+  'contradiction-feasibility': { model: 'fable', effort: 'high' },
+  'scope-yagni': { model: 'sonnet', effort: 'medium' },
+  sequencing: { model: 'fable', effort: 'high' },
+  risk: { model: 'fable', effort: 'high' },
+  correctness: { model: 'fable', effort: 'xhigh' },
+  'simplicity-yagni': { model: 'sonnet', effort: 'medium' },
+  testing: { model: 'fable', effort: 'high' },
+  duplication: { model: 'sonnet', effort: 'medium' },
+  verify: { model: 'fable', effort: 'high' },
 }
 
 // Resolves a tier alias through args.modelMap, the escape hatch for an account

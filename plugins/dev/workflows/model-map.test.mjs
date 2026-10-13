@@ -33,3 +33,18 @@ for (const [file, resolveModel] of Object.entries(copies)) {
     assert.throws(() => resolveModel('fable', { fable: 'haiku' }, 'x'), /must be 'fable' or 'opus'/)
   })
 }
+
+// An omitted effort falls to the agent definition's default (medium for
+// dev:researcher, which the verify skeptics run as), so every slot pins one.
+test('adversarial-review.js: every DEFAULT_TIERS slot pins model and effort', () => {
+  const src = readFileSync(fileURLToPath(new URL('./adversarial-review.js', import.meta.url)), 'utf8')
+  const start = src.indexOf('const DEFAULT_TIERS = {')
+  const end = src.indexOf('\n}\n', start) + 2
+  const tiers = new Function(`${src.slice(start, end)}; return DEFAULT_TIERS`)()
+  const efforts = ['low', 'medium', 'high', 'xhigh', 'max']
+  for (const [key, t] of Object.entries(tiers)) {
+    assert.ok(t.model, `${key} has no model`)
+    assert.ok(efforts.includes(t.effort), `${key} has no valid effort`)
+  }
+  assert.ok(efforts.indexOf(tiers.verify.effort) >= efforts.indexOf('high'), 'verify skeptics below high')
+})

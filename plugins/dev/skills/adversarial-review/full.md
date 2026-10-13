@@ -93,10 +93,13 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
   config error.
 - `tiers`: normally omitted. `DEFAULT_TIERS` in
   `<plugin>/workflows/adversarial-review.js` names every slot
-  (mechanical lenses sonnet, reasoning lenses and the verify skeptics fable) and
-  accepts only `fable`/`opus`/`sonnet`; no slot inherits the session model. An override
+  (mechanical lenses sonnet at medium effort, reasoning lenses and the verify
+  skeptics fable at high, diff correctness fable at xhigh) and accepts only
+  `fable`/`opus`/`sonnet`; no slot inherits the session model or effort. An override
   replaces one key (a lens key or `verify`; values `{model, effort}`) and needs a
-  concrete reason about this artifact. Never downgrade the verify skeptics.
+  concrete reason about this artifact. A loaded focus that marks an area the
+  artifact touches as high-stakes (billing, auth, data loss) is one: raise
+  `correctness` effort to `max` and `verify` to `xhigh`. Never downgrade the verify skeptics.
 - `modelMap`: pass the parsed value of `DOT_CLAUDE_MODEL_MAP` when that env var
   is set (check with `printenv DOT_CLAUDE_MODEL_MAP`), otherwise omit it. It
   remaps an alias the account lacks, e.g. `{"fable":"opus"}`, and never targets
@@ -112,9 +115,9 @@ over this path.
 direct agent alongside the Workflow (or the manual panel), the way a declared
 extra lens always ran alongside the panel: agent type, model, and tools per
 the declared skill's Dispatch section (e.g. a lens that writes model files
-needs a writing agent); default to `dev:reviewer` with `model: "sonnet"` only
-when the skill names none. This overrides any same-message instruction in the
-skill's Dispatch section. Dispatch from that skill's gate and prompt template
+needs a writing agent); default to `dev:reviewer` with `model: "sonnet"` and
+`effort: "high"` only when the skill names none. This overrides any
+same-message instruction in the skill's Dispatch section. Dispatch from that skill's gate and prompt template
 at `~/.claude/skills/<name>/SKILL.md`, with `repoDir` set to `<repoDir>` from
 step 1. The main session applies the skill's gate before dispatch, as in the
 quick tier. If that path does not exist, print `extra lens: <name>: not_run
@@ -131,8 +134,8 @@ redundant copy, and all of a type's lenses run.
 
 Dispatch one `Agent` per lens, **all in a single message** so they run
 concurrently with fresh, independent context, each as a read-only `dev:reviewer`
-agent with `model:` from `DEFAULT_TIERS` for its key (never omitted, never
-inherited from the opus session). Its definition carries the adversarial stance and the findings schema,
+agent with `model:` and `effort:` from `DEFAULT_TIERS` for its key (never
+omitted, never inherited from the opus session). Its definition carries the adversarial stance and the findings schema,
 so the prompt needs only the artifact (the file path, or for a diff: run
 `git -C <repoDir> diff <range>` and read files by absolute path under
 `<repoDir>`), its one lens `key` and `brief`, and any focus and
