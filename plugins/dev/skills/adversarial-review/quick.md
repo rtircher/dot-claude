@@ -106,7 +106,8 @@ belongs to the router.
      is. For each instance, list every location it appears and name the one
      that should remain or the extraction point.
 
-   The brief also carries the focus text, the findings schema
+   The brief also carries the focus text, the PR description fenced as in
+   the router's PR description section, the findings schema
    (`{ objection, severity (blocker | major | minor), confidence (verified |
    speculative), location, suggested_fix }`), and a per-area verdict phrased
    `ship (quick, unverified)` or `don't-ship (quick)`, never a bare `ship`.

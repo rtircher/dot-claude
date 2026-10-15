@@ -349,6 +349,28 @@ test('--out-of-scope with --out-of-scope-file exits 1', async () => {
   assert.match(r.stderr, /mutually exclusive/)
 })
 
+test('--pr-description-file reaches the reviewer prompt as fenced author context', async () => {
+  const { server, url, bodies } = await recordingStubServer()
+  const dir = mkdtempSync(join(tmpdir(), 'pr-'))
+  const pr = join(dir, 'pr.md')
+  writeFileSync(pr, 'Known gap: events are best effort.\n')
+  const env = { EXTERNAL_REVIEWERS: JSON.stringify([{ name: 'good', model: 'good', baseUrl: url, private: true }]) }
+  const r = await run(env, 'diff --git a b', 'diff', ['--pr-description-file', pr])
+  server.close()
+  assert.equal(r.code, 0, r.stderr)
+  const prompt = JSON.stringify(bodies[0].messages)
+  assert.match(prompt, /--- PR DESCRIPTION [^\n]*---\\nKnown gap: events are best effort\.\\n--- END PR DESCRIPTION ---/)
+})
+
+test('--pr-description with --pr-description-file exits 1', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pr-'))
+  const pr = join(dir, 'p.md')
+  writeFileSync(pr, 'x')
+  const r = await run({ EXTERNAL_REVIEWERS: '[]' }, 'd', 'diff', ['--pr-description', 'y', '--pr-description-file', pr])
+  assert.equal(r.code, 1)
+  assert.match(r.stderr, /mutually exclusive/)
+})
+
 test('an unreadable --focus-file exits 1 naming the path', async () => {
   const r = await run({ EXTERNAL_REVIEWERS: '[]' }, 'd', 'diff', ['--focus-file', '/nonexistent/focus.md'])
   assert.equal(r.code, 1)

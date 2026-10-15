@@ -1,6 +1,6 @@
 ---
 name: post-review-comments
-description: Post review findings as inline GitHub PR comments that land on the right lines (SHA-pinned anchors, one comment per finding, verified via diff_hunk). Use when the user says "post these comments", "post the review", or "post inline comments on the PR", after any review (adversarial-review, a manual read, or another review skill). Posts only on an explicit ask.
+description: Post review findings as inline GitHub PR comments that land on the right lines (SHA-pinned anchors, one comment per finding, verified via diff_hunk), each tagged [required], [optional], or [follow-up], with optional ones capped at 5. Use when the user says "post these comments", "post the review", or "post inline comments on the PR", after any review (adversarial-review, a manual read, or another review skill). Posts only on an explicit ask.
 ---
 
 # Posting review comments
@@ -20,9 +20,46 @@ Naive posting misplaces comments. Two independent traps, both observed in produc
    `+N` hunk arithmetic is easy to miscount (context lines, `@@` bases), and the drift is
    silent, the comment still posts, just on the wrong line.
 
+## Tags
+
+Every posted comment opens with one tag that tells the author what to do. Severity words
+(blocker, major, minor), lens names, confidence labels, and reviewer or model names never
+appear in the body; after the tag comes the problem, why it matters, and the fix.
+
+| Tag | Author's move | Findings |
+|---|---|---|
+| `[required]` | Fix before merge | A blocker or major on code this PR adds or changes |
+| `[optional]` | Their call, no reply needed | A verified minor on changed code, a Simplify `cut now` item, or a non-blocking question (body opens with "Question:") |
+| `[follow-up]` | Not this PR; a ticket or a "no" is enough | Code the PR does not change, work beyond the PR's goal, a Simplify `follow-up` item |
+
+A blocker or major is `[required]` only when it is verified and no skeptic contested it.
+Confirm a speculative, contested, or `unverified (single reviewer, manual path)` one against
+the code at the pinned SHA first; if you cannot, post it as an `[optional]` question.
+
+## What gets posted
+
+Every `[required]` and `[follow-up]` posts. At most **5** `[optional]` post, taken in the
+review's rank order; the rest are **held**. Never posted:
+
+- a speculative minor;
+- a trade-off or gap the PR description already discloses, unless the finding shows the
+  disclosure is wrong or understates the risk;
+- a preference with no consequence.
+
+Number every finding `#1..#n` (the review's numbering when it has one) and write one plan
+line:
+
+    post plan: [required] #1, #2 · [follow-up] #6 · [optional] #3, #4, #5, #7, #9 · held: #10, #11 · not posted: #8 (disclosed in PR description), #12 (speculative)
+
+`dev:adversarial-review` prints this line with its findings, so "post" posts the plan as
+shown; "post + #10" adds a held or skipped finding, "post - #4" drops one. The plan line is
+the only prompt: never ask about findings one by one. After a review that printed no plan (a
+manual read, another review skill), build the plan, post it, and report the line so the user
+can add held findings.
+
 ## Inline only, no issue-level comments
 
-Every finding posts as an **inline review comment** (file + line). Never post findings as a
+Every posted finding is an **inline review comment** (file + line). Never post findings as a
 top-level/issue PR comment: authors' fix workflows key off review threads, and issue comments
 have no resolved state to track, an issue-comment review was observed being silently skipped
 while every inline comment on the same PR got fixed. A finding with no single obvious line

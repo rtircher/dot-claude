@@ -78,6 +78,9 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
   absolute path, alongside the `focus` / `outOfScope` text above; the courier
   passes the path to `external-review.mjs`. Never write or pass a `*File` arg
   for an empty text arg: the workflow throws on a file without matching text.
+- `prDescription` / `prDescriptionFile`: for a PR with a non-empty body, the
+  body text and the absolute path of the file the router's PR description
+  section wrote, under the same rule as `focusFile`.
 - `expectedArtifactSha256`: the digest from step 1.
 - `skillScriptsDir`: `<plugin>/skills/adversarial-review/scripts`, absolute.
 - `externalReview` defaults to **true**; pass `false` only on an explicit "no
@@ -138,16 +141,19 @@ agent with `model:` and `effort:` from `DEFAULT_TIERS` for its key (never
 omitted, never inherited from the opus session). Its definition carries the adversarial stance and the findings schema,
 so the prompt needs only the artifact (the file path, or for a diff: run
 `git -C <repoDir> diff <range>` and read files by absolute path under
-`<repoDir>`), its one lens `key` and `brief`, and any focus and
-out-of-scope notes. Where `dev:reviewer` is unavailable, fall back to
+`<repoDir>`), its one lens `key` and `brief`, any focus and
+out-of-scope notes, and the PR description fenced as in the router's PR
+description section. Where `dev:reviewer` is unavailable, fall back to
 `dev:researcher`, then general-purpose, and paste this framing and the schema
 into the prompt:
 
 > Your job is to find what is wrong with this artifact through the lens of
 > {lens}: {brief}. Assume the author is over-confident. Surface real problems,
 > not style nits. Be specific — point to the exact part. When you are uncertain
-> whether something is a problem, flag it rather than letting it pass. End with
-> a single verdict: ship or don't-ship, with one sentence why.
+> whether something is a problem, flag it rather than letting it pass. Pick
+> severity by the cost of going ahead unchanged, per the scale in
+> `<plugin>/agents/reviewer.md`. End with a single verdict: ship or
+> don't-ship, with one sentence why.
 
 Findings are
 `{ objection, severity (blocker | major | minor), confidence (verified | speculative), location, suggested_fix }`.
@@ -222,9 +228,9 @@ on the same bytes you hashed in step 1, with the Bash timeout at 600000 ms:
 
 For a spec/plan, pipe `cat <absolute path>` with `--type spec|plan --target
 "<path> @ <type>"` and no `--cwd`/`--range`. Pass `--focus-file` /
-`--out-of-scope-file`, only when the corresponding text is non-empty, with the
-same focus/out-of-scope files the Workflow path writes to the scratchpad
-(never pass either flag pointing at an empty file), and `--only <name>`
+`--out-of-scope-file` / `--pr-description-file`, only when the corresponding
+text is non-empty, with the same files the Workflow path writes to the
+scratchpad (never pass a flag pointing at an empty file), and `--only <name>`
 (repeatable) to run only the reviewers the user consented to. The script prints
 `{configured, artifactSha256, votes:[vote | {name, __error} | {name, skipped}]}`.
 Count a vote only if its `artifactSha256` equals your `expected` digest and it

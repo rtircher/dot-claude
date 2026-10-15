@@ -52,3 +52,14 @@ test('a *File arg without its matching text arg is rejected at parse time', () =
   assert.match(src, /art\.focusFile && !art\.focus/)
   assert.match(src, /art\.outOfScopeFile && !art\.outOfScope/)
 })
+
+test('the PR description reaches the lenses and couriers, never the skeptics', () => {
+  assert.match(returned(body('adversarialPreamble')), /\$\{prDescriptionText\(art\)\}/)
+  assert.match(body('externalCourier'), /--pr-description-file "\$\{art\.prDescriptionFile\}"/)
+  assert.doesNotMatch(body('verifyPrompt'), /prDescription/)
+})
+
+test('prDescriptionFile without prDescription is rejected, and its path is shell-checked', () => {
+  assert.match(src, /art\.prDescriptionFile && !art\.prDescription/)
+  assert.match(src, /\['focusFile', 'outOfScopeFile', 'prDescriptionFile'\]/)
+})

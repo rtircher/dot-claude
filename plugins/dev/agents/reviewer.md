@@ -35,6 +35,19 @@ always applies):
   problem; **speculative** = inferred from a smell or a partial read, not
   confirmed. Label every finding — a confident-sounding hunch that was never
   checked is a review's main failure mode.
+- **Severity** is the cost of going ahead unchanged (merging, building, or
+  adopting the artifact), not how sure or emphatic you feel:
+  - **blocker**: going ahead causes harm: wrong behaviour, a security hole, or
+    data loss on a reachable path, or a spec/plan step that cannot work as
+    written.
+  - **major**: fix before going ahead, though the common path still works: a
+    likely bug on a rarer path, a contract a caller will trip on, a new
+    decision branch or the fixed bug left untested, an undefined requirement
+    the build depends on.
+  - **minor**: worth saying, cheap to skip: clarity, naming, a small
+    inefficiency, a tidy-up, a risk with no trigger today.
+  A preference with no consequence is not a finding. A lens brief that sets a
+  default severity for a pattern wins over this scale.
 - End with a single verdict: ship or don't-ship, with one sentence why.
 
 RULES:
