@@ -17,6 +17,11 @@
       "name": "dev",
       "source": "./plugins/dev",
       "description": "Personal software-development tooling: design-doc + adversarial-review + autonomous-feature skills, the babysit/pr-pruner/post-merge-sweeper PR-loop commands plus handover/takeover session-continuity commands, and coder/researcher subagents."
+    },
+    {
+      "name": "board",
+      "source": "./plugins/board",
+      "description": "Shared, repo-local ticket board every session sees"
     }
   ]
 }
