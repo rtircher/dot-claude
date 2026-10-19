@@ -206,6 +206,7 @@ def _cmd_html(ctx: _Ctx) -> int:
 
 
 def _cmd_sync(ctx: _Ctx) -> int:
+    locate.clear_negative(ctx.ref.key)
     res = sync.sync(ctx.ref)
     ctx.synced = res.synced
     for w in res.warnings:

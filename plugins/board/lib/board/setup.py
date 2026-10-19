@@ -91,4 +91,5 @@ def init(cwd: Path, mode: str, url: str | None) -> BoardRef:
     elif not _is_board(existing):
         raise SetupRefused(f"branch {branch} exists and is not a board; nothing changed")
     locate.save_config(ref)
+    locate.clear_negative(key)
     return ref

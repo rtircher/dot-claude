@@ -37,6 +37,18 @@ class LocateTest(unittest.TestCase):
         self.assertIsNone(locate.repo_key(plain))
         self.assertIsNone(locate.resolve(plain))
 
+    def test_negative_resolve_is_cached_and_cleared(self):
+        from unittest import mock
+        code = gf.make_code_repo(self.tmp, gf.make_remote(self.tmp, branch=None))
+        self.assertIsNone(locate.resolve(code))
+        with mock.patch.object(locate, "run_git") as rg:
+            self.assertIsNone(locate.resolve(code))
+            self.assertTrue(all(c.args[0][0] != "ls-remote" for c in rg.call_args_list))
+        locate.clear_negative(locate.repo_key(code))
+        with mock.patch.object(locate, "_remote_has_branch", return_value=False) as probe:
+            self.assertIsNone(locate.resolve(code))
+            self.assertTrue(probe.called)
+
     def test_slug(self):
         self.assertEqual(locate.slug("Example.com/Acme/widgets"), "example-com-acme-widgets")
 
