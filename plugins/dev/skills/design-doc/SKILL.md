@@ -1,6 +1,12 @@
 ---
 name: design-doc
-description: Draft a design doc (RFC) using a standard 8-section structure (Summary, Problem, Goals, Architecture, Risks, Testing & Rollout, Alternatives, Open Questions) with per-section guidance. Use this whenever the user wants to write, draft, or structure a new design document, design doc, technical design, or RFC for a feature, system, or service before implementation. Triggers include explicit phrases like "write a design doc", "design doc for X", "draft an RFC", or "technical design for", and also requests that describe the artifact by its parts without naming it, like "write it up properly before we build, with goals, risks, and a rollout plan". This skill authors the written artifact. Do not use it to break an already-agreed design into implementation steps (use writing-plans), to review or poke holes in an existing doc (use adversarial-review), to summarize or edit a doc that already exists, or for an open-ended "walk me through the architecture options" conversation with no doc in mind (use brainstorming).
+description: >-
+  Draft a design doc or RFC for a feature, system, or service before
+  implementation, in the standard 8-section structure (Summary, Problem, Goals,
+  Architecture, Risks, Testing & Rollout, Alternatives, Open Questions).
+  Triggers: "write a design doc", "draft an RFC", "technical design for". Not for
+  implementation steps (writing-plans), critique of a doc (adversarial-review),
+  or an open-ended discussion with no doc in mind (brainstorming).
 ---
 
 # Design Doc
@@ -16,12 +22,16 @@ into steps) then implement.
 
 - A non-trivial feature, system, or service that benefits from a written design
   before code, especially one with meaningful trade-offs or cross-team impact.
-- The user asks for a design doc, RFC, or technical design.
+- The user asks for a design doc, RFC, or technical design, or describes the
+  artifact by its parts without naming it (e.g. "write it up properly before we
+  build, with goals, risks, and a rollout plan").
 
-Not this: a quick exploratory conversation with no artifact yet (use
+Not this: a quick exploratory conversation with no artifact yet, including an
+open-ended "walk me through the architecture options" with no doc in mind (use
 brainstorming), turning an already-agreed design into ordered implementation
-steps (use writing-plans), or reviewing existing code or a PR (use
-`adversarial-review`).
+steps (use writing-plans), reviewing or poking holes in an existing doc, code, or
+PR (use `adversarial-review`), or summarizing or editing a doc that already
+exists.
 
 ## How to use the template
 

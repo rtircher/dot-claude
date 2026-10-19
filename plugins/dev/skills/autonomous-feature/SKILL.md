@@ -1,7 +1,12 @@
 ---
 name: autonomous-feature
 description: >-
-  Use when the user explicitly asks to run a whole feature through the full spec → adversarial-review → plan → adversarial-review → implement → adversarial-review pipeline with minimal supervision — e.g. "run the full pipeline", "spec it, review it, plan it, then build it", "take this all the way through with minimal input from me", "handle it end to end and only ping me if you need a decision", or the /autonomous-feature command. Do NOT trigger on an ordinary "add X" / "build Y" request, or on a request for only a spec, only a plan, only a review, or only the implementation — those belong to the individual skills (brainstorming, writing-plans, adversarial-review, subagent-driven-development). Pass a "pause" argument to gate for approval after each phase instead of running heads-down, or an "external-review" argument to force and confirm third-party enlistment: the run must surface a loud, ping-worthy failure if no external reviewer ran in ROUND 1 of a review phase (external.shortfall), while rounds 2+ digest-staleness drops are the documented degradation and never ping.
+  Run one feature through spec, review, plan, review, implement, review with
+  minimal supervision, stopping only for decisions that need the user. Triggers:
+  "run the full pipeline", "spec it, review it, plan it, then build it", "take
+  this end to end", "only ping me if you need a decision". Not for an ordinary
+  add/build ask or a request for a single phase.
+disable-model-invocation: true
 ---
 
 # Autonomous Feature
@@ -12,7 +17,8 @@ the work safely allows. This is the orchestrator that chains the individual
 skills you'd otherwise invoke one at a time, plus an explicit contract for *when
 to keep going* versus *when to stop and ping the human*.
 
-It is **explicitly invoked only**. The human, by invoking it, has already
+It is **explicitly invoked only**, as the slash command `/dev:autonomous-feature`
+(the skill is hidden from model invocation). The human, by invoking it, has already
 decided this feature is low-risk enough to run heads-down. This skill does not
 re-judge that decision — but the ping criteria below are the safety net that
 catches the cases where "low-risk" turns out to be wrong mid-flight.
@@ -23,8 +29,11 @@ catches the cases where "low-risk" turns out to be wrong mid-flight.
 - The feature is well-enough understood that a spec can be drafted without a long
   interview.
 
-If the user wants only a spec, only a plan, only a review, or wants to drive each
-step themselves, this is the wrong skill — use the underlying skills directly.
+An ordinary "add X" / "build Y" request is not a reason to use this. If the user
+wants only a spec, only a plan, only a review, only the implementation, or wants
+to drive each step themselves, this is the wrong skill — use the underlying skills
+directly (brainstorming, writing-plans, adversarial-review,
+subagent-driven-development).
 
 ## Modes
 
