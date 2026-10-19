@@ -23,18 +23,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/require-green-tests.py",
-            "if": "Bash(git *)",
-            "timeout": 60,
-            "statusMessage": "Checking for a green test run on this tree"
-          }
-        ]
-      },
-      {
         "matcher": "Read|Grep|Bash",
         "hooks": [
           {

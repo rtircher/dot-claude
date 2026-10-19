@@ -20,16 +20,6 @@ repo-local `user.name`/`user.email` before the first commit, asking rather than
 guessing, and leave any deliberate identity alone. Only the git author changes;
 never add an AI co-author trailer to compensate.
 
-## Green-tests commit gate mechanics
-
-A repo opts in by committing a `.claude/require-green-tests` file at its root
-containing its canonical full-suite command (e.g. `make test`). In opted-in
-repos, a PreToolUse hook denies `git commit` unless the current worktree
-matches the fingerprint recorded at the last green run. Record a run by
-executing the suite through the conventions plugin's
-`scripts/record-green.sh <command>` from the repo root. Staging changes never
-invalidates a recorded run; editing any file does.
-
 ## Testing-rule sources
 
 The "Test observable behavior at the boundary" rule distills matklad's

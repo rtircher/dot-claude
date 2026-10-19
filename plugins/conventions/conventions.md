@@ -210,11 +210,6 @@ subagents.
 - **Test data earns its size.** Minimal inline fixtures and builders over
   checked-in golden dumps; a reader should see from the test itself why the
   expected value is correct.
-- **Green-tests commit gate (opt-in per repo).** Repos with a
-  `.claude/require-green-tests` file gate `git commit` on a recorded green run:
-  in those repos, always run the full suite via the plugin's
-  `scripts/record-green.sh <command>` so the pass is recorded. Mechanics in the
-  conventions plugin's `docs/reference.md`.
 - **Adversarial review before committing.** When a plan/spec is finalized or a
   PR/diff is ready, run independent skeptical review: find what's wrong, not
   rubber-stamp. (See the `dev` plugin's `adversarial-review` skill.)

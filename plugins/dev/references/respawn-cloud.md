@@ -44,8 +44,7 @@ commits travel**. "Respawn anyway" must warn that uncommitted changes are *lost
 forever* when this container dies, not merely stranded in a sibling worktree.
 
 The user's work commit ("Commit now") stays subject to whatever commit gates the repo
-has (pre-commit hooks, the conventions plugin's green-tests gate), exactly as in the
-local flow; do not suggest bypassing them. If a gate blocks the commit, fix the cause
+has (pre-commit hooks), exactly as in the local flow; do not suggest bypassing them. If a gate blocks the commit, fix the cause
 or put the choice to the user. The handover-doc commit is NOT such a commit; C4
 explains why it is built with plumbing instead.
 
@@ -113,21 +112,11 @@ commit=$(git commit-tree "$tree" -p <base-sha> -m "docs: handover for <slug>") &
 rm -f "$tmpidx" && echo "$commit"
 ```
 
-Why plumbing rather than switch-commit-switch:
-
-- With a dirty tree (the "Respawn anyway" path), `git switch` drags the uncommitted
-  changes across branches and a careless `git add` would sweep them into the carrier
-  commit, stranding in-progress work on a never-merged branch. Plumbing leaves the
-  working tree and current branch untouched.
-- The conventions green-tests gate fingerprints the **whole worktree** and denies
-  `git commit` whenever the tree diverges from the last recorded green run. A
-  porcelain handover commit is therefore denied even on a clean tree (the new doc
-  file changes the fingerprint) and unrecoverably on a red tree, a common reason to
-  respawn. The gate exists so no *work* commit claims an unverified tree; this
-  carrier commit makes no claim about the worktree at all (built off base, outside
-  the worktree, on a branch that is never merged), so constructing it with
-  `commit-tree` is outside the gate's purpose, not a bypass of it. The user's work
-  commit in C2 stays gated.
+Why plumbing rather than switch-commit-switch: with a dirty tree (the "Respawn
+anyway" path), `git switch` drags the uncommitted changes across branches and a
+careless `git add` would sweep them into the carrier commit, stranding in-progress
+work on a never-merged branch. Plumbing leaves the working tree and current branch
+untouched.
 
 **Push work branch first, then handover branch:**
 
