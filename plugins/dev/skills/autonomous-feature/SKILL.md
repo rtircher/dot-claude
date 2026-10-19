@@ -32,7 +32,7 @@ catches the cases where "low-risk" turns out to be wrong mid-flight.
 An ordinary "add X" / "build Y" request is not a reason to use this. If the user
 wants only a spec, only a plan, only a review, only the implementation, or wants
 to drive each step themselves, this is the wrong skill — use the underlying skills
-directly (brainstorming, writing-plans, adversarial-review,
+directly (brainstorming, design-doc, writing-plans, adversarial-review,
 subagent-driven-development).
 
 ## Modes
@@ -194,10 +194,12 @@ written.
 
 ### Phase 1 — Spec
 
-Use your brainstorming skill to turn the feature request into a spec / design
-doc. Capture intent, requirements, and the shape of the design. Don't
-over-interview — this skill exists to move with minimal input; fill reasonable
-gaps with stated assumptions and only ping on design-changing ambiguity.
+Use your brainstorming skill to settle intent and requirements, then follow its
+handoff: this plugin's `design-doc` skill writes the spec when the change needs a
+design doc, and brainstorming's requirements note is the spec when it does not.
+Don't over-interview — this skill exists to move with minimal input; fill
+reasonable gaps with stated assumptions and only ping on design-changing
+ambiguity.
 
 **The spec MUST include a Non-goals section.** List what this feature
 deliberately does not do — the adjacent capabilities, generalizations, and

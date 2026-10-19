@@ -6,7 +6,7 @@ description: >-
   Architecture, Risks, Testing & Rollout, Alternatives, Open Questions).
   Triggers: "write a design doc", "draft an RFC", "technical design for". Not for
   implementation steps (writing-plans), critique of a doc (adversarial-review),
-  or an open-ended discussion with no doc in mind (brainstorming).
+  or intent and requirements still unsettled (brainstorming first).
 ---
 
 # Design Doc
@@ -14,9 +14,12 @@ description: >-
 Produce a design doc: the written artifact that captures *what* we're building,
 *why*, the chosen approach, and what could go wrong, so a reader who was not in
 the room can evaluate it. It sits between exploration and execution in the flow:
-brainstorming (explore intent) then this design doc (commit the approach to
-writing) then `adversarial-review` (poke holes) then `writing-plans` (break it
-into steps) then implement.
+brainstorming (settle intent and requirements) then this design doc (commit the
+approach to writing) then `adversarial-review` (poke holes) then `writing-plans`
+(break it into steps) then implement. When brainstorming hands off, its approved
+requirements summary seeds the Problem and Goals sections: build on it rather
+than re-asking what it settled. Brainstorming also decides when a change is small
+enough to skip this doc and go straight to `writing-plans`.
 
 ## When this applies
 
