@@ -1,5 +1,6 @@
 ---
 description: Vendor the canonical cloud-parity seed from dot-claude into the current repo (or --check for drift)
+disable-model-invocation: true
 allowed-tools: Bash(bash:*), Bash(git rev-parse:*), Bash(jq:*), Read, Edit
 ---
 

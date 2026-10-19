@@ -3,7 +3,7 @@
 `review-routing/` checks that the `adversarial-review` skill's tier router
 picks the right tier (`SKILL.md`, "Pick tier"):
 full tier for a bare PR URL, a PR number, "review this PR", "code review", a
-spec/plan path, or `/dev:review-panel`; quick tier only for "quick pass" /
+spec/plan path; quick tier only for "quick pass" /
 "quick review" / "quick look" / "quick check". Every case also checks the
 built-in `/code-review` skill is never invoked while deciding the tier.
 
