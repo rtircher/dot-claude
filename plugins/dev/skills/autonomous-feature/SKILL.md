@@ -176,39 +176,21 @@ provides. If none exists for a step (e.g. no verification skill), fall back to
 the inline behavior described for that phase.
 
 **Delegate adversarial review to this plugin's Workflow when the Workflow tool
-is available.** This plugin ships a `dev:review-workflow` Workflow
-(`workflows/adversarial-review.js`: independent reviewers, structured findings, an
-adversarial-verify pass that demotes only unanimously-refuted findings), wrapped
-by `dev:gated-review` (`workflows/gated-review.js`), which runs the review/fix/re-review
-gate to the confidence cap below. Where the phases below say "the
-`adversarial-review` skill" and the Workflow tool is available, delegate to
-`dev:gated-review` (or `dev:review-workflow` for a single advisory pass) instead. The
-coordinator invoking the Workflow is the sanctioned opt-in; it returns one
-consolidated structured result rather than flooding the coordinator with
-per-reviewer chatter, which suits the thin-coordinator discipline above, and its
-gate maps onto these confidence gates. A Workflow runs headless and cannot pause
-to disambiguate or to ask consent, so pass the full artifact contract up front:
-type, file path or diff range, repo, focus, out-of-scope (a PR artifact
-resolves per the adversarial-review router's Step 0, but gated review commits
-fixes, so ask the user to check out the PR branch if HEAD is not its head).
-Load the repo's `## Review focus` per the adversarial-review router's focus
-loader, and pass it as `focus` (appended to any phase focus) plus `focusFile`
-(a scratchpad file holding the same text), plus (because
-gated-review forwards args unchanged into `dev:review-workflow`) the
-external-review contract:
-`skillScriptsDir: "<plugin>/skills/adversarial-review/scripts"` (`<plugin>` is
-the `dev` plugin root, two levels above this skill's base directory; substitute
-its absolute path, because `${CLAUDE_PLUGIN_ROOT}` may be unset when this loads
-as a skill, and never guess a repo-relative path),
-`expectedArtifactSha256` (computed by this coordinator in Bash exactly as the
-`adversarial-review` skill's step 1 does: sha256 of `git diff <range>` output for
-a diff, of the file bytes for spec/plan), and `requireExternal: true` when the
-`external-review` argument was given. Without the first two the workflow skips
-external with a `config` drop, which in a force/confirm run is a round-1
-shortfall, hence a ping. The ping contract stays
-with this coordinator: read the Workflow's returned findings and stop per the
-contract above; the Workflow never pings on its own. If the Workflow tool is
-unavailable, use the `adversarial-review` skill as written.
+is available.** Where the phases below say "the `adversarial-review` skill",
+dispatch `dev:gated-review` instead (`dev:review-workflow` for a single advisory
+pass): it runs the review/fix/re-review loop to the confidence cap below and
+returns one consolidated result, which suits the thin coordinator. Invoking it
+is the sanctioned opt-in. It runs headless and forwards its args unchanged into
+`dev:review-workflow`, so build them up front exactly as the adversarial-review
+skill's `full.md` steps 1 and 2 do (artifact pin, digest, focus files,
+`skillScriptsDir`), loading focus per its router's *Load focus* section, since
+no router runs here. Only three things are specific to this skill: append any
+phase focus to that loaded focus; pass `requireExternal: true` when the
+`external-review` argument was given; and, for a PR, ask the user to check out
+its branch first, since gated review commits fixes. The ping contract stays with
+this coordinator: read the returned findings and stop per the contract above.
+If the Workflow tool is unavailable, use the `adversarial-review` skill as
+written.
 
 ### Phase 1 — Spec
 
@@ -299,10 +281,8 @@ the build is the asymmetry this phase exists to close — passing tests confirm 
 code does what you told it to, not that what you told it to do is right.
 
 Run the `adversarial-review` skill on the completed work (the branch diff). Its
-diff panel runs correctness, simplicity & YAGNI, testing, and duplication lenses. External review is on by default; the `external-review` flag forces and
-confirms round-1 participation (`requireExternal: true`, ping on round-1
-`external.shortfall`), and a code diff is the
-strongest case for a different model family. For a **multi-task** plan, also run the final cross-implementation
+diff panel runs correctness, simplicity & YAGNI, testing, and duplication lenses.
+External reviewers run per *Third-party review* above. For a **multi-task** plan, also run the final cross-implementation
 symmetry pass (`model: sonnet`, `opus` for a large or subtle diff) over the full branch diff to catch type asymmetry,
 parallel-structure drift, undocumented behavior, and cross-package coupling that
 per-task work misses.
