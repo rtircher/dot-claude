@@ -7,6 +7,7 @@ on:
     paths:
       - "plugins/dev/scaffold/**"
       - "plugins/dev/scripts/**"
+      - "plugins/dev/skills/*/scripts/**"
       - "scripts/**"
       - ".github/workflows/cloud-parity-tests.yml"
 
