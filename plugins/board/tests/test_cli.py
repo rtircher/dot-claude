@@ -64,6 +64,21 @@ class CliTest(unittest.TestCase):
         self.assertEqual(data["next"][0]["title"], "Set up backups")
         self.assertEqual(data["repo"], data["repo"] or "")
 
+    def test_html_writes_file_and_prints_path(self):
+        self.init_same()
+        self.run_cli("goal", "add", "Example goal")
+        self.run_cli("add", "Set up backups", "--session", "s1")
+        out_path = self.tmp / "out" / "board.html"
+        code, out, _ = self.run_cli("html", "--out", str(out_path), "--json")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.loads(out)["path"], str(out_path))
+        self.assertIn("Set up backups", out_path.read_text(encoding="utf-8"))
+        code, out, _ = self.run_cli("html")
+        self.assertEqual(code, 0)
+        default = Path(out.strip())
+        self.assertTrue(default.exists())
+        self.assertEqual(default.parent.name, "html")
+
     def test_add_prints_id_and_text_summary(self):
         self.init_same()
         code, out, _ = self.run_cli("add", "Title: with \"quotes\" and --- dashes")

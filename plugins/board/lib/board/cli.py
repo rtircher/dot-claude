@@ -6,10 +6,11 @@ import dataclasses
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from board import locate, setup, store, sync, views
+from board import locate, render_html, setup, store, sync, views
 from board.locate import BoardRef
 
 NO_BOARD = "No board for this repo. Run: board init --mode same|external [--url URL]"
@@ -64,6 +65,7 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("title")
     a.add_argument("--link", action="append", default=[])
     gs.add_parser("list", parents=[c])
+    sub.add_parser("html", parents=[c]).add_argument("--out")
     return p
 
 
@@ -177,6 +179,31 @@ def _cmd_next(ctx: _Ctx) -> int:
     return 0
 
 
+def _cmd_html(ctx: _Ctx) -> int:
+    board, _ = ctx.load()
+    if board is None:
+        return _not_fetched(ctx)
+    page = render_html.render_html(board, ctx.summary(board))
+    if ctx.args.out:
+        path = Path(ctx.args.out)
+    else:
+        path = locate.state_dir() / "html" / f"{locate.slug(ctx.ref.key)}.html"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".board-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(page)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    ctx.emit({"path": str(path)}, str(path))
+    return 0
+
+
 def _cmd_sync(ctx: _Ctx) -> int:
     res = sync.sync(ctx.ref)
     ctx.synced = res.synced
@@ -266,7 +293,7 @@ def _cmd_goal(ctx: _Ctx) -> int:
 
 
 _COMMANDS = {
-    "summary": _cmd_summary, "show": _cmd_show, "next": _cmd_next, "sync": _cmd_sync,
+    "summary": _cmd_summary, "html": _cmd_html, "show": _cmd_show, "next": _cmd_next, "sync": _cmd_sync,
     "add": _cmd_add, "claim": _cmd_claim, "note": _cmd_note, "goal": _cmd_goal,
     "release": _simple_write("release", "Released {id}"),
     "status": _simple_write("set_status", "Updated {id}", status="status"),
