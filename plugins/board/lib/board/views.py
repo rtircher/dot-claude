@@ -76,21 +76,24 @@ def summary(board, sessions, now, current_session, synced, next_limit=5) -> dict
 
     by_session: dict[str, list[Ticket]] = {}
     for t in board.tickets.values():
-        if t.status == "in_progress" and t.owner is not None:
+        if t.owner is not None and t.status not in ("done", "dropped"):
             by_session.setdefault(t.owner.session, []).append(t)
 
     entries, stale = [], []
     for sid, ts in by_session.items():
         hb = sessions.get(sid)
         if hb is not None:
-            all_stale = hb.state == "ended" or now - _parse(hb.last_seen) > LOCAL_STALE_AFTER
-            dead = ts if all_stale else []
+            seen = _parse(hb.last_seen)
+            if hb.state == "ended":
+                dead = ts
+            else:
+                dead = [t for t in ts if now - max(seen, _owner_activity(t)) > LOCAL_STALE_AFTER]
         else:
             dead = [t for t in ts if now - _owner_activity(t) > REMOTE_STALE_AFTER]
         dead_ids = {t.id for t in dead}
         for t in sorted(dead, key=lambda t: t.id):
             stale.append({"id": t.id, "title": t.title, "owner_label": t.owner.label})
-        live = [t for t in ts if t.id not in dead_ids]
+        live = [t for t in ts if t.id not in dead_ids and t.status == "in_progress"]
         if not live:
             continue
         latest = max(live, key=lambda t: (t.owner.claimed_at, t.id))

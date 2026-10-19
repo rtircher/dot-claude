@@ -185,6 +185,25 @@ class CliTest(unittest.TestCase):
         code, out, _ = self.run_cli("show", tid)
         self.assertIn("taken over from alpha", out)
 
+    def test_claim_takes_over_dead_owners_blocked_ticket(self):
+        self.init_same()
+        _, out, _ = self.run_cli("add", "Set up backups")
+        tid = out.strip().split()[0]
+        from board import locate
+        rk = locate.repo_key(self.repo)
+        os.environ["BOARD_SESSION_LABEL"] = "alpha"
+        self.run_cli("claim", tid, "--session", "s-alpha")
+        self.assertEqual(self.run_cli("status", tid, "blocked", "--session", "s-alpha")[0], 0)
+        sdir = self.state / "sessions"
+        sdir.mkdir(parents=True)
+        (sdir / "s-alpha.json").write_text(json.dumps(
+            {"session": "s-alpha", "label": "alpha", "where": "local", "repo_key": rk,
+             "state": "ended", "last_seen": "2026-01-01T00:00:00Z"}))
+        os.environ["BOARD_SESSION_LABEL"] = "beta"
+        code, out, err = self.run_cli("claim", tid, "--session", "s-beta")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("taken over from alpha", self.run_cli("show", tid)[1])
+
     def test_claim_without_session_exits_1(self):
         self.init_same()
         _, out, _ = self.run_cli("add", "Set up backups")

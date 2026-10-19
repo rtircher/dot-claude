@@ -108,7 +108,7 @@ class ViewsTest(unittest.TestCase):
 
     def test_stale_local_and_remote(self):
         b = board(
-            tk("a", status="in_progress", owner=own("s1"), updated=iso(1)),
+            tk("a", status="in_progress", owner=own("s1", "alice", 5), updated=iso(1)),
             tk("b", status="in_progress", owner=own("s2", "bob", 25), updated=iso(1)),
             tk("c", status="in_progress", owner=own("s3", "cy", 23), updated=iso(1)),
             tk("d", status="in_progress", owner=own("s4", "di"), updated=iso(1)),
@@ -119,6 +119,23 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual(set(stale), {"a", "b", "d"})
         self.assertEqual(stale["b"]["owner_label"], "bob")
         self.assertEqual([e["session"] for e in s["sessions"]], ["s3"])
+
+    def test_local_heartbeat_old_but_owner_note_recent_is_not_stale(self):
+        t = tk("a", status="in_progress", owner=own("s1", "alice", 5),
+               log=[LogEntry(iso(1 / 6), "s1", "progress")])
+        s = self.summ(board(t), {"s1": hb("s1", "active", 3)})
+        self.assertEqual(s["stale"], [])
+        self.assertEqual(len(s["sessions"]), 1)
+
+    def test_dead_owner_blocked_ticket_is_stale_but_not_a_session_entry(self):
+        t = tk("a", status="blocked", owner=own("s1", "alice", 5))
+        s = self.summ(board(t), {"s1": hb("s1", "ended", 3)})
+        self.assertEqual([e["id"] for e in s["stale"]], ["a"])
+        self.assertEqual(s["sessions"], [])
+        live = tk("b", status="blocked", owner=own("s2", "bob", 1))
+        s = self.summ(board(live), {"s2": hb("s2", "active", 0.1, "bob")})
+        self.assertEqual(s["stale"], [])
+        self.assertEqual(s["sessions"], [])
 
     def test_other_sessions_note_does_not_keep_remote_claim_alive(self):
         t = tk("b", status="in_progress", owner=own("s2", "bob", 25), updated=iso(1),
