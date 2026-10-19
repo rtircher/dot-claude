@@ -42,6 +42,21 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("No board for this repo. Run: board init --mode same|external [--url URL]", out)
 
+    def test_sync_bypasses_fresh_negative_cache(self):
+        self.assertEqual(self.run_cli("summary")[0], 2)
+        self.assertTrue((self.state / "negative.json").exists())
+        seed = self.tmp / "seed"
+        gf.git(self.tmp, "init", "-q", str(seed))
+        gf.git(seed, "checkout", "-q", "--orphan", gf.BRANCH)
+        (seed / "board.json").write_text('{"code_repo": "example/repo"}\n', encoding="utf-8")
+        gf.git(seed, "add", "-A")
+        gf.git(seed, "commit", "-q", "-m", "board: init")
+        gf.git(seed, "push", "-q", str(self.origin), f"{gf.BRANCH}:refs/heads/{gf.BRANCH}")
+        self.assertEqual(self.run_cli("summary")[0], 2)
+        code, out, err = self.run_cli("sync")
+        self.assertNotEqual(code, 2, out + err)
+        self.assertEqual(self.run_cli("summary")[0], 0)
+
     def test_outside_git_exit_2(self):
         plain = self.tmp / "plain"
         plain.mkdir()

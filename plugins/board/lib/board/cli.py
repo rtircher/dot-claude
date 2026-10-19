@@ -310,6 +310,10 @@ def _run(argv: list[str], cwd: Path) -> int:
     ctx = _Ctx(args, cwd)
     if args.cmd == "init":
         return _cmd_init(ctx)
+    if args.cmd == "sync":
+        key = locate.repo_key(cwd)
+        if key is not None:
+            locate.clear_negative(key)
     ctx.ref = locate.resolve(cwd)
     if ctx.ref is None:
         print(NO_BOARD)
