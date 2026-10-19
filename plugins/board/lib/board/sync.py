@@ -42,11 +42,11 @@ def _journal_path(ref: BoardRef) -> Path:
 
 
 @contextmanager
-def _lock(ref: BoardRef):
+def _lock(ref: BoardRef, wait: float | None = None):
     path = state_dir() / "locks" / f"{slug(ref.key)}.lock"
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a+") as fh:
-        end = time.monotonic() + LOCK_WAIT
+        end = time.monotonic() + (LOCK_WAIT if wait is None else wait)
         while True:
             try:
                 fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -184,8 +184,8 @@ def _offline(cwd: Path, ref: BoardRef, journal: list[dict], warnings: list[str])
     return SyncResult(False, warnings)
 
 
-def submit(ref: BoardRef, op: dict, timeout: float = 5) -> SyncResult:
-    with _lock(ref):
+def submit(ref: BoardRef, op: dict, timeout: float = 5, lock_wait: float | None = None) -> SyncResult:
+    with _lock(ref, lock_wait):
         path = _journal_path(ref)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as fh:
@@ -193,6 +193,6 @@ def submit(ref: BoardRef, op: dict, timeout: float = 5) -> SyncResult:
         return _sync(ref, timeout)
 
 
-def sync(ref: BoardRef, timeout: float = 5) -> SyncResult:
-    with _lock(ref):
+def sync(ref: BoardRef, timeout: float = 5, lock_wait: float | None = None) -> SyncResult:
+    with _lock(ref, lock_wait):
         return _sync(ref, timeout)
