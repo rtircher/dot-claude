@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { renderGlance, textBar, ticketDetail, goalTickets, fileLink } from './render.mjs'
+import { renderGlance, textBar, barSvg, repoName, ruleSvg, ticketDetail, goalTickets, fileLink } from './render.mjs'
 
 const next = (n) =>
   Array.from({ length: n }, (_, i) => ({ id: `t${i + 1}`, title: `Example task ${i + 1}`, goal: 'g1' }))
@@ -123,4 +123,44 @@ test('goalTickets filters ready items by goal', () => {
 
 test('fileLink escapes parentheses and spaces', () => {
   assert.equal(fileLink('/a b/c(1).html'), 'file:///a%20b/c%281%29.html')
+})
+
+test('sections carry small uppercase headings', () => {
+  const vm = renderGlance(fixture(), { currentSession: 'me' })
+  assert.deepEqual(vm.sections.map((s) => s.heading), [
+    'PROJECT · PROJECT',
+    'IN PROGRESS · 3 SESSIONS',
+    'NEXT UP (UNCLAIMED, UNBLOCKED)',
+  ])
+})
+
+test('idle and waiting badges are flagged for the warning color', () => {
+  const ss = renderGlance(fixture(), { currentSession: 'me' }).sections[1].sessions
+  assert.deepEqual(ss.map((x) => [x.badge, x.warn]), [
+    ['waiting on you', true],
+    ['idle', true],
+    ['remote', false],
+  ])
+})
+
+test('side-quest chain items after the first get a chevron', () => {
+  const ss = renderGlance(fixture(), { currentSession: 'me' }).sections[1].sessions
+  assert.deepEqual(ss[0].chain.map((c) => c.text), ['Parent', '› Child'])
+})
+
+test('barSvg fills the accent rect to the fraction and clamps', () => {
+  assert.match(barSvg(0.5, 300, 6), /<rect width="150" height="6" rx="3" fill="#3b82f6"\/>/)
+  assert.match(barSvg(2, 300, 6), /<rect width="300" height="6" rx="3" fill="#3b82f6"\/>/)
+  assert.doesNotMatch(barSvg(0, 300, 6), /#3b82f6/)
+  assert.match(barSvg(0.4), /^<svg [^>]*preserveAspectRatio="none"/)
+})
+
+test('ruleSvg is one pixel tall', () => {
+  assert.match(ruleSvg(), /height="1"/)
+})
+
+test('repoName keeps the last path segment', () => {
+  assert.equal(repoName('example.invalid/someone/project'), 'project')
+  assert.equal(repoName('git@example.invalid:someone/project.git'), 'project')
+  assert.equal(repoName(undefined), '')
 })

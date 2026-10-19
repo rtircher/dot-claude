@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { renderGlance, textBar, ticketDetail, goalTickets, fileLink } from './render.mjs'
+import { renderGlance, textBar, barSvg, ruleSvg, ticketDetail, goalTickets, fileLink } from './render.mjs'
 
 const PANE = 'board-glance'
 const POLL_MS = 30_000
@@ -107,7 +107,18 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
+    const { Box, Text, Button, Markdown, Svg } = $.ui.resolve(e) as any
+    // Graphical surfaces (desktop, mobile) take type sizes, weights and SVG;
+    // the terminal gets text bars and bold, which every engine accepts.
+    const gfx = e.surface !== 'terminal' && Boolean(Svg)
+    const small = gfx ? { size: 'caption' } : {}
+    const note2 = gfx ? { size: 'footnote' } : {}
+    const count = gfx ? { size: 'footnote', tabular: true } : {}
+    const strong = gfx ? { weight: 'semibold' } : { bold: true }
+    const heading = (key: string, text: string) => (
+      <Text key={key} {...small} {...strong} dimColor>{text}</Text>
+    )
+    const rule = (key: string) => gfx && <Svg key={key} source={ruleSvg()} alt="" height={1} />
 
     if (noBoard) return <Text dimColor>No board for this repo. Ask Claude to set up a board.</Text>
     if (!summaryNow) return <Text dimColor>{note || 'Loading the board...'}</Text>
@@ -116,38 +127,59 @@ export const register: Register = on => {
     const vm = renderGlance(summary, { currentSession: sessionId })
 
     if (detail) {
+      const [head, ...rest] = detail
       return (
-        <Box flexDirection="column">
+        <Box flexDirection="column" gap={1}>
           <Button key="back" onPress={() => { detail = null; redraw($) }}>Back</Button>
-          {detail.map((l, i) => <Text key={`d${i}`}>{l}</Text>)}
+          <Text {...strong}>{head}</Text>
+          <Box flexDirection="column">
+            {rest.map((l, i) => <Text key={`d${i}`} {...note2} dimColor={l.startsWith('  ')}>{l}</Text>)}
+          </Box>
         </Box>
       )
     }
 
+    const toggleGoal = (id: string) => {
+      expanded.has(id) ? expanded.delete(id) : expanded.add(id)
+      redraw($)
+      void refresh($)
+    }
+
     return (
-      <Box flexDirection="column">
-        {note && <Text dimColor>{note}</Text>}
-        {vm.notice && <Text dimColor>{vm.notice}</Text>}
-        {vm.unsynced && !vm.notice && <Text dimColor>unsynced: showing the last known board</Text>}
+      <Box flexDirection="column" gap={2}>
+        {(note || vm.notice || vm.unsynced) && (
+          <Box flexDirection="column">
+            {note && <Text {...note2} dimColor>{note}</Text>}
+            {vm.notice && <Text {...note2} dimColor>{vm.notice}</Text>}
+            {vm.unsynced && !vm.notice && <Text {...note2} color="warning">unsynced: showing the last known board</Text>}
+          </Box>
+        )}
         {vm.sections.map(sec => {
           if (sec.kind === 'project') {
             return (
-              <Box key="project" flexDirection="column">
-                <Text bold>{sec.title}</Text>
+              <Box key="project" flexDirection="column" gap={1}>
+                {heading('project-h', sec.heading)}
                 {sec.bars.map(b => (
                   <Box key={`g-${b.id}`} flexDirection="column">
-                    <Button
-                      key={`goal-${b.id}`}
-                      onPress={() => { expanded.has(b.id) ? expanded.delete(b.id) : expanded.add(b.id); redraw($); void refresh($) }}
-                    >
-                      {b.title} {textBar(b.fraction)} {b.label}
-                    </Button>
+                    <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                      <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                        <Button key={`goal-${b.id}`} plain label={b.title} onPress={() => toggleGoal(b.id)} />
+                      </Box>
+                      <Box flexShrink={0}>
+                        <Text {...count} dimColor>{b.label}</Text>
+                      </Box>
+                    </Box>
+                    {gfx
+                      ? <Svg source={barSvg(b.fraction)} alt={`${b.title}: ${b.label} done`} height={6} />
+                      : <Text color="suggestion">{textBar(b.fraction)}</Text>}
                     {expanded.has(b.id) && (
-                      goalTickets(summary, b.id).length === 0
-                        ? <Text dimColor>  no ready tickets in this goal</Text>
-                        : goalTickets(summary, b.id).map((t: any) => (
-                            <Button key={`gt-${t.id}`} onPress={() => showTicket($, t.id)}>  {t.id}  {t.title}</Button>
-                          ))
+                      <Box flexDirection="column" paddingLeft={2} marginTop={1}>
+                        {goalTickets(summary, b.id).length === 0
+                          ? <Text {...note2} dimColor>no ready tickets in this goal</Text>
+                          : goalTickets(summary, b.id).map((t: any) => (
+                              <Button key={`gt-${t.id}`} plain dimColor label={t.title} onPress={() => showTicket($, t.id)} />
+                            ))}
+                      </Box>
                     )}
                   </Box>
                 ))}
@@ -156,33 +188,56 @@ export const register: Register = on => {
           }
           if (sec.kind === 'sessions') {
             return (
-              <Box key="sessions" flexDirection="column">
-                <Text bold>{sec.title}</Text>
-                {sec.sessions.map(s => (
-                  <Box key={`s-${s.session}`} flexDirection="column">
-                    <Text>{s.label} [{s.badge}]</Text>
-                    {s.chain.map(c => (
-                      <Button key={`c-${s.session}-${c.id}`} onPress={() => showTicket($, c.id)}>
-                        <Text dimColor={c.muted} bold={c.current}>{'  '}{c.id}  {c.title}</Text>
-                      </Button>
-                    ))}
+              <Box key="sessions" flexDirection="column" gap={1}>
+                {heading('sessions-h', sec.heading)}
+                {sec.sessions.map((s, si) => (
+                  <Box key={`s-${s.session}`} flexDirection="column" gap={1}>
+                    {si > 0 && rule(`sr-${s.session}`)}
+                    <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                      <Text {...small} {...strong} color="suggestion">{s.label}</Text>
+                      {s.warn
+                        ? <Text {...small} color="warning">{s.badge}</Text>
+                        : <Text {...small} dimColor>{s.badge}</Text>}
+                    </Box>
+                    <Box flexDirection="row" gap={1}>
+                      <Box width={1} backgroundColor="suggestion" />
+                      <Box flexDirection="column">
+                        {s.chain.map(c =>
+                          gfx && c.current
+                            ? (
+                                <Button key={`c-${s.session}-${c.id}`} plain label={c.text} onPress={() => showTicket($, c.id)}>
+                                  <Text weight="semibold">{c.text}</Text>
+                                </Button>
+                              )
+                            : <Button key={`c-${s.session}-${c.id}`} plain dimColor={c.muted} label={c.text} onPress={() => showTicket($, c.id)} />,
+                        )}
+                      </Box>
+                    </Box>
                   </Box>
                 ))}
               </Box>
             )
           }
           return (
-            <Box key="next" flexDirection="column">
-              <Text bold>{sec.title}</Text>
-              {sec.items.map(t => (
-                <Button key={`n-${t.id}`} onPress={() => showTicket($, t.id)}>{t.id}  {t.title}</Button>
+            <Box key="next" flexDirection="column" gap={1}>
+              {heading('next-h', sec.heading)}
+              {sec.items.map((t, i) => (
+                <Box key={`n-${t.id}`} flexDirection="column" gap={1}>
+                  {i > 0 && rule(`nr-${t.id}`)}
+                  <Button key={`nb-${t.id}`} plain label={t.title} onPress={() => showTicket($, t.id)} />
+                </Box>
               ))}
-              {sec.more && <Text dimColor>{sec.more}</Text>}
+              {sec.more && rule('nr-more')}
+              {sec.more && <Text {...note2} dimColor>{sec.more}</Text>}
             </Box>
           )
         })}
-        <Button key="full" onPress={() => openFull($)}>Full board</Button>
-        {fullBoard && <Markdown text={fullBoard} />}
+        <Box flexDirection="column" gap={1}>
+          <Box flexDirection="row">
+            <Button key="full" onPress={() => openFull($)}>Full board</Button>
+          </Box>
+          {fullBoard && <Markdown text={fullBoard} />}
+        </Box>
       </Box>
     )
   })

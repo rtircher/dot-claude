@@ -4,6 +4,41 @@
 export const NEXT_SHOWN = 5
 
 const BADGES = { waiting: 'waiting on you' }
+// Badges that need the user's attention are drawn in the warning color.
+const WARN_STATES = new Set(['idle', 'waiting'])
+
+// The goal bar and row divider are SVG on graphical surfaces. Fixed colors
+// with partial opacity read on both light and dark themes.
+const ACCENT = '#3b82f6'
+const TRACK = '#888888'
+
+export function barSvg(fraction, width = 300, height = 6) {
+  const f = Math.min(1, Math.max(0, fraction || 0))
+  const fill = Math.round(f * width)
+  const r = height / 2
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">` +
+    `<rect width="${width}" height="${height}" rx="${r}" fill="${TRACK}" fill-opacity="0.25"/>` +
+    (fill > 0 ? `<rect width="${fill}" height="${height}" rx="${r}" fill="${ACCENT}"/>` : '') +
+    '</svg>'
+  )
+}
+
+export function ruleSvg(width = 300) {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="1" viewBox="0 0 ${width} 1" preserveAspectRatio="none">` +
+    `<rect width="${width}" height="1" fill="${TRACK}" fill-opacity="0.35"/></svg>`
+  )
+}
+
+// The repo as people say it: the last path segment of a URL-ish name.
+export function repoName(repo) {
+  return String(repo || '').replace(/\.git$/, '').split('/').filter(Boolean).pop() || ''
+}
+
+function heading(title) {
+  return title.toUpperCase()
+}
 
 export function textBar(fraction, width = 12) {
   const f = Math.min(1, Math.max(0, fraction || 0))
@@ -22,10 +57,12 @@ export function renderGlance(summary, opts = {}) {
       label: s.label,
       where: s.where,
       badge: BADGES[s.state] || s.state,
+      warn: WARN_STATES.has(s.state),
       isCurrent: s.session === current,
       chain: (s.chain || []).map((c, i, all) => ({
         id: c.id,
         title: c.title,
+        text: i === 0 ? c.title : `› ${c.title}`,
         current: i === all.length - 1,
         muted: i < all.length - 1,
       })),
@@ -37,6 +74,7 @@ export function renderGlance(summary, opts = {}) {
     {
       kind: 'project',
       title: `Project · ${summary.repo || ''}`,
+      heading: heading(`Project · ${repoName(summary.repo)}`),
       bars: goals.map((g) => ({
         id: g.id,
         title: g.title,
@@ -51,6 +89,7 @@ export function renderGlance(summary, opts = {}) {
     sections.push({
       kind: 'sessions',
       title: `In progress · ${sessions.length} session${sessions.length === 1 ? '' : 's'}`,
+      heading: heading(`In progress · ${sessions.length} session${sessions.length === 1 ? '' : 's'}`),
       sessions,
     })
   }
@@ -58,6 +97,7 @@ export function renderGlance(summary, opts = {}) {
     sections.push({
       kind: 'next',
       title: 'Next up',
+      heading: heading('Next up (unclaimed, unblocked)'),
       items: all.slice(0, NEXT_SHOWN),
       more: more > 0 ? `+${more} more` : null,
     })
