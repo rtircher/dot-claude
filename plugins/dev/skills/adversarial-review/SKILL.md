@@ -47,6 +47,8 @@ Run `<plugin>/skills/adversarial-review/scripts/load-focus.sh --base <ref>` once
 
 It prints `focus:`, optional `areas:`, `migrations:` and `extra-lens:` lines, `---`, then the rest of the section verbatim. The `focus:` value is the output contract's first-line `focus:` field: the file the focus came from, `none`, `unavailable (no clone)`, or `read from working tree` (the base ref could not be fetched). Pass the text after `---` as `focus`, never truncated (the script warns past 40 lines). `areas:` and `migrations:` feed only the quick tier's bucketing; `extra-lens:` feeds the gated extra agent on either tier.
 
+A nonzero exit means focus could not be read (in `--gh` mode, an auth, network or rate-limit failure rather than a missing file): report `focus: unavailable (<reason>)`, with the reason from stderr, and continue without focus.
+
 Caller-supplied focus (an explicit `focus` arg from `dev:gated-review` or autonomous-feature) is appended to the section above.
 
 ## PR description

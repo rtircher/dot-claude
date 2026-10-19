@@ -6,7 +6,7 @@
 # locates the line from the file content at that SHA (never from `gh pr diff`),
 # posts with the single-comment endpoint, then checks the comment's diff_hunk.
 # Run from a clone of the PR's repo; `--remote` is the git remote whose URL
-# matches that repo. Side is always RIGHT (the new version of the file); for a
+# matches that repo, and names the repo when --repo is omitted. Side is always RIGHT (the new version of the file); for a
 # deleted line, make the same `gh api` call by hand with side=LEFT.
 #
 #   --pattern    ERE matching exactly one line of <path> at the SHA
@@ -39,7 +39,25 @@ while [ $# -gt 0 ]; do
 done
 { [ -n "$pr" ] && [ -n "$remote" ] && [ -n "$path" ] && [ -n "$pattern" ] && [ -n "$body_file" ]; } || usage
 [ -f "$body_file" ] || { echo "post-comment: no such body file: $body_file" >&2; exit 1; }
-[ -n "$repo" ] || repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+
+# The repo comes from --remote, the remote the SHA is fetched from, so the comment
+# and the line lookup always address the same repo (`gh repo view` follows the
+# gh default, which can differ in a multi-remote clone).
+if [ -z "$repo" ]; then
+  url=$(git remote get-url "$remote" 2>/dev/null) \
+    || { echo "post-comment: no git remote named '$remote'" >&2; exit 1; }
+  url=${url%/}; url=${url%.git}
+  # URL form (ssh:// or https://, optional user@ and :port) or scp form
+  # (user@host:owner/repo, host may be an ssh config alias).
+  if [[ "$url" =~ ^[A-Za-z][A-Za-z0-9+.-]*://([^/@]+@)?[^/]+/([^/]+)/([^/]+)$ ]]; then
+    repo="${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+  elif [[ "$url" =~ ^([^/@:]+@)?[^/:]+:([^/]+)/([^/]+)$ ]]; then
+    repo="${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+  else
+    echo "post-comment: cannot derive owner/repo from remote '$remote' ($url); pass --repo" >&2
+    exit 1
+  fi
+fi
 
 # 1. Pin the head SHA.
 [ -n "$sha" ] || sha=$(gh pr view "$pr" -R "$repo" --json headRefOid -q .headRefOid)

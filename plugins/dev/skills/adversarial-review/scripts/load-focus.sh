@@ -21,6 +21,10 @@
 #   extra-lens: <name>                          (omitted when none declared)
 #   ---
 #   <the rest of the section, verbatim>
+#
+# Exit: 0 ok, 2 usage, 3 --gh mode could not read a file for a reason other than
+# "not found" (auth, network, rate limit); the reason is on stderr and no focus
+# is printed, so callers never mistake an outage for an absent section.
 set -euo pipefail
 
 base="" repo="" gh_repo=""
@@ -39,6 +43,10 @@ if [ -z "$gh_repo" ] && [ -z "$repo" ]; then repo=$(git rev-parse --show-topleve
 # or a higher level); exits 1 when the heading is absent.
 section() {
   awk '
+    # Fenced code blocks hold no headings: a `# comment` line inside one must not
+    # end the section (or open it).
+    /^[ \t]*(```|~~~)/ { fence = !fence; if (found) print; next }
+    fence { if (found) print; next }
     !found && /^#+[ \t]+Review focus[ \t]*$/ { h = $0; sub(/[ \t].*/, "", h); level = length(h); found = 1; next }
     found {
       if (match($0, /^#+[ \t]/)) { h = $0; sub(/[ \t].*/, "", h); if (length(h) <= level) exit }
@@ -56,10 +64,20 @@ if [ -z "$gh_repo" ] && ! git -C "$repo" rev-parse --verify -q "$base^{commit}" 
   git -C "$repo" rev-parse --verify -q "$base^{commit}" >/dev/null || on_disk_fallback=1
 fi
 
-read_tracked() { # file -> stdout, non-zero status when absent
-  local f="$1"
+read_tracked() { # file -> stdout; status 1 when absent, 3 when unreadable (--gh only)
+  local f="$1" out err
   if [ -n "$gh_repo" ]; then
-    gh api -H "Accept: application/vnd.github.raw" "repos/$gh_repo/contents/$f?ref=$base" 2>/dev/null
+    # Only a 404 means "no such file"; GitHub also answers 404 for a private repo
+    # the token cannot see, which is indistinguishable here.
+    if out=$(gh api -H "Accept: application/vnd.github.raw" "repos/$gh_repo/contents/$f?ref=$base" 2>&1); then
+      printf '%s\n' "$out"
+    elif [[ "$out" == *"HTTP 404"* ]]; then
+      return 1
+    else
+      err=$(printf '%s' "$out" | head -n 1)
+      echo "load-focus: cannot read $f from $gh_repo@$base: ${err:-gh api failed}" >&2
+      return 3
+    fi
   elif [ "$on_disk_fallback" = 1 ]; then
     cat "$repo/$f" 2>/dev/null
   else
@@ -73,7 +91,9 @@ if [ -z "$gh_repo" ] && [ -f "$repo/CLAUDE.local.md" ] && b=$(section <"$repo/CL
 fi
 if [ -z "$source_name" ]; then
   for f in AGENTS.md CLAUDE.md; do
-    if text=$(read_tracked "$f") && b=$(printf '%s\n' "$text" | section); then
+    rc=0; text=$(read_tracked "$f") || rc=$?
+    [ "$rc" -eq 3 ] && exit 3
+    if [ "$rc" -eq 0 ] && b=$(printf '%s\n' "$text" | section); then
       source_name="$f" body="$b"
       [ "$on_disk_fallback" = 1 ] && source_name="read from working tree"
       break
