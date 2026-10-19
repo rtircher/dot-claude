@@ -45,6 +45,8 @@ test('adversarial-review.js: every DEFAULT_TIERS slot pins model and effort', ()
   for (const [key, t] of Object.entries(tiers)) {
     assert.ok(t.model, `${key} has no model`)
     assert.ok(efforts.includes(t.effort), `${key} has no valid effort`)
+    // xhigh and max are per-run overrides, never defaults (conventions, "Model selection").
+    assert.ok(efforts.indexOf(t.effort) <= efforts.indexOf('high'), `${key} defaults above high`)
   }
   assert.ok(efforts.indexOf(tiers.verify.effort) >= efforts.indexOf('high'), 'verify skeptics below high')
 })

@@ -47,11 +47,12 @@ non-trivial questions about the code:
   `DOT_CLAUDE_MODEL_MAP` to a JSON remap (e.g. `{"fable":"opus"}`) and apply it
   to every `model:` you pass; the review workflows take it as `modelMap`.
 - **Effort travels with the agent definition.** `dev:coder` and
-  `dev:reviewer` default to `high`, `dev:researcher` to `medium`; review
-  workflows pin effort per slot. Omit `effort:` to take the definition's
-  default. Pass it only to deviate: `low` for a pure lookup or courier,
-  `xhigh` for a correctness-critical pass (concurrency, migrations, security).
-  `max` is opt-in by name. Built-in types (general-purpose, Explore, Plan)
+  `dev:researcher` default to `medium` (Anthropic's starting point for Sonnet
+  agentic coding), `dev:reviewer` to `high`; review workflows pin effort per
+  slot, none above `high`. Omit `effort:` to take the definition's default.
+  Pass it only to deviate: `low` for a pure lookup or courier, `xhigh` only for
+  a measured gain (a pass at `high` missed what `xhigh` caught on the same kind
+  of work). `max` is opt-in by name. Built-in types (general-purpose, Explore, Plan)
   carry no default we control, so pass `effort:` with them (`medium` for
   Explore). For a reasoning ceiling on a narrow task, retry
   the same model one effort level up before moving up a tier. Repo

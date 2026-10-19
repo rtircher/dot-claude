@@ -83,9 +83,9 @@
  *                                    // (scope-yagni, gaps, simplicity-yagni, duplication) on
  *                                    // sonnet, reasoning lenses and the verify skeptics on
  *                                    // fable. Effort is pinned too: medium on the mechanical
- *                                    // lenses, high on reasoning lenses and verify, xhigh on
- *                                    // diff correctness. Nothing inherits the session model
- *                                    // or effort. Explicit tiers override per key.
+ *                                    // lenses, high on reasoning lenses (diff correctness
+ *                                    // included) and verify. Nothing inherits the session
+ *                                    // model or effort. Explicit tiers override per key.
  *   modelMap?: { [alias]: alias },   // remap applied after tiers, for an account without
  *                                    // an alias: {"fable": "opus"}. Never targets sonnet.
  * }
@@ -256,15 +256,16 @@ function gitPrefix(art) {
   return art.repoDir ? `git -C "${art.repoDir}"` : 'git'
 }
 
-// Fixed routing, every slot named (conventions, "Model selection"): mechanical
-// lenses on the worker tier (sonnet); reasoning lenses, the diff correctness and
-// testing lenses, and the verify skeptics on the reasoning tier (fable). Nothing
-// inherits: the coordinator runs a stronger tier, so an omitted model would put every slot on the coordinator tier and
-// multiply usage across the fan-out. Effort is pinned for the same reason: an
-// omitted effort falls to the agent definition's default (dev:researcher, which
-// the skeptics run as, is medium). Correctness gets xhigh because it is the one
-// lens whose misses ship as bugs. args.tiers overrides one key; never downgrade
-// the verify skeptics.
+// Fixed routing, every slot named (conventions, "Model selection", owns the
+// why): mechanical lenses on the worker tier (sonnet); reasoning lenses, the diff
+// correctness and testing lenses, and the verify skeptics on the reasoning tier
+// (fable). Nothing inherits: the coordinator runs a stronger tier, so an omitted
+// model would put every slot on the coordinator tier and multiply usage across
+// the fan-out. Effort is pinned for the same reason: an omitted effort falls to
+// the agent definition's default (dev:researcher, which the skeptics run as, is
+// medium). No default exceeds high: xhigh and max are per-run overrides through
+// args.tiers, kept for a measured gain or a high-stakes focus. args.tiers
+// overrides one key; never downgrade the verify skeptics.
 const DEFAULT_TIERS = {
   'hidden-assumptions': { model: 'fable', effort: 'high' },
   gaps: { model: 'sonnet', effort: 'medium' },
@@ -272,7 +273,7 @@ const DEFAULT_TIERS = {
   'scope-yagni': { model: 'sonnet', effort: 'medium' },
   sequencing: { model: 'fable', effort: 'high' },
   risk: { model: 'fable', effort: 'high' },
-  correctness: { model: 'fable', effort: 'xhigh' },
+  correctness: { model: 'fable', effort: 'high' },
   'simplicity-yagni': { model: 'sonnet', effort: 'medium' },
   testing: { model: 'fable', effort: 'high' },
   duplication: { model: 'sonnet', effort: 'medium' },

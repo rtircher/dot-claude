@@ -96,13 +96,14 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
   config error.
 - `tiers`: normally omitted. `DEFAULT_TIERS` in
   `<plugin>/workflows/adversarial-review.js` names every slot
-  (mechanical lenses sonnet at medium effort, reasoning lenses and the verify
-  skeptics fable at high, diff correctness fable at xhigh) and accepts only
+  (mechanical lenses sonnet at medium effort; reasoning lenses, diff correctness
+  included, and the verify skeptics fable at high) and accepts only
   `fable`/`opus`/`sonnet`; no slot inherits the session model or effort. An override
   replaces one key (a lens key or `verify`; values `{model, effort}`) and needs a
-  concrete reason about this artifact. A loaded focus that marks an area the
-  artifact touches as high-stakes (billing, auth, data loss) is one: raise
-  `correctness` effort to `max` and `verify` to `xhigh`. Never downgrade the verify skeptics.
+  concrete reason about this artifact: the user naming the effort, or a measured
+  gain (a run at `high` missed what `xhigh` caught on this kind of change). A
+  high-stakes focus alone is not one; it already steers what the lenses hunt for.
+  Never downgrade the verify skeptics.
 - `modelMap`: pass the parsed value of `DOT_CLAUDE_MODEL_MAP` when that env var
   is set (check with `printenv DOT_CLAUDE_MODEL_MAP`), otherwise omit it. It
   remaps an alias the account lacks, e.g. `{"fable":"opus"}`, and never targets
