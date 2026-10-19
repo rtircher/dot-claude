@@ -1,6 +1,6 @@
 ---
 description: Load this repo's latest handover into the session on demand (non-destructive read; finds branch-carried cloud handovers too)
-allowed-tools: Bash(bash:*), Bash(git branch:*), Bash(git fetch:*), Bash(git show:*), Bash(git merge-base:*), Bash(git switch:*), Bash(git log:*), Bash(jj root:*), Bash(jj new:*), Bash(jj git fetch:*), Bash(jj log:*), Read
+allowed-tools: Bash(git rev-parse:*), Bash(git branch:*), Bash(git fetch:*), Bash(git show:*), Bash(git merge-base:*), Bash(git switch:*), Bash(git log:*), Bash(jj root:*), Bash(jj new:*), Bash(jj git fetch:*), Bash(jj log:*), Read
 ---
 
 Pull the most recent handover for THIS repo (written by `/dev:handover` or
@@ -74,7 +74,7 @@ its own line as `` `/rename <name>` `` and ask the user to run it.
 ## 4. Get on the right branch (only if needed)
 
 Only when the repo matches, the named branch exists in this repo, and you are not
-already on it, get onto it. In a jj repo (`jj root` succeeds) that is `jj new
+already on it, get onto it. In a jj repo (`jj root` succeeds and `git rev-parse --show-toplevel` fails or prints the same path; a git worktree nested in a jj repo prints its own path, so it is plain git) that is `jj new
 <bookmark>`; in plain git `git switch <branch>`, or `git worktree add <path>
 <branch>` where a hook blocks switching. If that branch already lives in another
 worktree, work from that path instead. Never switch branches on a repo

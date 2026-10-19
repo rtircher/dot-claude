@@ -1,6 +1,6 @@
 ---
 description: Respawn this session into a fresh, meaningfully named one. Writes a handover, then spawns a clean session that resumes the work (a started session, or a branch-carried resume prompt in cloud)
-allowed-tools: Bash(jj root:*), Bash(jj log:*), Bash(jj new:*), Bash(jj bookmark:*), Bash(bash:*), Bash(git status:*), Bash(git branch:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-remote:*), Bash(git push:*), Bash(git hash-object:*), Bash(git read-tree:*), Bash(git update-index:*), Bash(git write-tree:*), Bash(git commit-tree:*), Bash(mkdir -p:*), Bash(mktemp:*), Bash(rm -f:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write, ToolSearch, Read, mcp__ccd_session__start_session
+allowed-tools: Bash(jj root:*), Bash(jj log:*), Bash(jj new:*), Bash(jj bookmark:*), Bash(git status:*), Bash(git branch:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-remote:*), Bash(git push:*), Bash(git hash-object:*), Bash(git read-tree:*), Bash(git update-index:*), Bash(git write-tree:*), Bash(git commit-tree:*), Bash(mkdir -p:*), Bash(mktemp:*), Bash(rm -f:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write, ToolSearch, Read, mcp__ccd_session__start_session
 ---
 
 Collapse the `handover` then `clear` then `takeover` ritual into one step. This writes
@@ -32,7 +32,7 @@ harmless probe. The tool may be deferred; load it with ToolSearch query
 Use `start_session`, not `hand_off_to_session`: a hand-off forks the whole
 conversation into the new session, which defeats a respawn.
 
-jj repos (`jj root` succeeds) have no `git checkout`/`switch` (a hook blocks them) and
+jj repos (`jj root` succeeds and `git rev-parse --show-toplevel` fails or prints the same path; a git worktree nested in a jj repo prints its own path, so it is plain git) have no `git checkout`/`switch` (a hook blocks them) and
 their workspaces have no `.git`, so branch work below uses jj there and non-switching
 git commands otherwise.
 
@@ -180,11 +180,12 @@ Do these in order:
 1. Read the handover. Note its `Branch:` (the branch to create) and the `Base commit:`
    under its `## Respawn` section (the commit to fork from). Those two values are the
    single source of truth; this prompt deliberately does not repeat them.
-2. Confirm that base commit is reachable: in a jj repo (`jj root` succeeds; a jj
-   workspace has no `.git`) `jj log -r <base> --no-graph -T commit_id`, else
+2. Confirm that base commit is reachable: in a jj repo (`jj root` succeeds and
+   `git rev-parse --show-toplevel` fails or prints the same path; a git worktree
+   nested in a jj repo prints its own path, so it is plain git) `jj log -r <base> --no-graph -T commit_id`, else
    `git rev-parse --verify <base>^{commit}`.
    If it is missing, STOP and report; do not continue.
-3. Create that branch off it without `git switch`. jj repo (`jj root` succeeds):
+3. Create that branch off it without `git switch`. jj repo (as in step 2):
    `jj new <base>`, then `jj bookmark create <branch> -r @-`. Plain git: if
    `git rev-parse HEAD` equals `<base>` and this worktree is on an auto-named branch,
    `git branch -m <branch>` renames it in place; otherwise

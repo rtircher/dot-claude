@@ -1,7 +1,7 @@
 ---
 description: Shepherd my open PRs until merge-ready (address review comments, rebase, chase CI); loops by default, `once` for a single pass
 disable-model-invocation: true
-allowed-tools: Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr review:*), Bash(gh api:*), Bash(git fetch:*), Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git push:*), Bash(jj root:*), Bash(~/.claude/skills/pr-comments/scripts/unresolved-threads.sh:*), Skill, Read, Edit, Write, Grep, Glob
+allowed-tools: Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr review:*), Bash(gh api:*), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git push:*), Bash(jj root:*), Bash(~/.claude/skills/pr-comments/scripts/unresolved-threads.sh:*), Skill, Read, Edit, Write, Grep, Glob
 ---
 
 Keep my open PRs moving toward merge: address new review comments, rebase what has
@@ -84,7 +84,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
   --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved|not)'
 ```
 
-Detect a jj repo once per pass with `jj root` succeeding; it changes how threads and
+Detect a jj repo once per pass: `jj root` succeeds and `git rev-parse --show-toplevel` fails or prints the same path; a git worktree nested in a jj repo prints its own path, so it is plain git; it changes how threads and
 rebases are handled below.
 
 In a cloud session where `gh` is absent, use the GitHub MCP tools for the same reads

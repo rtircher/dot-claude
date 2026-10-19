@@ -1,6 +1,6 @@
 ---
 description: Summarise this session and write a per-repo handover a fresh session can resume from
-allowed-tools: Bash(bash:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(jj root:*), Bash(jj log:*), Bash(gh pr list:*), Bash(mkdir -p:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(jj root:*), Bash(jj log:*), Bash(gh pr list:*), Bash(mkdir -p:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write
 ---
 
 Write a handover that lets a fresh session resume this work with no other context.
@@ -17,7 +17,7 @@ repos never overwrite each other. A previous handover is archived rather than lo
 - Ground the handover in fact with read-only commands you need — `git status`,
   `git diff --stat`, `git log --oneline -5`, `git worktree list`. Do not guess; if
   you didn't observe it, leave it out.
-- Branch: in a jj repo (`jj root` succeeds) HEAD is detached, so `git branch
+- Branch: in a jj repo (`jj root` succeeds and `git rev-parse --show-toplevel` fails or prints the same path; a git worktree nested in a jj repo prints its own path, so it is plain git) HEAD is detached, so `git branch
   --show-current` prints nothing. Read the bookmark at `@` (or at `@-` when `@` has
   none): `` jj log --ignore-working-copy --no-graph -r 'heads((@ | @-) & bookmarks())' -T 'local_bookmarks.map(|b| b.name()).join(" ")' ``.
   Empty output means no bookmark: write `(no bookmark, @- <short commit id>)`. In
