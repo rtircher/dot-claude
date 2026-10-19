@@ -1,6 +1,6 @@
 ---
 description: Load this repo's latest handover into the session on demand (non-destructive read; finds branch-carried cloud handovers too)
-allowed-tools: Bash(git rev-parse:*), Bash(git branch:*), Bash(git fetch:*), Bash(git show:*), Bash(git merge-base:*), Bash(git switch:*), Bash(git log:*), Bash(jj root:*), Bash(jj new:*), Bash(jj git fetch:*), Bash(jj log:*), Read
+allowed-tools: Bash(git rev-parse:*), Bash(git branch:*), Bash(git fetch:*), Bash(git show:*), Bash(git merge-base:*), Bash(git switch:*), Bash(git log:*), Bash(jj root:*), Bash(jj new:*), Bash(jj git fetch:*), Bash(jj bookmark track:*), Bash(jj log:*), Read
 ---
 
 Pull the most recent handover for THIS repo (written by `/dev:handover` or
@@ -83,7 +83,9 @@ mismatch. A respawned session is already on its branch, so this is a no-op for i
 For a **branch-carried** handover, additionally:
 
 - The `Branch:` branch may not exist locally yet; create it from the remote. jj:
-  `jj git fetch`, then `jj new feat/<slug>@origin`. Plain git: `git fetch origin
+  `jj git fetch`, `jj bookmark track feat/<slug>@origin` (this creates the local
+  bookmark; `jj new feat/<slug>@origin` alone leaves none to set or push), then
+  `jj new feat/<slug>`. Plain git: `git fetch origin
   feat/<slug>`, then `git switch feat/<slug>` sets up tracking from
   `origin/feat/<slug>`.
 - Verify the `## Respawn` section's `Base commit:` is the branch tip **or an
