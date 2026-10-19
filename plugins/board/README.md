@@ -15,7 +15,7 @@ Requires `python3` (standard library only) and `git`.
 
 ## Setup
 
-In a repo, tell Claude "set up a board" (the `board` skill walks through it), or run `board init --mode same|external [--url URL]`.
+In a repo, tell Claude "set up a board" (the `tickets` skill, `/board:tickets`, walks through it), or run `board init --mode same|external [--url URL]`.
 
 - Same repo: the board lives on branch `claude/board` of the code repo's own remote.
 - External: the board lives on branch `board/<slug>` of a separate repo you name with `--url`.
@@ -23,6 +23,13 @@ In a repo, tell Claude "set up a board" (the `board` skill walks through it), or
 Cloud sessions find an external board through the environment variable `CLAUDE_BOARD_REPO=<url>`. Same-repo boards need nothing extra.
 
 Note: pushed board content (titles, notes, links) is visible to anyone with access to that remote. Do not put secrets on a board, and use a private external repo if the code repo is public.
+
+## Commands
+
+- `/board` opens the board pane (desktop app): goals, live sessions, and next tickets at a glance.
+- `/board:tickets` is the skill Claude uses to read and update the board. It also triggers on its own when you ask "what's next" or park a side quest.
+
+The skill must not be named `board`: a skill named after its plugin takes the bare `/board`, and the engine then refuses to register the pane command. `hooks/commands.test.mjs` guards this.
 
 ## State
 

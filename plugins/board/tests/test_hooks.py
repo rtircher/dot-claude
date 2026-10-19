@@ -208,12 +208,12 @@ class HooksTest(unittest.TestCase):
 
 class SkillTest(unittest.TestCase):
     def test_skill_frontmatter(self):
-        path = ROOT / "skills" / "board" / "SKILL.md"
+        path = ROOT / "skills" / "tickets" / "SKILL.md"
         text = path.read_text(encoding="utf-8")
         self.assertTrue(text.startswith("---\n"))
         front = text.split("\n---\n", 1)[0].splitlines()[1:]
         fields = dict(line.split(": ", 1) for line in front if ": " in line)
-        self.assertEqual(fields.get("name"), "board")
+        self.assertEqual(fields.get("name"), "tickets")
         self.assertTrue(fields.get("description", "").strip())
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for body in (text, readme):

@@ -1,5 +1,5 @@
 ---
-name: board
+name: tickets
 description: Use the shared per-repo ticket board through the `board` CLI. Use when starting work in a repo that has a board (the session start summary says "Board:"), when the user asks "what's next" or "where are we", when the user parks something with a side-quest cue (park it, later, side note, follow up, flag it, btw), or when the user asks to "set up a board".
 ---
 
