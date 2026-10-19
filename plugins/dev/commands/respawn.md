@@ -179,7 +179,9 @@ Do these in order:
 1. Read the handover. Note its `Branch:` (the branch to create) and the `Base commit:`
    under its `## Respawn` section (the commit to fork from). Those two values are the
    single source of truth; this prompt deliberately does not repeat them.
-2. Confirm that base commit is reachable: `git rev-parse --verify <base>^{commit}`.
+2. Confirm that base commit is reachable: in a jj repo (`jj root` succeeds; a jj
+   workspace has no `.git`) `jj log -r <base> --no-graph -T commit_id`, else
+   `git rev-parse --verify <base>^{commit}`.
    If it is missing, STOP and report; do not continue.
 3. Create that branch off it without `git switch`. jj repo (`jj root` succeeds):
    `jj new <base>`, then `jj bookmark create <branch> -r @-`. Plain git: if
