@@ -41,8 +41,9 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("init", parents=[c])
     s.add_argument("--mode", choices=("same", "external"), required=True)
     s.add_argument("--url")
-    for name in ("summary", "next", "sync"):
+    for name in ("next", "sync"):
         sub.add_parser(name, parents=[c])
+    sub.add_parser("summary", parents=[c]).add_argument("--next-limit", type=int, default=5)
     for name in ("show", "claim", "release"):
         sub.add_parser(name, parents=[c]).add_argument("id")
     s = sub.add_parser("add", parents=[c])
@@ -150,7 +151,7 @@ def _cmd_summary(ctx: _Ctx) -> int:
     board, _ = ctx.load()
     if board is None:
         return _not_fetched(ctx)
-    s = ctx.summary(board)
+    s = ctx.summary(board, limit=max(0, ctx.args.next_limit))
     ctx.emit(s, views.render_text(s))
     return 0
 

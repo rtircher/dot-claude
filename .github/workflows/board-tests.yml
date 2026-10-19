@@ -27,3 +27,6 @@ jobs:
 
       - name: Run board tests
         run: python3 -m unittest discover -s plugins/board/tests -t plugins/board
+
+      - name: Run glance pane tests
+        run: node --test plugins/board/hooks/render.test.mjs

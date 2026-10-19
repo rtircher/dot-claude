@@ -64,6 +64,15 @@ class CliTest(unittest.TestCase):
         self.assertEqual(data["next"][0]["title"], "Set up backups")
         self.assertEqual(data["repo"], data["repo"] or "")
 
+    def test_summary_next_limit(self):
+        self.init_same()
+        for i in range(7):
+            self.run_cli("add", f"Example task {i}", "--session", "s1")
+        data = json.loads(self.run_cli("summary", "--json")[1])
+        self.assertEqual((len(data["next"]), data["next_more"]), (5, 2))
+        data = json.loads(self.run_cli("summary", "--json", "--next-limit", "100")[1])
+        self.assertEqual((len(data["next"]), data["next_more"]), (7, 0))
+
     def test_html_writes_file_and_prints_path(self):
         self.init_same()
         self.run_cli("goal", "add", "Example goal")

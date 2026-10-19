@@ -35,7 +35,7 @@ All commands accept `--json` and `--session <id>`. Session id falls back to `$BO
 | Command | Purpose |
 | --- | --- |
 | `board init --mode same\|external [--url URL]` | Create or adopt the board |
-| `board summary` | Goals, in-progress work, next up, stale claims |
+| `board summary [--next-limit N]` | Goals, in-progress work, next up, stale claims |
 | `board next` | The next ready ticket |
 | `board show <id>` | One ticket with its log |
 | `board add <title> [--goal G] [--parent ID] [--link L]` | Create a ticket |

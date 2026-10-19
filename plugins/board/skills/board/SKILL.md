@@ -52,4 +52,4 @@ A shared ticket board per repo, kept on a git branch, visible to every session. 
 
 ## Command reference
 
-`board summary | next | sync | show <id> | add <title> [--goal G] [--parent ID] [--link L] | claim <id> | release <id> | status <id> <status> | note <id> <text> | link <id> <link> | goal add <title> [--link L] | goal list | init --mode same|external [--url URL]`
+`board summary [--next-limit N] | next | sync | show <id> | add <title> [--goal G] [--parent ID] [--link L] | claim <id> | release <id> | status <id> <status> | note <id> <text> | link <id> <link> | goal add <title> [--link L] | goal list | init --mode same|external [--url URL]`
