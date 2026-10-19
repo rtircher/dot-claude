@@ -1,6 +1,6 @@
 ---
 description: Summarise this session and write a per-repo handover a fresh session can resume from
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(jj root:*), Bash(jj log:*), Bash(gh pr list:*), Bash(mkdir -p:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write
+allowed-tools: Bash(bash:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(jj root:*), Bash(jj log:*), Bash(gh pr list:*), Bash(mkdir -p:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write
 ---
 
 Write a handover that lets a fresh session resume this work with no other context.
@@ -10,10 +10,10 @@ repos never overwrite each other. A previous handover is archived rather than lo
 
 ## 1. Identify the repo and gather state
 
-- Repo key: the basename of the **main** repo, so every worktree of a project shares
-  one handover. Derive it from the shared git dir, not the current worktree:
-  `` basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")" ``.
-  Use `default` if you are not in a git repo. Note that main root path too.
+- Repo key: the basename of the **main** repo, so every git worktree and jj workspace
+  of a project shares one handover. Run
+  `bash "${CLAUDE_PLUGIN_ROOT}/scripts/repo-key.sh"`: it prints `KEY` (the repo key,
+  `default` outside a repo) and `ROOT` (the main repo root). Note both.
 - Ground the handover in fact with read-only commands you need — `git status`,
   `git diff --stat`, `git log --oneline -5`, `git worktree list`. Do not guess; if
   you didn't observe it, leave it out.

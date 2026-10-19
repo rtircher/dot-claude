@@ -38,15 +38,15 @@ git commands otherwise.
 
 ## 1. Gather state and check preconditions
 
-Repo key (shared across worktrees) is the basename of the **main** repo:
-`` basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")" ``.
-Note the main root path too (`` dirname "$(git rev-parse --path-format=absolute --git-common-dir)" ``).
+Repo key (shared across git worktrees and jj workspaces) is the basename of the
+**main** repo: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/repo-key.sh"`, which prints
+`KEY` (the repo key) and `ROOT` (the main root path); note both.
 Ground everything in fact: `git status`, `git branch --show-current`, `git diff --stat`,
 `git log --oneline -5`, `git worktree list`. Do not guess.
 
 **Stop early if respawn does not apply:**
-- **Not a git repo** (the `git rev-parse` above fails): respawn needs a repo to fork
-  from. Say so and stop.
+- **Not a repo** (`ROOT` above is empty): respawn needs a repo to fork from. Say so
+  and stop.
 - **Nothing to hand off** (clean tree, no feature work in progress, no resumable task):
   there is nothing to respawn into. Surface this and confirm with the user before going on.
 
@@ -119,8 +119,9 @@ the `## Respawn` `Base commit:` are mandatory and parsed downstream.
 The handover is the **single source of truth** for the base commit, the destination
 branch, and the worktree to prune. The spawn prompt (step 5) points at these rather than
 repeating them, so the two cannot drift. Record the current worktree path
-(`git rev-parse --show-toplevel`) on the `Stale worktree:` line, so the resumed session
-knows exactly which worktree to clean up once this one is archived.
+(`git rev-parse --show-toplevel`; in a jj workspace, `jj root`) on the `Stale worktree:`
+line, so the resumed session knows exactly which worktree to clean up once this one is
+archived.
 
 ```markdown
 # Session handover: <ISO 8601 UTC timestamp>

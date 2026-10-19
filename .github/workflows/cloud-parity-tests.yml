@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - "plugins/dev/scaffold/**"
+      - "plugins/dev/scripts/**"
       - "scripts/**"
       - ".github/workflows/cloud-parity-tests.yml"
 

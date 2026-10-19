@@ -14,19 +14,16 @@ fetch=1
 [[ "${1:-}" == "--no-fetch" ]] && fetch=0
 
 state="$HOME/.claude/state"
-common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
-if [[ -n "$common" ]]; then
-  root=$(dirname "$common")
-  key=$(basename "$root")
-else
-  root=""
-  key=default
-fi
+# shellcheck source=repo-key.sh
+. "$(dirname "${BASH_SOURCE[0]}")/repo-key.sh"
+repo_key_resolve
+root=$REPO_ROOT key=$REPO_KEY
 printf 'KEY\t%s\nROOT\t%s\n' "$key" "$root"
 
+# git runs against the main root: a jj workspace has no .git of its own.
 origin=""
-if [[ -n "$common" ]]; then
-  url=$(git ls-remote --get-url origin 2>/dev/null || true)
+if [[ -n "$root" ]]; then
+  url=$(git -C "$root" ls-remote --get-url origin 2>/dev/null || true)
   # git echoes the remote name back when it has no URL.
   if [[ -n "$url" && "$url" != "origin" ]]; then
     origin=$(printf '%s' "$url" | sed -E 's#/+$##; s#\.git$##; s#^.*[:/]([^:/]+/[^:/]+)$#\1#')
@@ -46,19 +43,19 @@ fi
 
 if [[ -n "$origin" ]]; then
   if ((fetch)); then
-    git fetch origin '+refs/heads/handover/*:refs/remotes/origin/handover/*' >/dev/null 2>&1 || true
+    git -C "$root" fetch origin '+refs/heads/handover/*:refs/remotes/origin/handover/*' >/dev/null 2>&1 || true
   fi
   found=0
   while IFS=$'\t' read -r ref date; do
     [[ -n "$ref" ]] || continue
     found=1
-    doc=$(git ls-tree -r --name-only "$ref" -- docs/handovers/ | awk 'NR==1' || true)
+    doc=$(git -C "$root" ls-tree -r --name-only "$ref" -- docs/handovers/ | awk 'NR==1' || true)
     task=""
     if [[ -n "$doc" ]]; then
-      task=$(git show "$ref:$doc" | awk '/^## Task & goal/{f=1;next} f&&NF{print;exit}' || true)
+      task=$(git -C "$root" show "$ref:$doc" | awk '/^## Task & goal/{f=1;next} f&&NF{print;exit}' || true)
     fi
     printf 'BRANCH\t%s\t%s\t%s\t%s\n' "$ref" "$date" "${doc:--}" "$task"
-  done < <(git for-each-ref --sort=-committerdate \
+  done < <(git -C "$root" for-each-ref --sort=-committerdate \
              --format='%(refname:short)%09%(committerdate:iso8601)' refs/remotes/origin/handover/)
   if ((found)); then exit 0; fi
 fi

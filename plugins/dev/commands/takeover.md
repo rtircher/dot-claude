@@ -18,9 +18,9 @@ the full rationale). This command consumes both.
 
 Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/find-handover.sh"`. One call does the whole
 search and prints tab-separated lines: `KEY` (the repo key, basename of the **main**
-repo so worktrees share it; `default` outside a repo), `ROOT` (main repo root),
-`ORIGIN` (origin normalized to `<owner>/<repo>`, empty with no remote), then the first
-hit of this order:
+repo so git worktrees and jj workspaces share it; `default` outside a repo), `ROOT`
+(main repo root), `ORIGIN` (origin normalized to `<owner>/<repo>`, empty with no
+remote), then the first hit of this order:
 
 - `LOCAL <path>`: the newest state file under `~/.claude/state/handover/`. If this
   session was spawned by `/dev:respawn`, your prompt names the exact file: read that

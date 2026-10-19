@@ -11,16 +11,18 @@ set -euo pipefail
 dry=0
 [[ "${1:-}" == "--dry-run" ]] && dry=1
 
-common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
-  || { echo "handover-archive-sweep: not in a git repo" >&2; exit 2; }
-root=$(dirname "$common")
-key=$(basename "$root")
+# shellcheck source=repo-key.sh
+. "$(dirname "${BASH_SOURCE[0]}")/repo-key.sh"
+repo_key_resolve
+[[ -n "$REPO_ROOT" ]] || { echo "handover-archive-sweep: not in a repo" >&2; exit 2; }
+root=$REPO_ROOT key=$REPO_KEY
 
 state="$HOME/.claude/state"
 mkdir -p "$state/handover" "$state/handover-archive"
 
-# One listing instead of a per-file branch lookup.
-branches=$(git for-each-ref --format='%(refname:short)' refs/heads)
+# One listing instead of a per-file branch lookup. Against the main root: a jj
+# workspace has no .git, and a colocated repo exports its bookmarks there.
+branches=$(git -C "$root" for-each-ref --format='%(refname:short)' refs/heads)
 
 shopt -s nullglob
 moved=0 kept=0 other=0
