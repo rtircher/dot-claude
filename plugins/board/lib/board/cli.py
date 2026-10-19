@@ -112,9 +112,11 @@ class _Ctx:
         res = sync.submit(self.ref, op)
         self.synced = res.synced
         lost = False
+        needle = (f"claim on {op['id']} by {op['session']} lost to"
+                  if op.get("op") == "claim" else None)
         for w in res.warnings:
             print(f"warning: {w}", file=sys.stderr)
-            lost = lost or "lost to" in w
+            lost = lost or (needle is not None and needle in w)
         return 3 if lost else 0
 
     def tail(self) -> None:

@@ -204,6 +204,27 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 0, out + err)
         self.assertIn("taken over from alpha", self.run_cli("show", tid)[1])
 
+    def test_only_claims_exit_3_from_replayed_warnings(self):
+        from unittest import mock
+        self.init_same()
+        _, out, _ = self.run_cli("add", "Set up backups")
+        tid = out.strip().split()[0]
+        replay = ["claim on t999 by s-other lost to alpha"]
+        real = cli.sync.submit
+
+        def fake(ref, op):
+            res = real(ref, op)
+            res.warnings = list(res.warnings) + replay
+            return res
+
+        with mock.patch.object(cli.sync, "submit", fake):
+            self.assertEqual(self.run_cli("note", tid, "hello", "--session", "s1")[0], 0)
+            self.assertEqual(self.run_cli("claim", tid, "--session", "s1")[0], 0)
+            fake2 = lambda ref, op: type("R", (), {"synced": True, "warnings": [
+                f"claim on {tid} by s2 lost to alpha"]})()
+        with mock.patch.object(cli.sync, "submit", fake2):
+            self.assertEqual(self.run_cli("claim", tid, "--session", "s2")[0], 3)
+
     def test_claim_without_session_exits_1(self):
         self.init_same()
         _, out, _ = self.run_cli("add", "Set up backups")
