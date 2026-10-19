@@ -62,11 +62,15 @@ non-trivial questions about the code:
   the coordinator runs on, and the stronger tiers burn them fastest. The
   escalation tier is opt-in by name, never reached by omission.
 - **Adversarial-review panels route themselves:** `dev:review-workflow` pins
-  every slot in its `DEFAULT_TIERS` (mechanical lenses on the worker tier,
-  reasoning lenses and verify skeptics on the reasoning tier) and accepts only
-  `fable`/`opus`/`sonnet`. Don't restate tiers there; pass `tiers` only to
-  override one named key, pass `modelMap` when `DOT_CLAUDE_MODEL_MAP` is set,
-  and never downgrade the verify skeptics.
+  every slot in its `DEFAULT_TIERS` and accepts only `fable`/`opus`/`sonnet`.
+  The split is policy: the four mechanical lenses (`gaps`, `scope-yagni`,
+  `simplicity-yagni`, `duplication`) run on `sonnet`, because they are pattern
+  checks where Sonnet is strong at a fifth of `fable`'s price; the reasoning
+  lenses and the verify skeptics run on `fable`, and the verify pass, which
+  checks every uncorroborated blocker or major finding, filters the false
+  positives the cheaper lenses raise. Don't restate tiers there; pass
+  `tiers` only to override one named key, pass `modelMap` when
+  `DOT_CLAUDE_MODEL_MAP` is set, and never downgrade the verify skeptics.
 
 ## Delegation
 
