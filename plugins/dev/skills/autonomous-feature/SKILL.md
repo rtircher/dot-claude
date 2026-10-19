@@ -44,7 +44,7 @@ pipeline** and honor the **same ping criteria** — the only difference is what 
 - **Default (no argument):** heads-down. At each phase boundary, post a concise
   checkpoint summary and **keep going**. The human can interrupt, but is not
   required to.
-- **`pause` (e.g. `/autonomous-feature pause`):** gated. At each phase boundary,
+- **`pause` (e.g. `/dev:autonomous-feature pause`):** gated. At each phase boundary,
   post the same checkpoint summary and then **stop and wait** for explicit
   approval before starting the next phase.
 
@@ -63,7 +63,7 @@ counts. A code diff (Phase 6) is the strongest case for a different model
 family.
 
 The `external-review` argument is therefore **force/confirm**, not an enable
-switch: `/autonomous-feature external-review` (or `/autonomous-feature pause
+switch: `/dev:autonomous-feature external-review` (or `/dev:autonomous-feature pause
 external-review`) demands that external reviewers actually ran while the pinned
 digest was fresh. It is SATISFIED BY ROUND-1 external participation: round 1
 runs against the digest-fresh artifact, and once a fix pass mutates the
@@ -106,17 +106,17 @@ invalidate the premise you're working from:
 - **Destructive or irreversible action.** Deleting data, schema/data migrations,
   force-push, rewriting history, publishing to an external service, anything
   touching production, anything that spends money. (Third-party review sends are
-  pre-authorized as standing policy: the local model always, and Codex per the
-  standing CLAUDE.md consent, with autonomous-feature runs counting as
-  user-initiated. They never trigger this ping; every other external publish
-  still stops.)
+  pre-authorized, per the Third-party review section above, and never trigger
+  this ping; every other external publish still stops.)
 - **Scope expansion.** The work is drifting beyond what the agreed spec covers.
   Don't silently grow the feature — surface it and let the human decide.
 - **Security-sensitive decision.** Auth, secrets/credentials, cryptography,
   access control, handling of PII. Get a human in the loop rather than guessing.
 
-When you ping, give the human a tight decision: what you found, the options, and
-your recommendation. Then wait.
+Every stop costs the human attention, so do not ping outside this list, and do
+not stall second-guessing whether the feature is worth building: the spec review
+is for that. When you ping, give the human a tight decision: what you found, the
+options, and your recommendation. Then wait.
 
 ## Confidence gates
 
@@ -170,12 +170,10 @@ run the whole pipeline without exhausting it.
 Track the phases with TodoWrite so progress is visible. Run them in order.
 
 This pipeline **composes other skills** for the spec, plan, execution, and
-verification steps. The references below name the `superpowers` plugin's skills
-(the common case). In an environment where `superpowers` is not enabled, use that
-environment's equivalent brainstorming / planning / subagent-execution /
-verification skills instead — resolve by capability, not by the exact
-`superpowers:` name. If no equivalent exists for a step (e.g. no verification
-skill), fall back to the inline behavior described for that phase.
+verification steps. Resolve each by capability (brainstorming, planning,
+subagent-driven execution, verification) from the skills this environment
+provides. If none exists for a step (e.g. no verification skill), fall back to
+the inline behavior described for that phase.
 
 **Delegate adversarial review to this plugin's Workflow when the Workflow tool
 is available.** This plugin ships a `dev:review-workflow` Workflow
@@ -198,9 +196,10 @@ loader, and pass it as `focus` (appended to any phase focus) plus `focusFile`
 (a scratchpad file holding the same text), plus (because
 gated-review forwards args unchanged into `dev:review-workflow`) the
 external-review contract:
-`skillScriptsDir: "${CLAUDE_PLUGIN_ROOT}/skills/adversarial-review/scripts"`
-(`CLAUDE_PLUGIN_ROOT` is set for plugin commands, the same mechanism
-`setup-local-reviewer.md` uses; never a repo-relative guess),
+`skillScriptsDir: "<plugin>/skills/adversarial-review/scripts"` (`<plugin>` is
+the `dev` plugin root, two levels above this skill's base directory; substitute
+its absolute path, because `${CLAUDE_PLUGIN_ROOT}` may be unset when this loads
+as a skill, and never guess a repo-relative path),
 `expectedArtifactSha256` (computed by this coordinator in Bash exactly as the
 `adversarial-review` skill's step 1 does: sha256 of `git diff <range>` output for
 a diff, of the file bytes for spec/plan), and `requireExternal: true` when the
@@ -213,8 +212,8 @@ unavailable, use the `adversarial-review` skill as written.
 
 ### Phase 1 — Spec
 
-Use your brainstorming skill (`superpowers:brainstorming`, or your environment's
-equivalent) to turn the feature request into a spec / design doc. Capture intent, requirements, and the shape of the design. Don't
+Use your brainstorming skill to turn the feature request into a spec / design
+doc. Capture intent, requirements, and the shape of the design. Don't
 over-interview — this skill exists to move with minimal input; fill reasonable
 gaps with stated assumptions and only ping on design-changing ambiguity.
 
@@ -230,39 +229,32 @@ where the line is drawn while it's still one sentence to draw.
 
 ### Phase 2 — Review the spec
 
-Use the `adversarial-review` skill on the spec; its spec panel includes a
-**scope & YAGNI** lens that flags speculative scope and over-generalization, which
-carries the *Bias to simplicity* check here. Then address findings to the
+Use the `adversarial-review` skill on the spec, then address findings to the
 confidence gate above. Watch specifically for premise-breaking findings here — this is the
 cheapest place to discover the feature is wrong, so weight the spec review's ping
-threshold lower than later phases. Simplicity findings are cheapest to act on here
-too: cutting speculative scope from the spec is far easier than unwinding it from
-the code.
+threshold lower than later phases.
 
 **Boundary:** checkpoint with what the review found and how it was resolved.
 (pause mode: wait for approval.)
 
 ### Phase 3 — Implementation plan
 
-Use your writing-plans skill (`superpowers:writing-plans`, or your environment's
-equivalent) to turn the clean spec into a step-by-step implementation plan.
+Use your planning skill to turn the clean spec into a step-by-step
+implementation plan.
 
 **Boundary:** checkpoint with the plan summary. (pause mode: wait for approval.)
 
 ### Phase 4 — Review the plan
 
-Use the `adversarial-review` skill on the plan; its plan panel runs sequencing,
-risk, and **scope & YAGNI** lenses — the last carries the *Bias to simplicity*
-check, since the plan is where a simple spec quietly grows extra steps,
-abstractions, and knobs. Address findings to the confidence gate.
+Use the `adversarial-review` skill on the plan, then address findings to the
+confidence gate.
 
 **Boundary:** checkpoint with the review outcome. (pause mode: wait for approval.)
 
 ### Phase 5 — Implement
 
-Execute the clean plan. Prefer your subagent-driven-development skill
-(`superpowers:subagent-driven-development`, or your environment's equivalent) for
-plans with independent tasks; use an executing-plans skill or inline
+Execute the clean plan. Prefer your subagent-driven execution skill for
+plans with independent tasks; use a plan-execution skill or inline
 implementation when that fits better — use judgment, and say which you chose and
 why. When dispatching subagents, pick the agent type per task rather than
 defaulting: `dev:coder` (worktree-isolated) for implementer tasks
@@ -282,8 +274,8 @@ during plan execution are how the orchestrator quietly becomes the worker and
 the session's context (and cost) balloons.
 
 **Every implementer dispatch brief carries the simplicity contract.** Subagents
-never see this skill or the session's conventions, so the *Bias to simplicity*
-rules must travel in the brief itself: implement only what the task names;
+never see this skill, so the *Bias to simplicity* rules must travel in the
+brief itself: implement only what the task names;
 before writing new code, reuse an existing helper, then stdlib, then a native
 platform feature, then an installed dependency, and only then the smallest
 working implementation; no new dependencies without reporting back; anything
@@ -292,7 +284,7 @@ than its brief describes is the scope-expansion ping firing one level down —
 surface it, don't merge it.
 
 When implementation is complete, verify before claiming done — use your
-verification-before-completion skill (`superpowers:verification-before-completion`)
+verification-before-completion skill
 if your environment has one; otherwise run the project's full verification
 commands and confirm the output before asserting success.
 
@@ -307,8 +299,7 @@ the build is the asymmetry this phase exists to close — passing tests confirm 
 code does what you told it to, not that what you told it to do is right.
 
 Run the `adversarial-review` skill on the completed work (the branch diff). Its
-diff panel runs correctness, **simplicity & YAGNI** (the *Bias to simplicity*
-check), testing, and duplication lenses. External review is on by default; the `external-review` flag forces and
+diff panel runs correctness, simplicity & YAGNI, testing, and duplication lenses. External review is on by default; the `external-review` flag forces and
 confirms round-1 participation (`requireExternal: true`, ping on round-1
 `external.shortfall`), and a code diff is the
 strongest case for a different model family. For a **multi-task** plan, also run the final cross-implementation
@@ -323,25 +314,3 @@ ping per the contract, not a silent fix.
 
 **Boundary:** checkpoint with the review outcome, then re-verify, summarize what
 was built, and hand back. (pause mode: wait for approval.)
-
-## Anti-patterns
-
-- **Re-judging risk.** The human chose to run this autonomously. Don't stall by
-  second-guessing whether the feature is worth building — that's what the spec
-  review is for. Use the ping criteria, not general anxiety.
-- **Pinging on the trivial.** Every stop costs the human attention, which defeats
-  the purpose. Reserve pings for the contract above; resolve small ambiguities
-  yourself and record the assumption.
-- **Soft confidence gates.** "The review looks mostly fine" is not the gate. No
-  unaddressed blocker/major, or it's not clean.
-- **Skipping the re-review.** Applying a fix is not the same as confirming it.
-  Closed findings must survive a fresh review.
-- **Silent scope creep.** If you find yourself building more than the spec
-  describes, that's a ping, not a bonus.
-- **Gold-plating a heads-down run.** With no human watching each phase, it's easy
-  to add "while I'm here" abstractions, config, and generality. Build what the spec
-  says and no more; a simpler design that meets the spec beats a richer one that
-  exceeds it.
-- **Treating green tests as the code review.** Verification confirms behavior
-  matches the plan; it does not surface bad abstractions, security holes, or
-  cross-package drift. Phase 6 is not optional just because the build is green.
