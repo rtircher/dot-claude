@@ -1,6 +1,6 @@
 ---
 description: Summarise this session and write a per-repo handover a fresh session can resume from
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(gh pr list:*), Bash(mkdir -p:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(jj root:*), Bash(jj log:*), Bash(gh pr list:*), Bash(mkdir -p:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write
 ---
 
 Write a handover that lets a fresh session resume this work with no other context.
@@ -15,8 +15,13 @@ repos never overwrite each other. A previous handover is archived rather than lo
   `` basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")" ``.
   Use `default` if you are not in a git repo. Note that main root path too.
 - Ground the handover in fact with read-only commands you need — `git status`,
-  `git branch --show-current`, `git diff --stat`, `git log --oneline -5`,
-  `git worktree list`. Do not guess; if you didn't observe it, leave it out.
+  `git diff --stat`, `git log --oneline -5`, `git worktree list`. Do not guess; if
+  you didn't observe it, leave it out.
+- Branch: in a jj repo (`jj root` succeeds) HEAD is detached, so `git branch
+  --show-current` prints nothing. Read the bookmark at `@` (or at `@-` when `@` has
+  none): `` jj log --ignore-working-copy --no-graph -r 'heads((@ | @-) & bookmarks())' -T 'local_bookmarks.map(|b| b.name()).join(" ")' ``.
+  Empty output means no bookmark: write `(no bookmark, @- <short commit id>)`. In
+  plain git use `git branch --show-current`.
 
 ## 2. Preserve the previous handover (no data loss)
 
@@ -34,7 +39,7 @@ Write `~/.claude/state/handover/<repo-key>.md` (use a real UTC timestamp from
 ```markdown
 # Session handover — <ISO 8601 UTC timestamp>
 Repo: <full repo root path>
-Branch: <current branch>
+Branch: <current branch, or the bookmark at @/@- in a jj repo>
 
 ## Task & goal
 What this session is doing and why.
