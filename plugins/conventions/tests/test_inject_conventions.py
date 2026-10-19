@@ -13,6 +13,17 @@ SCRIPT = os.path.join(PLUGIN, "scripts", "inject-conventions.sh")
 
 GIT_BULLET = "Never push or commit to the default branch"
 MAIN_ONLY_BULLET = "Fixed routing by role"
+# Git-only rules that the opt-out drops.
+GATED_RULES = (GIT_BULLET, "Git history hygiene", "Meaningful branch and worktree names")
+# Rules that sit beside the git rules but are not git workflow; the opt-out must keep them.
+UNGATED_RULES = (
+    "Commits are authored as the human",
+    "Claude <noreply@anthropic.com>",
+    "Never add an AI",
+    "Never cite commit short-hashes",
+    "verify merge status",
+    "never remove the worktree the session runs inside",
+)
 
 
 def run(*args, skip_git=None):
@@ -34,10 +45,20 @@ class InjectConventionsTest(unittest.TestCase):
 
     def test_skip_git_drops_only_the_git_block(self):
         for text in (run(skip_git="1"), run("--subagent", skip_git="1")):
-            self.assertNotIn(GIT_BULLET, text)
-            self.assertNotIn("Meaningful branch and worktree names", text)
+            for rule in GATED_RULES:
+                self.assertNotIn(rule, text)
             self.assertNotIn("<!--", text)
             self.assertIn("Simplicity first", text)
+
+    def test_skip_git_keeps_the_non_git_rules(self):
+        for text in (run(skip_git="1"), run("--subagent", skip_git="1")):
+            for rule in UNGATED_RULES:
+                self.assertIn(rule, text)
+
+    def test_default_injects_the_non_git_rules(self):
+        for text in (run(), run("--subagent")):
+            for rule in UNGATED_RULES:
+                self.assertIn(rule, text)
 
     def test_skip_git_requires_exactly_one(self):
         self.assertIn(GIT_BULLET, run(skip_git="0"))

@@ -249,16 +249,7 @@ subagents.
 - **Git history hygiene.** `git fetch` and rebase onto fresh `origin/<default>` (or the
   PR's base for a stacked branch), never a stale local copy. Prefer fast-forward / linear history: one commit per
   reviewable unit; before review, squash doc-evolution thrash and fold in-branch
-  reverts into their target. Never cite commit short-hashes in docs or PR bodies
-  (rebases churn them). Before deleting branches/worktrees, verify merge status
-  (including squash-merges); never remove the worktree the session runs inside.
-- **Commits are authored as the human, never the harness.** If the git identity
-  resolves to the harness default (`Claude <noreply@anthropic.com>`), set a
-  repo-local `user.name`/`user.email` before the first commit, asking rather
-  than guessing, and leave any deliberate identity alone. Never add an AI
-  co-author trailer to compensate (see *No AI attribution in pushed artifacts*
-  under Writing style). Cloud identity setup (the four `GIT_*` env vars) is
-  documented in the conventions plugin's `docs/reference.md`.
+  reverts into their target.
 - **Meaningful branch and worktree names.** When you create a branch or worktree
   yourself (via `EnterWorktree` or `git worktree add`), name it from the task as a
   descriptive `feat/…` / `fix/…` slug, never a random or auto-generated one. The
@@ -267,6 +258,16 @@ subagents.
   rename the branch to a descriptive `feat/…` / `fix/…` before pushing, and never push
   an auto-generated session branch.
 <!-- git-workflow: end -->
+- **Commits are authored as the human, never the harness.** If the git identity
+  resolves to the harness default (`Claude <noreply@anthropic.com>`), set a
+  repo-local `user.name`/`user.email` before the first commit, asking rather
+  than guessing, and leave any deliberate identity alone. Never add an AI
+  co-author trailer to compensate (see *No AI attribution in pushed artifacts*
+  under Writing style). Cloud identity setup (the four `GIT_*` env vars) is
+  documented in the conventions plugin's `docs/reference.md`.
+- **Never cite commit short-hashes in docs or PR bodies** (rebases churn them).
+- **Before deleting branches/worktrees, verify merge status** (including
+  squash-merges); never remove the worktree the session runs inside.
 
 ## Writing style
 
