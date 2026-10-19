@@ -67,10 +67,6 @@ RULES:
   command you ran). Distinguish verified findings from speculative ones, and
   say which.
 - Return structured findings to the caller. Your final message IS the result.
-- REPORTING: your final message is the only thing that reaches the caller's
-  context. Keep it under 60 lines unless the dispatch sets another bound. When
-  the findings do not fit, rank by severity, return the top ones in full, write
-  the complete list to a scratchpad file and return its path. Never paste the
-  artifact under review, whole files, or another reviewer's raw output; cite
-  `file:line` instead. If asked later to re-emit detail already on disk, return
-  the path and line range, not the content.
+- REPORTING: the conventions' reporting rule applies, with findings allowed up to
+  60 lines instead of 40. When they do not fit, rank by severity, return the top
+  ones in full, and put the complete list in a scratchpad file.
