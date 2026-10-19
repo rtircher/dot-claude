@@ -20,18 +20,11 @@ into steps) then implement.
 
 ## When this applies
 
-- A non-trivial feature, system, or service that benefits from a written design
-  before code, especially one with meaningful trade-offs or cross-team impact.
-- The user asks for a design doc, RFC, or technical design, or describes the
-  artifact by its parts without naming it (e.g. "write it up properly before we
-  build, with goals, risks, and a rollout plan").
-
-Not this: a quick exploratory conversation with no artifact yet, including an
-open-ended "walk me through the architecture options" with no doc in mind (use
-brainstorming), turning an already-agreed design into ordered implementation
-steps (use writing-plans), reviewing or poking holes in an existing doc, code, or
-PR (use `adversarial-review`), or summarizing or editing a doc that already
-exists.
+A non-trivial feature, system, or service that benefits from a written design
+before code, whether the user names the artifact or describes it by its parts
+(e.g. "write it up properly before we build, with goals, risks, and a rollout
+plan"). The description lists what it is not for; summarizing or editing a doc
+that already exists is also out.
 
 ## How to use the template
 
@@ -157,19 +150,7 @@ the answer into the relevant section and clear it.
 
 ## Anti-patterns
 
-- **Filling every section to look thorough.** Cut what does not apply and say so.
-  A padded doc gets skimmed, which defeats the point.
 - **Solution in search of a problem.** If the Problem Statement is thin, the doc
   is premature. Go back to brainstorming.
-- **Aspirational goals.** A goal you cannot test against is a slogan. Put numbers
-  on the non-functional ones.
-- **Hiding the trade-offs.** A design with no alternatives and no risks reads as
-  unconsidered, not as bulletproof.
-- **Designing for a scale or future you don't have.** Building in extensibility,
-  generality, or headroom no goal calls for is over-engineering dressed as
-  foresight. Design for the stated goals; note the heavier option as an alternative
-  for when a real requirement arrives.
 - **Diagram as decoration.** A diagram that only restates the prose adds nothing.
   Show structure the words cannot.
-- **Letting open questions rot.** Stale unanswered questions mean the doc has
-  stopped being the source of truth.
