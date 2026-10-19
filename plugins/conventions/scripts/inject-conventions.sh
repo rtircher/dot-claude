@@ -12,6 +12,10 @@
 # entry's `matcher` is a regex over `agent_type`, so this script never sees a
 # dispatch for an unmatched agent and emits the envelope unconditionally.
 #
+# Per-user opt-out: with DOT_CLAUDE_CONVENTIONS_SKIP_GIT=1 (settings.json `env`
+# reaches hooks), the `git-workflow` region is dropped from both injections, for
+# users whose own instructions already cover branch, push and commit rules.
+#
 # ${CLAUDE_PLUGIN_ROOT} is the plugin's install dir; plugins run from a cache
 # location, so relative paths would not resolve.
 set -euo pipefail
@@ -27,11 +31,17 @@ fi
 subagent=0
 [ "${1:-}" = "--subagent" ] && subagent=1
 
+skip_git=0
+[ "${DOT_CLAUDE_CONVENTIONS_SKIP_GIT:-}" = "1" ] && skip_git=1
+
 filter() {
-  awk -v skip_region="$subagent" '
+  awk -v skip_region="$subagent" -v skip_git="$skip_git" '
     /^<!-- main-session-only: start -->$/ { in_region = 1; next }
     /^<!-- main-session-only: end -->$/   { in_region = 0; next }
+    /^<!-- git-workflow: start -->$/      { in_git = 1; next }
+    /^<!-- git-workflow: end -->$/        { in_git = 0; next }
     in_region && skip_region              { next }
+    in_git && skip_git                    { next }
     { print }
   ' "$conventions"
 }

@@ -49,3 +49,11 @@ methodology; the two coexist).
 but `github.com` and `nodejs.org` are. In a cloud setup script, install mise
 from a pinned GitHub release tarball, not the `curl https://mise.run | sh`
 one-liner.
+
+## Opting out of the git workflow rules
+
+The branch, push, history, commit-identity, and branch-naming bullets in `conventions.md`
+sit between `git-workflow` region markers. A user whose own instructions already cover
+those rules sets `DOT_CLAUDE_CONVENTIONS_SKIP_GIT=1` in the `env` block of their
+`settings.json`; `scripts/inject-conventions.sh` then drops the region from both the
+main-session and the subagent injection. Any other value, or unset, keeps it.

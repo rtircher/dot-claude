@@ -98,8 +98,7 @@ subagents.
   (5 lines or so). The main session pulls the detail back in only when a later
   decision actually needs it, and pulls it from the file: a Read with
   offset+limit or a Grep of that path. Never resume the agent (SendMessage) to
-  re-emit what is already on disk; one such re-emit was the single largest
-  report in a transcript audit, at 31k characters.
+  re-emit what is already on disk: the re-emit lands in main context in full.
 - **Dispatch independent subagents together, in one message.** Prefer
   sequential dispatch when results feed into each other. Each completion
   notification lands in main context.
@@ -220,25 +219,6 @@ subagents.
 - **Review findings go on a PR only through `dev:post-review-comments`**
   (inline, anchored), never as a top-level PR comment, however the ask is
   phrased.
-- **Never push or commit to the default branch without explicit approval.** Read it
-  with `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` (`main`,
-  `dev`, whatever the repo uses); `<default>` below means that name. Gate irreversible or
-  outward-facing actions (pushes, merges, branch/tag/worktree deletion) on an
-  explicit go-ahead. Treat terse or ambiguous confirmations as needing clarification,
-  not a green light.
-- **Git history hygiene.** `git fetch` and rebase onto fresh `origin/<default>` (or the
-  PR's base for a stacked branch), never a stale local copy. Prefer fast-forward / linear history: one commit per
-  reviewable unit; before review, squash doc-evolution thrash and fold in-branch
-  reverts into their target. Never cite commit short-hashes in docs or PR bodies
-  (rebases churn them). Before deleting branches/worktrees, verify merge status
-  (including squash-merges); never remove the worktree the session runs inside.
-- **Commits are authored as the human, never the harness.** If the git identity
-  resolves to the harness default (`Claude <noreply@anthropic.com>`), set a
-  repo-local `user.name`/`user.email` before the first commit, asking rather
-  than guessing, and leave any deliberate identity alone. Never add an AI
-  co-author trailer to compensate (see *No AI attribution in pushed artifacts*
-  under Writing style). Cloud identity setup (the four `GIT_*` env vars) is
-  documented in the conventions plugin's `docs/reference.md`.
 - **Autonomous pipeline for low-risk features.** For a feature you flag as
   low-risk, the `dev` plugin's `/autonomous-feature` skill runs spec →
   adversarial-review → plan → adversarial-review → implement → adversarial-review
@@ -259,13 +239,34 @@ subagents.
   hypotheses by likelihood with the single cheapest disproving test for each.
   Distinguish code-vs-environment and hardware-vs-network early rather than
   cycling through plausible-sounding guesses.
+<!-- git-workflow: start -->
+- **Never push or commit to the default branch without explicit approval.** Read it
+  with `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` (`main`,
+  `dev`, whatever the repo uses); `<default>` below means that name. Gate irreversible or
+  outward-facing actions (pushes, merges, branch/tag/worktree deletion) on an
+  explicit go-ahead. Treat terse or ambiguous confirmations as needing clarification,
+  not a green light.
+- **Git history hygiene.** `git fetch` and rebase onto fresh `origin/<default>` (or the
+  PR's base for a stacked branch), never a stale local copy. Prefer fast-forward / linear history: one commit per
+  reviewable unit; before review, squash doc-evolution thrash and fold in-branch
+  reverts into their target. Never cite commit short-hashes in docs or PR bodies
+  (rebases churn them). Before deleting branches/worktrees, verify merge status
+  (including squash-merges); never remove the worktree the session runs inside.
+- **Commits are authored as the human, never the harness.** If the git identity
+  resolves to the harness default (`Claude <noreply@anthropic.com>`), set a
+  repo-local `user.name`/`user.email` before the first commit, asking rather
+  than guessing, and leave any deliberate identity alone. Never add an AI
+  co-author trailer to compensate (see *No AI attribution in pushed artifacts*
+  under Writing style). Cloud identity setup (the four `GIT_*` env vars) is
+  documented in the conventions plugin's `docs/reference.md`.
 - **Meaningful branch and worktree names.** When you create a branch or worktree
-  yourself (via the `using-git-worktrees` skill or `EnterWorktree`), name it from the
-  task as a descriptive `feat/…` / `fix/…` slug, never a random or auto-generated one.
-  The harness names the initial session branch/worktree for you (`claude/<slug>`, e.g.
-  `claude/zealous-wiles-65e0d5`); you can't pick that at creation, so rename the branch
-  to a descriptive `feat/…` / `fix/…` before pushing, and never push an auto-generated
-  `claude/<slug>` session branch.
+  yourself (via `EnterWorktree` or `git worktree add`), name it from the task as a
+  descriptive `feat/…` / `fix/…` slug, never a random or auto-generated one. The
+  harness names the initial session branch/worktree for you (an auto-generated name
+  such as `claude/<slug>` or `agent-<id>`); you can't pick that at creation, so
+  rename the branch to a descriptive `feat/…` / `fix/…` before pushing, and never push
+  an auto-generated session branch.
+<!-- git-workflow: end -->
 
 ## Writing style
 
@@ -294,11 +295,11 @@ message drafted on the user's behalf. Code comments follow these too, refined by
   become permanent history read by future hires, auditors, and customers.
 - **Diplomatic and collaborative**, especially when raising a concern or
   disagreeing: name the problem, propose the fix, skip the lecture.
-- **No em dashes** (or en dashes) in deliverables (files, commit messages, sent
-  messages). Use a comma, colon, parentheses, or a full stop instead. (This file
+- **No em dashes** (or en dashes) in chat or deliverables (files, commit messages,
+  sent messages). Use a comma, colon, parentheses, or a full stop instead. (This file
   follows its own rule.) This is a writing convention, not machine-enforced: if a
-  dash slips into a deliverable, restructure the sentence rather than swapping in a
-  hyphen, which reads worse. Conversation with Claude is exempt.
+  dash slips in, restructure the sentence rather than swapping in a hyphen, which
+  reads worse.
 - **Exclamation marks only when the tone is genuinely celebratory.** Default to a
   period.
 - **Prefer not to open a message with "I"** as the first word, but never contort
