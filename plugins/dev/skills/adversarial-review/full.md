@@ -16,7 +16,7 @@ manual path feels quicker. The manual path needs the `Agent` tool. If neither
 `Workflow` nor `Agent` is available (as in `dev:coder`, `dev:reviewer`,
 `dev:researcher` subagents), do not attempt a single-pass substitute review: stop
 and tell the caller, naming the artifact, that the review must run from the main
-session (or `/dev:review-panel` there). Both paths run the same panel and end in
+session. Both paths run the same panel and end in
 the same Output. `<plugin>` below is the `dev` plugin root: two levels above this
 skill's base directory (shown when the skill loads). Substitute its absolute path
 into commands; `${CLAUDE_PLUGIN_ROOT}` may be unset when this loads as a skill.
@@ -51,8 +51,8 @@ tip, `<range>` = `<trunk>...HEAD`), or ask. Run `git worktree remove --force
 <tmp>` on every exit path: after the review returns, after a workflow error only
 once the manual fallback finishes, and on abort. Gated review commits fixes, so
 it needs the PR branch checked out in the working tree: if HEAD is not the PR
-head, ask the user to check it out with their own tooling (e.g. `gt co`) rather
-than switching it yourself.
+head, ask the user to check it out with their own tooling (e.g. `gh pr checkout <n>`,
+or `jj new <bookmark>` in a jj repo) rather than switching it yourself.
 
 Compute the digest, the hex before the space in the output (`shasum -a 256`
 where `sha256sum` is missing). It pins the exact bytes every external reviewer
@@ -111,8 +111,7 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
 The workflow runs the lens panel, every configured external reviewer (couriers
 pinned to sonnet at low effort), schema-validated findings, a skeptic verify pass
 on uncorroborated blocker/major findings, and synthesis blind to model identity.
-Present its result per the Output section. `/dev:review-panel` is a thin command
-over this path.
+Present its result per the Output section.
 
 **Extra lens.** When the loaded focus declares `Extra lens: <skill>`, run one
 direct agent alongside the Workflow (or the manual panel), the way a declared
@@ -250,8 +249,8 @@ external review and none could vote (none configured, tool missing,
 unauthenticated, or errored), run the Claude panel as always and say loudly that
 it is Claude-only; never quietly substitute a lower-friction reviewer or report
 the ask as satisfied. Close with a one- or two-sentence setup hint, not a bare
-"unavailable": point at `/dev:setup-local-reviewer`, whose appendix lists the
-non-Claude model families, the cheapest route to each, and why a cloud session
+"unavailable": point at `<plugin>/skills/adversarial-review/references/external-routes.md`,
+which lists the routes to a non-Claude model family and why a cloud session
 should use a hosted key rather than a local model.
 
 **Blind scoring.** Each counted external vote is one more independent reviewer.

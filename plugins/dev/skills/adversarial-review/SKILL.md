@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: Use when you want independent, adversarial review of a plan, spec/design doc, or PR/diff before committing to it; reviewers are prompted to find what's wrong, not rubber-stamp. Triggers on "adversarial review", "independent review", "poke holes in this", "red-team this plan/spec/PR", or when a plan/spec is finalized and about to become implementation. Also triggers on a bare PR URL or number, "review this PR", "code review", "deep review", "full review", "quick pass", "quick review", "quick look", or "quick check". Full tier is the default; quick is opt-in.
+description: Use for independent, adversarial review of a plan, spec/design doc, or PR/diff (including a bare PR URL or number) before committing to it; reviewers hunt for what is wrong instead of rubber-stamping. Full tier is the default; "quick pass" picks the cheap tier.
 ---
 
 # Adversarial Review
@@ -43,13 +43,9 @@ An explicit artifact is required: a file path, a diff range like `main...HEAD`, 
 
 ## Load focus
 
-A `## Review focus` heading in an existing root context file. Check, in order, `CLAUDE.local.md`, then `AGENTS.md`, then `CLAUDE.md`; the **first one with the heading wins**, no concatenation.
+Run `<plugin>/skills/adversarial-review/scripts/load-focus.sh --base <ref>` once, from the cwd repo root (never a review worktree: the untracked `CLAUDE.local.md` lives only in the original checkout). It looks for a `## Review focus` heading in `CLAUDE.local.md` (read from disk), then `AGENTS.md`, then `CLAUDE.md`; the first file with the heading wins, no concatenation. Tracked files are read at the PR's base, never head and never whatever is checked out. `<ref>` is `<remote>/<baseRefName>` in a clone (2a) and `<remote>/<default>` for a local diff (3); with no clone (2b) pass `--gh <owner>/<repo> --base <baseRefName>`, which skips `CLAUDE.local.md`.
 
-Tracked files are always read at the PR's base, never head, never whatever is checked out: in a clone (2a), `git show <remote>/<baseRefName>:<file>`; no clone (2b), `gh api repos/{o}/{r}/contents/<file>?ref=<baseRefName>`; local diff (3), `git show <remote>/<default>:<file>`; full's worktree, the same base read. If the base ref is not present locally, fetch it first; if that fetch fails, read the tracked file from the working tree and record `focus: read from working tree` for the output contract's first-line `focus:` field.
-
-`CLAUDE.local.md` is untracked, so it is read from disk at the cwd repo root whatever is on disk right now, including in the full-tier worktree case (read from the original cwd repo root, not the detached worktree, which would not carry an untracked file). In the no-clone case there is no disk to read it from: it is skipped, Areas/Migrations/Extra lens fall back to none declared, and the output contract's first-line `focus:` field reads `unavailable (no clone)`. Otherwise that field names the file the focus came from (`CLAUDE.local.md`, `AGENTS.md`, or `CLAUDE.md`), or `none` when no file had the heading.
-
-The section is prose bullets plus optional `Areas:`, `Migrations:`, `Extra lens: <name>` lines; `<name>` is the first token after `Extra lens:`, and any parenthetical is a note. Split those three out; pass the rest verbatim as `focus`. `Areas:`/`Migrations:` feed only the quick tier's bucketing; `Extra lens:` feeds the gated extra agent on either tier. Warn, never truncate, past 40 lines.
+It prints `focus:`, optional `areas:`, `migrations:` and `extra-lens:` lines, `---`, then the rest of the section verbatim. The `focus:` value is the output contract's first-line `focus:` field: the file the focus came from, `none`, `unavailable (no clone)`, or `read from working tree` (the base ref could not be fetched). Pass the text after `---` as `focus`, never truncated (the script warns past 40 lines). `areas:` and `migrations:` feed only the quick tier's bucketing; `extra-lens:` feeds the gated extra agent on either tier.
 
 Caller-supplied focus (an explicit `focus` arg from `dev:gated-review` or autonomous-feature) is appended to the section above.
 
@@ -63,7 +59,7 @@ Top to bottom, first match wins.
 
 | Signal | Tier |
 |---|---|
-| Called by `dev:gated-review`, `dev:review-workflow`, autonomous-feature, or `/dev:review-panel` | full |
+| Run for `dev:gated-review` or autonomous-feature (the review workflow is the full tier's own engine) | full |
 | Artifact is a spec, plan, or design doc | full (quick is diff-only) |
 | The user says adversarial, independent, red-team, poke holes, panel, external, "full review", or "deep review" | full |
 | The user says "quick pass", "quick review", "quick look", or "quick check" | quick |

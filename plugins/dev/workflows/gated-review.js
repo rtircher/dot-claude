@@ -45,7 +45,7 @@
 export const meta = {
   name: 'gated-review',
   description:
-    'Drive an artifact to clean through review-workflow: review, fix, re-review, capped at 3 rounds. Returns clean, or the contested findings for a human when it does not converge.',
+    'Internal workflow behind gated review, dispatched by the autonomous-feature skill: review, fix, re-review through review-workflow, capped at 3 rounds. Returns clean, or the contested findings for a human. Not a user entry point.',
   phases: [
     { title: 'Gate', detail: 'review -> fix -> re-review until clean or capped' },
   ],
@@ -74,11 +74,11 @@ function fixPrompt(art, blockers, round) {
     .map((f, i) => `${i + 1}. [${f.severity}] ${f.objection}\n   Location: ${f.location}\n   Suggested fix: ${f.suggested_fix}`)
     .join('\n\n')
   const conventions = art.fixConventions ? `\n\nFollow these conventions: ${art.fixConventions}` : ''
-  return `Round ${round} fix pass. Address ONLY these confirmed blocker/major findings in ${target}, making the smallest change that resolves each. Do not refactor beyond them and do not touch anything out of scope.${conventions}
+  return `Round ${round} fix pass. Address ONLY these surviving blocker/major findings in ${target}, making the smallest change that resolves each. Do not refactor beyond them and do not touch anything out of scope.${conventions}
 
 ${items}
 
-When done, briefly state per finding what you changed (or why it was already handled). A later re-review will check your work, so do not claim a fix you did not make.`
+When done, briefly state per finding what you changed (or why it was already handled). Do not claim a fix you did not make.`
 }
 
 // Resolves a tier alias through args.modelMap, the escape hatch for an account

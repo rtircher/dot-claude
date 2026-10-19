@@ -12,20 +12,15 @@ belongs to the router.
 
 ## Procedure
 
-1. **Size gate.** Use the PR metadata already resolved (`gh pr view`'s
-   `files`/`additions`/`deletions`, or `git diff --numstat` for a local diff).
-   Run a **single pass** when fewer than 10 files changed and fewer than 200
-   lines added plus deleted, or when all files map to one area (area mapping:
-   step 2). Otherwise fan out by area.
-
-2. **Areas.** `Areas:` is a plain list of path prefixes. Each file maps to the
-   longest matching prefix, else its top-level directory. Absent an `Areas:`
-   line, each file's area is its top-level directory; the one-area test in
-   step 1 uses that grouping. If the focus names a `Migrations:` prefix, that
-   prefix always takes one of the 3 area slots and never merges into `misc`.
-   Remaining areas merge smallest-first into `misc` until they fit the
-   remaining 2 slots. The cap of 3 area reviewers always holds, Migrations
-   included.
+1. **Size gate and areas.** Pipe the diff's numstat into
+   `<plugin>/skills/adversarial-review/scripts/bucket-areas.sh --areas "<areas:>" --migrations "<migrations:>"`
+   (values from the router's focus output, flags omitted when none declared).
+   Numstat is `git diff --numstat <remote>/<base>...<headRefOid>` in a clone,
+   `git diff --numstat <remote>/<default>...HEAD` for a local diff, or with no
+   clone `gh pr view <n> --json files -q '.files[]|[.additions,.deletions,.path]|@tsv'`.
+   Its `mode` line is the gate: `single-pass`, or `fan-out` with `bucket` lines
+   (one area reviewer each; at most 3, a migrations bucket always keeping a
+   slot) and `file` lines mapping each path to its bucket.
 
 3. **Reviewers.** Each reviewer is a `dev:reviewer` agent, dispatched with
    `model: "sonnet"` and `effort: "high"` explicit on every call. Before dispatch, write the
@@ -63,48 +58,9 @@ belongs to the router.
      cap with it is 4 total. In the no-clone case (2b), the gate cannot run
      at all: report `extra lens: <name>: not_run (no clone)`.
 
-   Each reviewer's brief is fixed: the four diff-lens concerns as one
-   checklist, in code order.
-
-   <!-- adapted from LENS_PANELS.diff in workflows/adversarial-review.js (dashes replaced); keep in sync -->
-   - correctness: bugs, broken invariants, security holes, cross-package
-     coupling, not style
-   - simplicity-yagni: needless complexity, a simpler design that does the
-     same, reinvented helpers the codebase already has, abstraction/config/
-     generality this change does not need. For every new class, base class,
-     registry, flag, setting, or extension point ask how many concrete users
-     it has in this diff; one means inline it. Safety floor, per the
-     conventions' "Simplicity never trims the safety floor" rule: never
-     propose trimming input validation at trust boundaries, data-loss error
-     handling, security, accessibility, or migration backfill/lock/rollback
-     code. Tag each finding in suggested_fix `cut now` when it can be deleted
-     or inlined in this change, `follow-up` when it is pre-existing
-     over-build, each with an approximate net-lines figure
-   - testing: judge coverage by decision branches, not line percentage: list
-     each new or changed if/else, match, except, or early return in the
-     production diff and name the test that exercises it; flag branches with
-     none. Curate, don't append, per the conventions' "Test suite discipline:
-     curate, don't append" rule: flag tests that exercise a branch another
-     test already covers, tests that cannot fail such as asserting a mock's
-     return, a snapshot of a constant, or a getter/setter/pass-through,
-     over-mocking that tests the mock, integration or e2e tests that
-     re-assert a unit-covered branch, a missing regression test for the bug
-     being fixed, and brittle tests coupled to implementation detail. For each
-     redundant test name the surviving test and say `delete` or `merge into a
-     parametrize table`; a removal is a finding, same as a gap. Report the
-     suite delta as `tests +N added / ~M edited / -K deleted vs B branches
-     touched`; added far above branches with zero deleted is a major finding
-     by default
-   - duplication: the same logic introduced more than once. Two forms: (a)
-     copy-pasted or near-identical blocks added within THIS diff, across
-     functions or files, that should share one implementation; (b) logic in
-     this diff that re-implements something the codebase already has
-     elsewhere (a validator, a parser, a business rule) without reusing it.
-     Distinct from simplicity-yagni's reinvented-helper check, which flags
-     unnecessary abstraction and complexity: this lens flags redundant
-     OCCURRENCES of the same logic regardless of how simple each occurrence
-     is. For each instance, list every location it appears and name the one
-     that should remain or the extraction point.
+   Each reviewer's brief is fixed: the four `brief`s of the `diff` panel in
+   `LENS_PANELS` (`<plugin>/workflows/adversarial-review.js`) as one checklist,
+   in code order, verbatim.
 
    The brief also carries the focus text, the PR description fenced as in
    the router's PR description section, the findings schema
