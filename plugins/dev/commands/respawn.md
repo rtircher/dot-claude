@@ -1,6 +1,6 @@
 ---
 description: Respawn this session into a fresh, meaningfully named one. Writes a handover, then spawns a clean session that resumes the work (a started session, or a branch-carried resume prompt in cloud)
-allowed-tools: Bash(jj root:*), Bash(jj log:*), Bash(jj new:*), Bash(jj bookmark:*), Bash(git status:*), Bash(git branch:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-remote:*), Bash(git push:*), Bash(git hash-object:*), Bash(git read-tree:*), Bash(git update-index:*), Bash(git write-tree:*), Bash(git commit-tree:*), Bash(mkdir -p:*), Bash(mktemp:*), Bash(rm -f:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write, ToolSearch, Read, mcp__ccd_session__start_session
+allowed-tools: Bash(jj root:*), Bash(jj log:*), Bash(jj new:*), Bash(jj bookmark:*), Bash(jj status:*), Bash(jj diff:*), Bash(jj commit:*), Bash(jj describe:*), Bash(git status:*), Bash(git branch:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-remote:*), Bash(git push:*), Bash(git hash-object:*), Bash(git read-tree:*), Bash(git update-index:*), Bash(git write-tree:*), Bash(git commit-tree:*), Bash(mkdir -p:*), Bash(mktemp:*), Bash(rm -f:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write, ToolSearch, Read, mcp__ccd_session__start_session
 ---
 
 Collapse the `handover` then `clear` then `takeover` ritual into one step. This writes
@@ -56,13 +56,17 @@ The new session lands in its **own fresh worktree** and can only see what is com
 (worktrees share the same git object store, so a local commit is reachable there without
 a push). Anything not committed does not travel.
 
-So if `git status` shows uncommitted changes, **stop and ask the user**, offering:
+So if `git status` shows uncommitted changes, **stop and ask the user**, offering. In a jj
+repo the check is `jj status` instead (a workspace has no `.git`): jj's working-copy
+commit `@` holds uncommitted changes, so a non-empty `@` is a dirty tree.
 
 - **Commit now** (recommended): commit the in-progress work to the current branch with a
   clear conventional message (a `wip:` checkpoint is fine; squash later). **Stage
   deliberately** rather than blanket `git add -A`: prefer `git add -u` for tracked
   changes and add only the new files you mean to keep, so secrets, build output, or
-  scratch files are not swept in.
+  scratch files are not swept in. jj has no staging area, so read `jj status` and
+  `jj diff --stat` first and keep stray files out of the working copy; then
+  `jj commit -m '<msg>'`, which moves the work into `@-` and leaves `@` empty.
 - **Respawn anyway**: proceed without committing. **Warn loudly** that the new session
   will NOT see the uncommitted changes; they stay stranded in this worktree.
 - **Cancel**: stop and do nothing.
@@ -72,8 +76,14 @@ Also warn, either way, that the fresh worktree starts clean: gitignored / local 
 rebuilding.
 
 Capture the resulting tip (call it `<base-sha>`): `` git rev-parse HEAD ``, or in a jj
-repo `` jj log --no-graph -r @- -T commit_id `` (a jj workspace has no `.git`; the
-commit is `@-` once the work is committed). The new session forks off it.
+repo `` jj log --no-graph -r @- -T commit_id ``. The new session forks off it. In jj,
+`@-` is the tip only when the work sits in `@-` and `@` is empty: after a bare
+`jj describe -m ...` the work is still in `@` and `@-` is its parent, one commit too
+early, and the new session would silently miss the work. So first get the work out of
+`@` (`jj commit -m '<msg>'`, or `jj describe -m '<msg>'` then `jj new`), then check
+`` jj log --no-graph -r @ -T empty `` prints `true`, and only then read `@-`. If it
+prints `false`, commit again; do not read `@-`. After a **Respawn anyway** choice `@` is
+non-empty by design and `@-` is still the right base; the warning above stands.
 
 ## 3. Pick names (and reserve the branch)
 
@@ -121,7 +131,10 @@ branch, and the worktree to prune. The spawn prompt (step 5) points at these rat
 repeating them, so the two cannot drift. Record the current worktree path
 (`git rev-parse --show-toplevel`; in a jj workspace, `jj root`) on the `Stale worktree:`
 line, so the resumed session knows exactly which worktree to clean up once this one is
-archived.
+archived. For a jj workspace also record its name, which cleanup needs:
+`jj log --no-graph -r @ -T working_copies` prints `<name>@` (several names only if
+workspaces share one working copy: take the one whose `jj workspace root --name <name>`
+is `jj root`). Write `Stale worktree: <jj root> (jj workspace <name>)`.
 
 ```markdown
 # Session handover: <ISO 8601 UTC timestamp>
@@ -155,7 +168,10 @@ You are a fresh session in your own new worktree. Create the branch named on the
 line off the base commit above, and continue there. Do NOT switch into or work inside any
 other worktree while this session's original one may still be live: it may be mid-archive
 and must not be disturbed. Once the user confirms that old session is closed, you may prune
-its now-stale worktree with `git worktree remove <Stale worktree>` from your own worktree.
+its now-stale worktree from your own worktree. A git worktree: `git worktree remove
+<Stale worktree>`. A jj workspace (the line says so): `jj -R <Repo> --ignore-working-copy
+workspace forget <name>`, then delete the `<Stale worktree>` directory, because forget only
+drops the registration and leaves the files; `git worktree remove` fails on it.
 ```
 
 ## 5. Spawn the fresh session
@@ -229,8 +245,9 @@ Tell the user plainly:
   remove the worktree it is running in, so this session's worktree (plus any trial
   worktrees from earlier attempts) outlives it. After the new session has forked and you
   have archived this one, prune the leftovers: run `git worktree remove <path>` yourself
-  from the main repo, or just confirm to the resumed session that this session is closed
-  and let it remove the stale worktree (its handover records the path).
+  from the main repo (a jj workspace: `jj workspace forget <name>` from the main repo,
+  then delete its directory), or just confirm to the resumed session that this session
+  is closed and let it remove the stale worktree (its handover records the path).
 
 ## Manual fallback (no start_session, no usable remote)
 
