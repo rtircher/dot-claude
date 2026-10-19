@@ -93,6 +93,24 @@ class HooksTest(unittest.TestCase):
         self.assertIn("Set up backups", p.stdout)
         self.assertLess(self.elapsed, 8)
 
+    def test_session_start_sync_worst_case_fits_hook_timeout(self):
+        from unittest import mock
+
+        self.init_board()
+        declared = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+        limit = declared["hooks"]["SessionStart"][0]["hooks"][0]["timeout"]
+        seen = {}
+
+        def capture(ref, timeout=5, lock_wait=None, push_min=hooks.sync.PUSH_MIN):
+            seen.update(timeout=timeout, lock_wait=lock_wait, push_min=push_min)
+            return hooks.sync.SyncResult(False, [])
+
+        with mock.patch.object(hooks.sync, "sync", capture):
+            hooks._summary_text(locate.resolve(self.repo), "s1")
+        # fetch may use the whole timeout, then the push gets its floor; the 3 s slack covers
+        # python startup, the heartbeat, local git in the checkout and rendering the summary
+        self.assertLessEqual(seen["lock_wait"] + seen["timeout"] + seen["push_min"], limit - 3)
+
     def test_session_start_writes_env_file(self):
         self.init_board()
         envf = self.tmp / "envfile"

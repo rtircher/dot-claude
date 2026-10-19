@@ -12,8 +12,11 @@ from pathlib import Path
 from board import gitutil, locate, ops
 from board.locate import BoardRef, slug, state_dir
 
-LOCK_WAIT = 10.0
 MAX_ATTEMPTS = 5
+# An interrupted push can still land, so a push gets at least this long by default.
+PUSH_MIN = 10.0
+# Outlasts the longest default hold: 5 s fetch, PUSH_MIN push, local git.
+LOCK_WAIT = 20.0
 _NO_HOOKS = ["-c", "core.hooksPath=/dev/null"]
 _FALLBACK_IDENTITY = ["-c", "user.name=board", "-c", "user.email=board@users.noreply.invalid"]
 _REJECTED = ("rejected", "non-fast-forward", "fetch first")
@@ -83,14 +86,14 @@ def _read_journal(ref: BoardRef) -> tuple[list[dict], list[str]]:
 
 
 class _Deadline:
-    """Overall budget for the network calls of one sync/submit (R11)."""
+    """Budget for the network calls of one sync/submit (R11); a push may run past it to its floor."""
 
     def __init__(self, timeout: float):
         self.end = time.monotonic() + timeout
 
-    def net(self, args, cwd):
-        """Run a network git call with the remaining budget; None on timeout or OS failure."""
-        left = self.end - time.monotonic()
+    def net(self, args, cwd, floor: float = 0.0):
+        """Run a network git call with the remaining budget (at least `floor`); None on timeout or OS failure."""
+        left = max(self.end - time.monotonic(), floor)
         if left <= 0:
             return None
         try:
@@ -132,6 +135,12 @@ def _reset_to_remote(cwd: Path, branch: str) -> bool:
     return True
 
 
+def _at_remote_tip(cwd: Path, branch: str) -> bool:
+    head = _local(["rev-parse", "HEAD"], cwd).stdout.strip()
+    tip = _local(["rev-parse", f"refs/remotes/origin/{branch}"], cwd).stdout.strip()
+    return head == tip
+
+
 def _ensure_checkout(ref: BoardRef, dl: _Deadline) -> tuple[Path, bool]:
     cwd = checkout_dir(ref)
     if (cwd / ".git").exists():
@@ -151,7 +160,11 @@ def _ensure_checkout(ref: BoardRef, dl: _Deadline) -> tuple[Path, bool]:
     return cwd, True
 
 
-def _sync(ref: BoardRef, timeout: float) -> SyncResult:
+def _clear_journal(ref: BoardRef) -> None:
+    _journal_path(ref).write_text("", encoding="utf-8")
+
+
+def _sync(ref: BoardRef, timeout: float, push_min: float) -> SyncResult:
     dl = _Deadline(timeout)
     journal, jwarn = _read_journal(ref)
     cwd, ok = _ensure_checkout(ref, dl)
@@ -169,9 +182,13 @@ def _sync(ref: BoardRef, timeout: float) -> SyncResult:
         last_warnings = warnings
         if not journal:
             return SyncResult(True, warnings)
-        pushed = dl.net(["push", "-q", "origin", f"HEAD:refs/heads/{ref.branch}"], cwd)
+        if _at_remote_tip(cwd, ref.branch):
+            # Every op is already on the remote, e.g. an earlier push landed but timed out.
+            _clear_journal(ref)
+            return SyncResult(True, warnings)
+        pushed = dl.net(["push", "-q", "origin", f"HEAD:refs/heads/{ref.branch}"], cwd, floor=push_min)
         if pushed is not None and pushed.returncode == 0:
-            _journal_path(ref).write_text("", encoding="utf-8")
+            _clear_journal(ref)
             return SyncResult(True, warnings)
         if pushed is None or not any(w in pushed.stderr for w in _REJECTED):
             return SyncResult(False, last_warnings + ["board push failed; changes kept locally"])
@@ -184,15 +201,17 @@ def _offline(cwd: Path, ref: BoardRef, journal: list[dict], warnings: list[str])
     return SyncResult(False, warnings)
 
 
-def submit(ref: BoardRef, op: dict, timeout: float = 5, lock_wait: float | None = None) -> SyncResult:
+def submit(ref: BoardRef, op: dict, timeout: float = 5, lock_wait: float | None = None,
+           push_min: float = PUSH_MIN) -> SyncResult:
     with _lock(ref, lock_wait):
         path = _journal_path(ref)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(op, ensure_ascii=False) + "\n")
-        return _sync(ref, timeout)
+        return _sync(ref, timeout, push_min)
 
 
-def sync(ref: BoardRef, timeout: float = 5, lock_wait: float | None = None) -> SyncResult:
+def sync(ref: BoardRef, timeout: float = 5, lock_wait: float | None = None,
+         push_min: float = PUSH_MIN) -> SyncResult:
     with _lock(ref, lock_wait):
-        return _sync(ref, timeout)
+        return _sync(ref, timeout, push_min)

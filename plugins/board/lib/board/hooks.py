@@ -22,6 +22,9 @@ PARK_CONTEXT = ("Board cue: the user is parking something. File it with "
                 "`board add --parent <your current ticket>` and confirm in one line.")
 BTW_CONTEXT = "Board cue: answer the btw first; if it turns into work, offer a ticket in one line."
 HOOK_LOCK_WAIT = 2.0
+# Lock wait + fetch + push floor must stay under the SessionStart hook's 15 s timeout.
+HOOK_SYNC_TIMEOUT = 4.0
+HOOK_PUSH_MIN = 6.0
 MAX_LINES = 25
 
 
@@ -86,7 +89,7 @@ def _write_env_file(session: str, cwd: Path) -> bool:
 def _summary_text(ref, session: str) -> str:
     res = None
     try:
-        res = sync.sync(ref, timeout=5, lock_wait=HOOK_LOCK_WAIT)
+        res = sync.sync(ref, timeout=HOOK_SYNC_TIMEOUT, lock_wait=HOOK_LOCK_WAIT, push_min=HOOK_PUSH_MIN)
     except sync.BoardBusy:
         pass
     synced = bool(res and res.synced)

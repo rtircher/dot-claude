@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -175,8 +176,6 @@ class SyncTest(unittest.TestCase):
         def failing(args, cwd, timeout=None):
             if args[0] == "push":
                 pushes.append(1)
-                import subprocess
-
                 return subprocess.CompletedProcess(args, 128, "", "fatal: unable to access remote")
             return real(args, cwd, timeout)
 
@@ -185,18 +184,46 @@ class SyncTest(unittest.TestCase):
         self.assertFalse(res.synced)
         self.assertEqual(len(pushes), 1)
 
-    def test_replay_of_note_already_on_tip_is_safe(self):
-        sync.submit(self.ref, ticket_op("t-1"))
-        n = note_op("t-1", "same note")
-        sync.submit(self.ref, n)
-        # simulate a crash after push but before journal truncation
-        journal = self.state / "journal" / "example-com-acme-widgets.jsonl"
-        import json
+    def test_push_that_lands_then_times_out_is_cleared_on_next_sync(self):
+        real = sync.run_git
 
-        journal.write_text(json.dumps(n) + "\n")
-        self.assertTrue(sync.sync(self.ref).synced)
-        tickets, _ = self.remote_tickets()
-        self.assertEqual([e.text for e in tickets["t-1"].log].count("same note"), 1)
+        def lands_then_times_out(args, cwd, timeout=None):
+            p = real(args, cwd, timeout)
+            if args[0] == "push":
+                raise subprocess.TimeoutExpired(args, timeout)
+            return p
+
+        def push_times_out(args, cwd, timeout=None):
+            if args[0] == "push":
+                raise subprocess.TimeoutExpired(args, timeout)
+            return real(args, cwd, timeout)
+
+        with mock.patch.object(sync, "run_git", lands_then_times_out):
+            self.assertFalse(sync.submit(self.ref, ticket_op("t-1")).synced)
+        self.assertIn("t-1", self.remote_tickets()[0])
+        with mock.patch.object(sync, "run_git", push_times_out):
+            self.assertTrue(sync.sync(self.ref).synced)
+        journal = self.state / "journal" / "example-com-acme-widgets.jsonl"
+        self.assertEqual(journal.read_text(), "")
+
+    def test_push_runs_to_its_floor_after_the_deadline_passed(self):
+        real = sync.run_git
+        budgets = []
+
+        def slow_fetch(args, cwd, timeout=None):
+            if args[0] == "fetch":
+                p = real(args, cwd, timeout)
+                time.sleep(1.2)
+                return p
+            if args[0] == "push":
+                budgets.append(timeout)
+            return real(args, cwd, timeout)
+
+        sync.sync(self.ref)  # clone outside the measured run
+        with mock.patch.object(sync, "run_git", slow_fetch):
+            res = sync.submit(self.ref, ticket_op("t-1"), timeout=1, push_min=3)
+        self.assertTrue(res.synced)
+        self.assertEqual(budgets, [3])
 
     def test_commit_identity_fallback_only_without_user_email(self):
         cfg = Path(os.environ["GIT_CONFIG_GLOBAL"])
@@ -231,6 +258,12 @@ class SyncTest(unittest.TestCase):
         self.assertTrue(sync.submit(self.ref, ticket_op("t-1")).synced)
         self.assertFalse(marker.exists())
 
+    def test_lock_wait_outlasts_default_hold(self):
+        import inspect
+
+        timeout = inspect.signature(sync.sync).parameters["timeout"].default
+        self.assertGreater(sync.LOCK_WAIT, timeout + sync.PUSH_MIN)
+
     def test_lock_busy_raises(self):
         import fcntl
 
@@ -242,14 +275,13 @@ class SyncTest(unittest.TestCase):
                 with self.assertRaises(sync.BoardBusy):
                     sync.sync(self.ref)
 
-    def test_deadline_is_overall(self):
+    def test_deadline_bounds_fetch_and_clone(self):
+        # The push is exempt: it runs to its floor (test_push_runs_to_its_floor_after_the_deadline_passed).
         calls = []
         real = sync.run_git
 
         def slow(args, cwd, timeout=None):
-            import subprocess
-
-            if args[0] not in ("fetch", "push", "clone"):
+            if args[0] not in ("fetch", "clone"):
                 return real(args, cwd, timeout)
             calls.append(timeout)
             raise subprocess.TimeoutExpired(args, timeout)
