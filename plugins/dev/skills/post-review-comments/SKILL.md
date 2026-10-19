@@ -10,8 +10,7 @@ Reference for turning a finding list into inline GitHub review comments that lan
 
 ## Why this exists
 
-Naive posting misplaces comments. Two independent traps, both observed in production
-(7 of 11 comments landed on wrong or blank lines in one review):
+Naive posting misplaces comments, for two independent reasons:
 
 1. **The batch reviews endpoint anchors by diff `position`, not file line.** `POST
    /repos/{o}/{r}/pulls/{n}/reviews` with `comments[].line` is unreliable, it can be
@@ -61,47 +60,39 @@ can add held findings.
 
 Every posted finding is an **inline review comment** (file + line). Never post findings as a
 top-level/issue PR comment: authors' fix workflows key off review threads, and issue comments
-have no resolved state to track, an issue-comment review was observed being silently skipped
-while every inline comment on the same PR got fixed. A finding with no single obvious line
+have no resolved state to track. A finding with no single obvious line
 still goes inline, anchored on the most load-bearing line in the diff (the mock definition,
 the import line, the function signature).
 
 ## The procedure
 
-**1. Pin the head SHA first, and re-pin if the branch moves.**
-```bash
-gh pr view <n> --json headRefOid -q .headRefOid
-```
-The branch can advance mid-review (multiple pushes). Compute all anchors against ONE sha
-and pass it as `commit_id`; a comment pinned to a sha stays correctly anchored even if a
-newer push arrives (GitHub marks it outdated, not misplaced).
+Post each comment with `scripts/post-comment.sh` (beside this file), one call per finding.
+Write the body, tag first, to a file, then run from a clone of the PR's repo:
 
-**2. Get line numbers from the real file content at that sha, never from `gh pr diff`.**
-`<remote>` is the git remote whose URL matches the PR's repo, per the router (`SKILL.md`), never an assumed `origin`.
 ```bash
-git fetch -q <remote> <sha>
-git show <sha>:<path> | grep -nE '<pattern for the line>'
+post-comment.sh --pr <n> --remote <remote> --path <file> --pattern '<ERE for the line>' \
+  --body-file <file> [--sha <sha>]
 ```
-`git show <sha>:<file>` is authoritative: its line numbers ARE the file lines GitHub's
-`line` parameter expects. Match on the code text, not a remembered number.
 
-**3. Post each comment individually with `line` + `side`, not the batch endpoint.**
-```bash
-gh api repos/{o}/{r}/pulls/<n>/comments --method POST --input - <<payload-via-file>
-# body: {commit_id, path, line, side:"RIGHT", body}
-```
-The individual `/pulls/{n}/comments` endpoint uses file-line semantics reliably. Build the
-JSON with a file + `--input` (no heredoc). `side:"RIGHT"` is the new version; use `"LEFT"`
-only to comment on a deleted line.
+`<remote>` is the git remote whose URL matches the PR's repo, never an assumed `origin`. The
+script runs the fixed sequence:
 
-**4. Verify EVERY comment via `diff_hunk` before trusting it.** The last line of a
-comment's `diff_hunk` is the line it actually attached to:
-```bash
-gh api "repos/{o}/{r}/pulls/<n>/comments?per_page=100" \
-  -q '.[] | select(.user.login=="<me>") | "\(.path):\(.line)\t\((.diff_hunk|split("\n")|last)[0:60])"'
-```
-If the anchor line doesn't contain the code you meant, the comment is misplaced, delete
-and repost. A comment on a blank `+` line is always wrong.
+1. **Pin the head SHA.** The branch can advance mid-review, so pass the SHA the first call
+   printed as `--sha` on the rest to anchor every comment of one review to the same commit.
+   A comment pinned to a SHA stays anchored when a newer push arrives (GitHub marks it
+   outdated, not misplaced).
+2. **Locate the line** in `git show <sha>:<path>`, matching the code text with `--pattern`
+   (it must match exactly one line). That file's line numbers are what GitHub's `line`
+   parameter expects; never use line numbers from `gh pr diff`.
+3. **Post** to the single-comment endpoint `/pulls/{n}/comments` with `line` and
+   `side: RIGHT`, not the batch endpoint. For a comment on a deleted line, make the same
+   `gh api` call by hand with `side: LEFT` and the old-file line.
+4. **Verify** via the last line of the comment's `diff_hunk`, which is the line it attached
+   to. Exit 3 means it landed elsewhere: the script prints the delete command; delete and
+   repost. A comment on a blank `+` line is always wrong.
+
+`--dry-run` prints the `gh api` call and checks, read-only, that the located line sits
+inside a diff hunk of the PR, without posting.
 
 ## Grouping vs individual comments
 
@@ -112,7 +103,7 @@ and repost. A comment on a blank `+` line is always wrong.
   correctness matters more than tidiness.
 - A **submitted** review cannot be deleted (only *pending* ones can). If a submitted review
   has misplaced comments, delete the individual bad comments
-  (`DELETE /pulls/comments/{id}`) and repost them via step 3, you cannot re-add them to the
+  (`DELETE /pulls/comments/{id}`) and repost them with `post-comment.sh`, you cannot re-add them to the
   already-submitted review, so they become standalone. Anchors correct beats grouping tidy.
 
 ## Pending-review collision
