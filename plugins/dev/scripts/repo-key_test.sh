@@ -74,4 +74,17 @@ out=$(cd "$ws" && bash "$here/handover-archive-sweep.sh" --dry-run)
 assert_contains "$out" "would archive: $state/proj-done-" "sweep sees the bookmark-backed branch"
 assert_contains "$out" "repo=proj archived=1 pending=1" "sweep keeps the pending handover"
 
+# repo_owns_handover: Repo: must name REPO_ROOT; a trailing note is allowed.
+# shellcheck source=repo-key.sh
+. "$here/repo-key.sh"
+owns() { # <file content> <REPO_ROOT>
+  printf '%b' "$1" >"$work/owns.md"
+  if REPO_ROOT=$2 repo_owns_handover "$work/owns.md"; then echo yes; else echo no; fi
+}
+assert_eq "$(owns 'Repo: /a/proj\n' /a/proj)" yes "repo_owns_handover: exact match"
+assert_eq "$(owns 'Repo: /a/proj (on the VM)\n' /a/proj)" yes "repo_owns_handover: trailing note"
+assert_eq "$(owns 'Repo: /a/proj-x\n' /a/proj)" no "repo_owns_handover: a repo whose key extends this one"
+assert_eq "$(owns 'Branch: main\n' /a/proj)" no "repo_owns_handover: no Repo: line"
+assert_eq "$(owns 'Repo: /a/proj\n' '')" no "repo_owns_handover: empty REPO_ROOT"
+
 finish "repo-key"

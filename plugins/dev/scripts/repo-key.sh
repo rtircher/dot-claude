@@ -5,6 +5,7 @@
 # jj workspace of a project shares one handover. A jj workspace has no .git (git
 # fails there), so its main repo comes from the .jj/repo pointer file instead.
 # Outside any repo: KEY default, ROOT empty. Reads only; never runs jj.
+# Also defines handover_repo and repo_owns_handover for the scripts that source it.
 
 repo_key_resolve() {
   REPO_ROOT="" REPO_KEY=default
@@ -35,6 +36,19 @@ repo_key_resolve() {
     REPO_ROOT=$(dirname "$common")
   fi
   REPO_KEY=$(basename "$REPO_ROOT")
+}
+
+# handover_repo <file>: prints the file's `Repo:` value, empty when it has none.
+handover_repo() { awk '/^Repo: /{sub(/^Repo: /,""); print; exit}' "$1"; }
+
+# repo_owns_handover <file>: true when the file's `Repo:` line names REPO_ROOT.
+# A <key>-*.md name can belong to a repo whose key extends this one (`dot` vs
+# `dot-files`); only the Repo: line tells them apart. Hand-written Repo: lines
+# sometimes carry trailing notes after the path.
+repo_owns_handover() {
+  local repo
+  repo=$(handover_repo "$1")
+  [[ -n "$REPO_ROOT" && ("$repo" == "$REPO_ROOT" || "$repo" == "$REPO_ROOT "*) ]]
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

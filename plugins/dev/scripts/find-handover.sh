@@ -31,11 +31,30 @@ if [[ -n "$root" ]]; then
 fi
 printf 'ORIGIN\t%s\n' "$origin"
 
-# Newest state file: <key>.md plus the per-respawn <key>-*.md files.
+# <key>-*.md also matches a repo whose key extends this one (`proj-x.md` for
+# `proj`). A Repo: line decides: keep the file only if it names this repo.
+# With none, or outside a repo where no sibling key exists, the name decides:
+# every <key>-* name this repo writes ends in a UTC stamp, which rules out the
+# other repo's plain handover, and takeover's Repo check warns on the rest. A
+# bare <key>-<ts>.md (/dev:handover's archive of <key>.md) is this repo's
+# whatever its Repo: says.
+ts='[0-9]{8}T[0-9]{6}Z'
+ours() {
+  local rest=${1##*/}
+  rest=${rest#"$key"-}
+  [[ "$rest" =~ ^$ts\.md$ ]] && return 0
+  if [[ -n "$root" && -n "$(handover_repo "$1")" ]]; then
+    repo_owns_handover "$1"
+  else
+    [[ "$rest" =~ ^.+-$ts\.md$ ]]
+  fi
+}
+
+# Newest state file: <key>.md plus the per-respawn <key>-<slug>-<ts>.md files.
 shopt -s nullglob
-local_files=("$state/handover/$key.md" "$state/handover/$key"-*.md)
 existing=()
-for f in "${local_files[@]}"; do [[ -f "$f" ]] && existing+=("$f"); done
+[[ -f "$state/handover/$key.md" ]] && existing+=("$state/handover/$key.md")
+for f in "$state/handover/$key"-*.md; do ours "$f" && existing+=("$f"); done
 if ((${#existing[@]})); then
   printf 'LOCAL\t%s\n' "$(ls -t "${existing[@]}" | awk 'NR==1')"
   exit 0
@@ -60,10 +79,13 @@ if [[ -n "$origin" ]]; then
   if ((found)); then exit 0; fi
 fi
 
-archived=("$state/handover-archive/$key"-*.md)
+# Archives are <key>-<ts>.md (/dev:handover) and <key>-<slug>-<ts>-<ts>.md (the
+# respawn sweep).
+archived=()
+for f in "$state/handover-archive/$key"-*.md; do ours "$f" && archived+=("$f"); done
 if ((${#archived[@]})); then
-  # Timestamped names sort lexically; the last is newest.
-  printf 'ARCHIVE\t%s\n' "$(printf '%s\n' "${archived[@]}" | sort | tail -n 1)"
+  # Newest by mtime, as LOCAL (mv keeps it); names sort by slug before stamp.
+  printf 'ARCHIVE\t%s\n' "$(ls -t "${archived[@]}" | awk 'NR==1')"
   exit 0
 fi
 echo NONE

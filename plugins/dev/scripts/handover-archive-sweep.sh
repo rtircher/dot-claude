@@ -27,10 +27,7 @@ branches=$(git -C "$root" for-each-ref --format='%(refname:short)' refs/heads)
 shopt -s nullglob
 moved=0 kept=0 other=0
 for f in "$state/handover/$key"-*.md; do
-  # The prefix can belong to another repo (`dot` vs `dot-files`): match Repo:.
-  repo=$(awk '/^Repo: /{sub(/^Repo: /,""); print; exit}' "$f")
-  # Hand-written Repo: lines sometimes carry trailing notes after the path.
-  if [[ "$repo" != "$root" && "$repo" != "$root "* ]]; then other=$((other + 1)); continue; fi
+  if ! repo_owns_handover "$f"; then other=$((other + 1)); continue; fi
   branch=$(awk '/^Branch: /{sub(/^Branch: /,""); print; exit}' "$f")
   if [[ -n "$branch" ]] && grep -Fxq -- "$branch" <<<"$branches"; then
     dest="$state/handover-archive/$(basename "$f" .md)-$(date -u +%Y%m%dT%H%M%SZ).md"
