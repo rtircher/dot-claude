@@ -127,3 +127,26 @@ export function goalTickets(summary, goalId) {
 export function fileLink(path) {
   return 'file://' + encodeURI(path).replace(/[()]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
 }
+
+// The one-line band above the prompt. Returns null when there is nothing to
+// show. Only the next-up title is cut to fit `width`; when fewer than
+// BAND_MIN_TITLE cells are left for it, the next-up part is dropped.
+const BAND_MIN_TITLE = 8
+
+export function bandText(summary, opts = {}) {
+  if (!summary) return null
+  if (summary.fetched === false) return 'Board: not fetched yet (remote unreachable)'
+  const n = (summary.sessions || []).length
+  const head = `Board: ${n ? `${n} in progress` : 'nothing in progress'}`
+  const tail = summary.synced === false ? ' · unsynced' : ''
+  const first = (summary.next || [])[0]
+  if (!first) return `${head} · nothing ready${tail}`
+  const lead = ' · next: '
+  let title = first.title
+  if (opts.width) {
+    const room = opts.width - head.length - lead.length - tail.length
+    if (room < BAND_MIN_TITLE) return head + tail
+    if (title.length > room) title = title.slice(0, room - 1) + '…'
+  }
+  return head + lead + title + tail
+}

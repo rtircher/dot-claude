@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { renderGlance, textBar, barSvg, repoName, ruleSvg, ticketDetail, goalTickets, fileLink } from './render.mjs'
+import { renderGlance, textBar, barSvg, repoName, ruleSvg, ticketDetail, goalTickets, fileLink, bandText } from './render.mjs'
 
 const next = (n) =>
   Array.from({ length: n }, (_, i) => ({ id: `t${i + 1}`, title: `Example task ${i + 1}`, goal: 'g1' }))
@@ -163,4 +163,50 @@ test('repoName keeps the last path segment', () => {
   assert.equal(repoName('example.invalid/someone/project'), 'project')
   assert.equal(repoName('git@example.invalid:someone/project.git'), 'project')
   assert.equal(repoName(undefined), '')
+})
+
+test('band: counts in-progress sessions and names the first next-up ticket', () => {
+  assert.equal(bandText(fixture()), 'Board: 3 in progress · next: Example task 1')
+  const one = fixture()
+  one.sessions = one.sessions.slice(0, 1)
+  assert.equal(bandText(one), 'Board: 1 in progress · next: Example task 1')
+})
+
+test('band: says so when nothing is in progress or ready', () => {
+  const s = fixture()
+  s.sessions = []
+  s.next = []
+  s.next_more = 0
+  assert.equal(bandText(s), 'Board: nothing in progress · nothing ready')
+})
+
+test('band: flags an unsynced board', () => {
+  const s = fixture()
+  s.synced = false
+  assert.equal(bandText(s), 'Board: 3 in progress · next: Example task 1 · unsynced')
+})
+
+test('band: a board not fetched yet says only that', () => {
+  const s = fixture()
+  s.fetched = false
+  assert.equal(bandText(s), 'Board: not fetched yet (remote unreachable)')
+})
+
+test('band: hidden without a summary', () => {
+  assert.equal(bandText(null), null)
+  assert.equal(bandText(undefined), null)
+})
+
+test('band: the next-up title is cut to fit the width, the rest stays whole', () => {
+  const s = fixture()
+  s.next = [{ id: 't1', title: 'A very long ticket title that will not fit', goal: 'g1' }]
+  s.synced = false
+  const text = bandText(s, { width: 50 })
+  assert.equal(text.length, 50)
+  assert.ok(text.startsWith('Board: 3 in progress · next: A very'))
+  assert.ok(text.endsWith('… · unsynced'))
+  // Too narrow for any title: drop the next-up part rather than show a stub.
+  assert.equal(bandText(s, { width: 35 }), 'Board: 3 in progress · unsynced')
+  // No width: never cut.
+  assert.ok(bandText(s).includes('will not fit'))
 })

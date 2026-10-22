@@ -1,9 +1,13 @@
 import type { Register } from 'claude-code'
 
-import { renderGlance, textBar, barSvg, ruleSvg, ticketDetail, goalTickets, fileLink } from './render.mjs'
+import { renderGlance, textBar, barSvg, ruleSvg, ticketDetail, goalTickets, fileLink, bandText } from './render.mjs'
 
 const PANE = 'board-glance'
 const POLL_MS = 30_000
+// The band above the prompt polls slower and for the whole session.
+const BAND_POLL_MS = 60_000
+// Cells the band's [ Open ] button and the gap before it take.
+const BAND_BUTTON_CELLS = 10
 
 // Pane-local state. Lives for one load of the module; the board itself is
 // always re-read through the CLI.
@@ -15,6 +19,7 @@ let detail: string[] | null = null
 let fullBoard: string | null = null
 let inFlight = false
 let timer: { cancel: () => void } | null = null
+let bandTimer: { cancel: () => void } | null = null
 const expanded = new Set<string>()
 
 function redraw($: any) {
@@ -90,6 +95,9 @@ async function openFull($: any) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'board', description: 'Show the board at a glance in a pane' })
+    // Feed the band; never awaited, so the prompt is not held up.
+    if (!bandTimer) bandTimer = $.clock.every(BAND_POLL_MS, () => refresh($))
+    void refresh($)
     return next(e)
   })
 
@@ -104,6 +112,22 @@ export const register: Register = on => {
   on('command.run', { command: 'board' }, async $ => {
     await openPane($)
     return { text: 'Board pane opened.' }
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // Hidden in a repo without a board, before the first summary, and while a
+    // survey holds the band.
+    if (e.props.hasSurvey || noBoard) return next(e)
+    const width = Math.max(0, e.props.bodyColumns - BAND_BUTTON_CELLS)
+    const text = bandText(summaryNow, { width })
+    if (!text) return next(e)
+    const { Box, Text, Button } = $.ui.resolve(e) as any
+    return (
+      <Box flexDirection="row" gap={1}>
+        <Text dimColor wrap="truncate-end">{text}</Text>
+        <Button key="board-open" label="Open" onPress={() => openPane($)} />
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
