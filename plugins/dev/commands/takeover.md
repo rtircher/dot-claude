@@ -8,6 +8,10 @@ Pull the most recent handover for THIS repo (written by `/dev:handover` or
 Non-destructive: it never moves, renames, or deletes anything, so it works any time, as
 many times as you like.
 
+`/clear` within 15 minutes of `/dev:handover` needs no takeover: a hook loads that
+handover and steps 2, 4 and 5 run on the next message (`HANDOVER_AUTOLOAD_MAX_AGE_MIN`
+sets the window, `0` turns it off).
+
 Handovers arrive two ways: as **state files** under `~/.claude/state/handover/`
 (local sessions, shared filesystem) or **branch-carried** on a pushed throwaway
 `handover/<slug>` branch (written by `/dev:respawn`'s cloud flow, because cloud
