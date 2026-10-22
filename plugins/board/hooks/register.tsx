@@ -94,10 +94,11 @@ async function openFull($: any) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'board', description: 'Show the board at a glance in a pane' })
-    // Feed the band; never awaited, so the prompt is not held up.
+    // Feed the band first, so a refused command cannot leave it empty; the
+    // refresh is never awaited, so the prompt is not held up.
     if (!bandTimer) bandTimer = $.clock.every(BAND_POLL_MS, () => refresh($))
     void refresh($)
+    await $.command.register({ name: 'board', description: 'Show the board at a glance in a pane' })
     return next(e)
   })
 
