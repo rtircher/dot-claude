@@ -66,7 +66,3 @@ What's unresolved or waiting on input.
 Record the **main repo root** (the same one used for the key) and branch verbatim —
 `/dev:takeover` checks them before it resumes or switches branches. After writing,
 report the path and a one-line summary.
-
-`/clear` within 15 minutes of writing it resumes in place: the cleared session loads
-this handover and runs takeover's checks on the next message
-(`HANDOVER_AUTOLOAD_MAX_AGE_MIN` sets the window, `0` turns it off).
