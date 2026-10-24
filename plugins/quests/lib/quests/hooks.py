@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-from quests import cues, locate, store, sync, views
+from quests import cues, locate, migrate, store, sync, views
 
 NO_QUESTS = 'Quests: none for this repo (say "set up quests" to create it).'
 CLAIM_LINE = "Take a quest before starting work; file side quests with `quest side`."
@@ -116,8 +116,12 @@ def session_start(data: dict) -> list[str]:
         except Exception:
             _log_error("session-start env file")
     ref = locate.resolve(cwd)
+    note = None
     if ref is None:
-        return [NO_QUESTS]
+        # An old `board` branch is carried over once, within its own 5 s network budget.
+        ref, note = migrate.auto(cwd)
+    if ref is None:
+        return [note or NO_QUESTS]
     extra = [CLAIM_LINE]
     if not wrote_env or where() == "cloud":
         extra.append(f"Quests CLI: {plugin_root() / 'bin' / 'quest'}; session: {session}")
@@ -126,6 +130,8 @@ def session_start(data: dict) -> list[str]:
     except Exception:
         _log_error("session-start summary")
         body = [f"Quests: {ref.key} (unreadable; see hook-errors.log)"]
+    if note:
+        extra.insert(0, note)
     return body[:MAX_LINES - len(extra)] + extra
 
 

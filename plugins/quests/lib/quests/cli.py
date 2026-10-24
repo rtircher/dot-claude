@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from quests import locate, render_html, setup, store, sync, views
+from quests import locate, migrate, render_html, setup, store, sync, views
 from quests.locate import QuestsRef
 
 NO_QUESTS = "No quest log for this repo. Run: quest init --mode same|external [--url URL]"
@@ -70,6 +70,7 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("--link", action="append", default=[])
     gs.add_parser("list", parents=[c])
     sub.add_parser("html", parents=[c]).add_argument("--out")
+    sub.add_parser("migrate", parents=[c])
     return p
 
 
@@ -149,6 +150,13 @@ class _Fail(Exception):
 def _cmd_init(ctx: _Ctx) -> int:
     ref = setup.init(ctx.cwd, ctx.args.mode, ctx.args.url)
     ctx.emit(dataclasses.asdict(ref), f"Quests ready: {ref.branch} on {ref.url}")
+    return 0
+
+
+def _cmd_migrate(ctx: _Ctx) -> int:
+    res = migrate.migrate(ctx.cwd)
+    ctx.emit({"created": res.created, "found": res.found, "messages": res.lines},
+             "\n".join(res.lines))
     return 0
 
 
@@ -348,6 +356,8 @@ def _run(argv: list[str], cwd: Path) -> int:
     ctx = _Ctx(args, cwd)
     if args.cmd == "init":
         return _cmd_init(ctx)
+    if args.cmd == "migrate":
+        return _cmd_migrate(ctx)
     if args.cmd == "sync":
         key = locate.repo_key(cwd)
         if key is not None:
@@ -368,7 +378,7 @@ def main(argv: list[str], cwd: Path | None = None) -> int:
     except _Usage as e:
         print(f"quest: {e}", file=sys.stderr)
         return 1
-    except setup.SetupRefused as e:
+    except (setup.SetupRefused, migrate.MigrateError) as e:
         print(f"quest: {e}")
         return 4
     except sync.QuestsBusy:

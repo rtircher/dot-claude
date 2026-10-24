@@ -49,7 +49,8 @@ A shared quest log per repo, kept on a git branch, visible to every session. Goa
 3. External: ask for the repo URL, and say cloud sessions need `CLAUDE_QUESTS_REPO=<url>` in their environment.
 4. Run `quest init --mode same` or `quest init --mode external --url <url>`.
 5. Propose main quests from existing plans and runbooks. Create only the ones the user approves: `quest main add "<title>" --link <doc>`.
+6. A repo that still has the old `claude/board` branch is migrated automatically at session start, or by hand with `quest migrate`.
 
 ## Command reference
 
-`quest log [--next-limit N] | next | sync | show <id> | add <title> [--main G] [--parent ID] [--link L] | side <title> [--link L] | take <id> | drop <id> | done <id> | status <id> <status> | note <id> <text> | link <id> <link> | main add <title> [--link L] | main list | init --mode same|external [--url URL]`
+`quest log [--next-limit N] | next | sync | show <id> | add <title> [--main G] [--parent ID] [--link L] | side <title> [--link L] | take <id> | drop <id> | done <id> | status <id> <status> | note <id> <text> | link <id> <link> | main add <title> [--link L] | main list | init --mode same|external [--url URL] | migrate`

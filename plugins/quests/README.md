@@ -33,6 +33,16 @@ Note: pushed quest content (titles, notes, links) is visible to anyone with acce
 
 The skill must not be named `quests`: a skill named after its plugin takes the bare `/quests`, and the engine then refuses to register the pane command. `hooks/commands.test.mjs` guards this.
 
+## Migrating from the old name
+
+This plugin used to be called `board`. Nothing is lost and nothing is deleted:
+
+- `quest migrate` creates `claude/quests` at the same commit as the old `claude/board` branch (the same remote, no rewrite) and says what it did. If `claude/quests` already exists it says so and does nothing. External logs get `quests/<slug>` from `board/<slug>` the same way, and their config entry is carried over. The old branches are never modified or deleted.
+- It also copies the old state directory's config entries into the new one, and moves any non-empty pending journal across so it replays on the next sync.
+- At session start, when no quest log is found but a marked old one is, the same migration runs once automatically within a 5 second network budget. If it fails, the session start prints a one-line hint and carries on.
+
+The on-disk format inside the branch is unchanged (including the `goal` frontmatter key and the `board.json` marker file), so existing data reads as is.
+
 ## State
 
 Per-machine state (session heartbeats, checkouts, hook error log) is kept under `${QUESTS_STATE_DIR:-$HOME/.claude/state/quests}`. Nothing is written inside the plugin directory or the code repo's working tree.
@@ -44,6 +54,7 @@ All commands accept `--json` and `--session <id>`. Session id falls back to `$QU
 | Command | Purpose |
 | --- | --- |
 | `quest init --mode same\|external [--url URL]` | Create or adopt the quest log |
+| `quest migrate` | Carry a log made under the plugin's earlier name over to the quests branch |
 | `quest log [--next-limit N]` | Main quests, in-progress work, next up, stale claims |
 | `quest next` | The next ready quest |
 | `quest show <id>` | One quest with its log |
@@ -61,7 +72,7 @@ All commands accept `--json` and `--session <id>`. Session id falls back to `$QU
 
 `quest side` needs a current quest (one this session has taken and not finished); without one it exits 2 and says to use `quest add`.
 
-Exit codes: 0 ok, 1 error, 2 no quest log (or no current quest for `side`), 3 take refused, 4 setup refused, 5 busy.
+Exit codes: 0 ok, 1 error, 2 no quest log (or no current quest for `side`), 3 take refused, 4 setup or migration refused, 5 busy.
 
 ## Known limits
 
