@@ -44,9 +44,14 @@ def _journal_path(ref: QuestsRef) -> Path:
     return state_dir() / "journal" / f"{slug(ref.key)}.jsonl"
 
 
-@contextmanager
 def _lock(ref: QuestsRef, wait: float | None = None):
-    path = state_dir() / "locks" / f"{slug(ref.key)}.lock"
+    return lock_slug(slug(ref.key), wait)
+
+
+@contextmanager
+def lock_slug(name: str, wait: float | None = None):
+    """The per-repo lock, by slug (the journal file stem), for callers without a ref."""
+    path = state_dir() / "locks" / f"{name}.lock"
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a+") as fh:
         end = time.monotonic() + (LOCK_WAIT if wait is None else wait)
@@ -164,7 +169,7 @@ def _clear_journal(ref: QuestsRef) -> None:
     _journal_path(ref).write_text("", encoding="utf-8")
 
 
-def _sync(ref: QuestsRef, timeout: float, push_min: float) -> SyncResult:
+def _sync(ref: QuestsRef, timeout: float, push_min: float, push: bool = True) -> SyncResult:
     dl = _Deadline(timeout)
     journal, jwarn = _read_journal(ref)
     cwd, ok = _ensure_checkout(ref, dl)
@@ -182,6 +187,11 @@ def _sync(ref: QuestsRef, timeout: float, push_min: float) -> SyncResult:
         last_warnings = warnings
         if not journal:
             return SyncResult(True, warnings)
+        if not push:
+            # Read-only caller: show the pending ops, leave the push to the next normal sync.
+            _reset_to_remote(cwd, ref.branch)
+            _commit_ops(cwd, journal, warnings, commit=False)
+            return SyncResult(False, warnings)
         if _at_remote_tip(cwd, ref.branch):
             # Every op is already on the remote, e.g. an earlier push landed but timed out.
             _clear_journal(ref)
@@ -212,6 +222,6 @@ def submit(ref: QuestsRef, op: dict, timeout: float = 5, lock_wait: float | None
 
 
 def sync(ref: QuestsRef, timeout: float = 5, lock_wait: float | None = None,
-         push_min: float = PUSH_MIN) -> SyncResult:
+         push_min: float = PUSH_MIN, push: bool = True) -> SyncResult:
     with _lock(ref, lock_wait):
-        return _sync(ref, timeout, push_min)
+        return _sync(ref, timeout, push_min, push)

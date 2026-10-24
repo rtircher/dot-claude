@@ -346,6 +346,13 @@ class CliTest(unittest.TestCase):
         code, out, _ = self.run_cli("done", child)
         self.assertNotIn("Back to", out)  # parent is done now
 
+    def test_done_and_status_with_unknown_id_exit_2(self):
+        self.init_same()
+        for argv in (("done", "t-nope"), ("status", "t-nope", "done")):
+            code, out, err = self.run_cli(*argv)
+            self.assertEqual(code, 2)
+            self.assertIn("no such quest: t-nope", out + err)
+
     def test_status_still_accepts_all_statuses(self):
         self.init_same()
         _, out, _ = self.run_cli("add", "Set up backups")

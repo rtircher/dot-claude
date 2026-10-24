@@ -45,6 +45,13 @@ def _branch_state(url: str, branch: str, cwd: Path) -> str | None:
         return show.stdout if show.returncode == 0 else ""
 
 
+def _is_old_marker(text: str | None) -> bool:
+    try:
+        return text is not None and isinstance(json.loads(text), dict)
+    except ValueError:
+        return False
+
+
 def _is_quests(text: str) -> bool:
     try:
         data = json.loads(text)
@@ -87,6 +94,9 @@ def init(cwd: Path, mode: str, url: str | None) -> QuestsRef:
     ref = QuestsRef(key, mode, url, branch)
     existing = _branch_state(url, branch, cwd)
     if existing is None:
+        old = locate.OLD_SAME_BRANCH if mode == "same" else locate.OLD_EXTERNAL_PREFIX + locate.slug(key)
+        if _is_old_marker(_branch_state(url, old, cwd)):
+            raise SetupRefused(f"an old board exists on {old}; run `quest migrate`")
         _create(url, branch, key)
     elif not _is_quests(existing):
         raise SetupRefused(f"branch {branch} exists and is not a quest log; nothing changed")

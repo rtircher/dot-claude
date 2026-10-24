@@ -10,6 +10,7 @@ import os
 import re
 import shlex
 import sys
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,7 @@ CLAIM_LINE = "Take a quest before starting work; file side quests with `quest si
 PARK_CONTEXT = ("Quests cue: the user is parking something. File it with "
                 "`quest side \"<title>\"` and confirm in one line.")
 BTW_CONTEXT = "Quests cue: answer the btw first; if it turns into work, offer a ticket in one line."
+SESSION_NET_BUDGET = 5.0
 HOOK_LOCK_WAIT = 2.0
 # Lock wait + fetch + push floor must stay under the SessionStart hook's 15 s timeout.
 HOOK_SYNC_TIMEOUT = 4.0
@@ -86,10 +88,10 @@ def _write_env_file(session: str, cwd: Path) -> bool:
     return True
 
 
-def _summary_text(ref, session: str) -> str:
+def _summary_text(ref, session: str, push: bool = True) -> str:
     res = None
     try:
-        res = sync.sync(ref, timeout=HOOK_SYNC_TIMEOUT, lock_wait=HOOK_LOCK_WAIT, push_min=HOOK_PUSH_MIN)
+        res = sync.sync(ref, timeout=HOOK_SYNC_TIMEOUT, lock_wait=HOOK_LOCK_WAIT, push_min=HOOK_PUSH_MIN, push=push)
     except sync.QuestsBusy:
         pass
     synced = bool(res and res.synced)
@@ -115,18 +117,22 @@ def session_start(data: dict) -> list[str]:
             wrote_env = _write_env_file(session, cwd)
         except Exception:
             _log_error("session-start env file")
-    ref = locate.resolve(cwd)
+    # One 5 s network budget for resolve and the old-board migration together.
+    net_end = time.monotonic() + SESSION_NET_BUDGET
+    ref = locate.resolve(cwd, deadline=net_end)
     note = None
+    migrated = False
     if ref is None:
-        # An old `board` branch is carried over once, within its own 5 s network budget.
-        ref, note = migrate.auto(cwd)
+        # An old `board` branch is carried over once. A journal it moves is not pushed from here.
+        ref, note = migrate.auto(cwd, deadline=net_end)
+        migrated = ref is not None
     if ref is None:
         return [note or NO_QUESTS]
     extra = [CLAIM_LINE]
     if not wrote_env or where() == "cloud":
         extra.append(f"Quests CLI: {plugin_root() / 'bin' / 'quest'}; session: {session}")
     try:
-        body = _summary_text(ref, session).splitlines()
+        body = _summary_text(ref, session, push=not migrated).splitlines()
     except Exception:
         _log_error("session-start summary")
         body = [f"Quests: {ref.key} (unreadable; see hook-errors.log)"]

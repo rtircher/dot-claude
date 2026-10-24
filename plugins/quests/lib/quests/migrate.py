@@ -15,12 +15,11 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from quests import locate
+from quests import locate, sync
 from quests.gitutil import run_git
-from quests.locate import SAME_BRANCH, QuestsRef, slug, state_dir
+from quests.locate import (OLD_EXTERNAL_PREFIX, OLD_SAME_BRANCH, SAME_BRANCH, QuestsRef,
+                           is_old_branch, slug, state_dir)
 
-OLD_SAME_BRANCH = "claude/board"
-OLD_EXTERNAL_PREFIX = "board/"
 OLD_ENV_REPO = "CLAUDE_BOARD_REPO"
 OLD_MARKER = "board.json"
 AUTO_BUDGET = 5.0
@@ -34,6 +33,10 @@ class MigrateError(Exception):
     def __init__(self, msg: str, found: bool = False):
         super().__init__(msg)
         self.found = found
+
+
+class Unreachable(MigrateError):
+    """The remote could not be reached (or the network budget ran out); worth retrying later."""
 
 
 @dataclass
@@ -56,7 +59,7 @@ class _Deadline:
     def left(self) -> float:
         left = self.end - time.monotonic()
         if left <= 0:
-            raise MigrateError("timed out")
+            raise Unreachable("timed out")
         return left
 
 
@@ -64,16 +67,16 @@ def _git(dl: _Deadline, args: list[str], cwd: Path | None):
     try:
         return run_git(args, cwd, dl.left())
     except subprocess.TimeoutExpired:
-        raise MigrateError(f"git {args[0]} timed out")
+        raise Unreachable(f"git {args[0]} timed out")
     except OSError as e:
-        raise MigrateError(f"cannot run git ({e})")
+        raise Unreachable(f"cannot run git ({e})")
 
 
 def _tip(dl: _Deadline, url: str, branch: str, cwd: Path | None) -> str | None:
     """Commit the branch points to on `url`, or None when it is absent."""
     p = _git(dl, ["ls-remote", "--heads", url, f"refs/heads/{branch}"], cwd)
     if p.returncode != 0:
-        raise MigrateError(f"cannot reach {url}")
+        raise Unreachable(f"cannot reach {url}")
     out = p.stdout.split()
     return out[0] if out else None
 
@@ -119,51 +122,95 @@ def _read_json(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def migrate_state() -> list[str]:
-    """Copy old config entries the new config lacks; move pending journals across."""
+def _plural(n: int, one: str, many: str) -> str:
+    return one if n == 1 else many
+
+
+def _new_branch(old: str) -> str:
+    if old == OLD_SAME_BRANCH:
+        return SAME_BRANCH
+    return "quests/" + old[len(OLD_EXTERNAL_PREFIX):]
+
+
+def migrate_state(dl: _Deadline | None = None, skip_key: str | None = None) -> list[str]:
+    """Carry old config entries and pending journals across.
+
+    An entry with an old-style branch is written only once its branch has been migrated,
+    and then under the new branch name; otherwise it is skipped. `skip_key` is the repo
+    being migrated right now, which the caller handles itself.
+    """
     lines: list[str] = []
     old = old_state_dir()
     new = state_dir()
     if old.resolve() == new.resolve():
         return lines
+    dl = dl or _Deadline(AUTO_BUDGET)
     old_cfg = _read_json(old / "config.json")
     cfg = locate._load_config()
-    added = [k for k in old_cfg if k not in cfg and isinstance(old_cfg[k], dict)]
+    added = 0
+    for k, e in old_cfg.items():
+        if k in cfg or k == skip_key or not isinstance(e, dict):
+            continue
+        if not all(isinstance(e.get(f), str) for f in ("mode", "url", "branch")):
+            continue
+        if is_old_branch(e["branch"]):
+            new_b = _new_branch(e["branch"])
+            try:
+                status, sha = migrate_branch(e["url"], e["branch"], new_b, None, dl)
+            except MigrateError:
+                continue
+            if status not in ("created", "exists"):
+                continue
+            if status == "created":
+                lines.append(f"Created {new_b} at {sha}, the same commit as {e['branch']}.")
+            e = dict(e, branch=new_b)
+        cfg[k] = e
+        added += 1
     if added:
-        for k in added:
-            cfg[k] = old_cfg[k]
         locate.write_config(cfg)
-        lines.append(f"Copied {len(added)} config entr{'y' if len(added) == 1 else 'ies'} to {new}.")
+        lines.append(f"Copied {added} config {_plural(added, 'entry', 'entries')} to {new}.")
     jdir = old / "journal"
     if jdir.is_dir():
         for src in sorted(jdir.glob("*.jsonl")):
-            try:
-                text = src.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            ops = [ln for ln in text.splitlines() if ln.strip()]
+            line = _move_journal(src, new / "journal" / src.name)
+            if line:
+                lines.append(line)
+    return lines
+
+
+def _move_journal(src: Path, dest: Path) -> str | None:
+    """Move pending ops under the repo's lock; the destination is durable before the source is emptied."""
+    try:
+        with sync.lock_slug(src.stem, 2.0):
+            ops = [ln for ln in src.read_text(encoding="utf-8").splitlines() if ln.strip()]
             if not ops:
-                continue
-            dest = new / "journal" / src.name
+                return None
             dest.parent.mkdir(parents=True, exist_ok=True)
             with open(dest, "a", encoding="utf-8") as fh:
                 fh.write("\n".join(ops) + "\n")
-            src.write_text("", encoding="utf-8")
-            lines.append(f"Moved {len(ops)} pending journal entr{'y' if len(ops) == 1 else 'ies'} "
-                         f"({src.stem}) to {new / 'journal'}.")
-    return lines
+                fh.flush()
+                os.fsync(fh.fileno())
+            with open(src, "w", encoding="utf-8") as fh:
+                fh.flush()
+                os.fsync(fh.fileno())
+    except sync.QuestsBusy:
+        return f"Journal {src.stem} is busy; it will move next time."
+    except OSError:
+        return None
+    return (f"Moved {len(ops)} pending journal {_plural(len(ops), 'entry', 'entries')} "
+            f"({src.stem}) to {dest.parent}; it pushes on the next sync.")
 
 
 def _targets(cwd: Path, key: str) -> list[tuple[str, str, str, str]]:
     """(mode, url, old branch, new branch) for each old board this repo may have."""
     out: list[tuple[str, str, str, str]] = []
     entry = locate._load_config().get(key)
+    if not isinstance(entry, dict):
+        entry = _read_json(old_state_dir() / "config.json").get(key)
     if isinstance(entry, dict) and all(isinstance(entry.get(k), str) for k in ("mode", "url", "branch")):
         b = entry["branch"]
-        if b == OLD_SAME_BRANCH:
-            return [(entry["mode"], entry["url"], b, SAME_BRANCH)]
-        if b.startswith(OLD_EXTERNAL_PREFIX):
-            return [(entry["mode"], entry["url"], b, "quests/" + b[len(OLD_EXTERNAL_PREFIX):])]
+        if is_old_branch(b):
+            return [(entry["mode"], entry["url"], b, _new_branch(b))]
         if b == SAME_BRANCH:
             return [(entry["mode"], entry["url"], OLD_SAME_BRANCH, b)]
         if b.startswith("quests/"):
@@ -188,7 +235,7 @@ def migrate(cwd: Path, budget: float = 30.0) -> Outcome:
         raise MigrateError("not inside a git repository")
     out = Outcome()
     try:
-        out.lines += migrate_state()
+        out.lines += migrate_state(dl, skip_key=key)
     except OSError as e:
         out.lines.append(f"Could not carry the old state over ({e}); continuing.")
     for mode, url, old, new in _targets(cwd, key):
@@ -218,7 +265,7 @@ def migrate(cwd: Path, budget: float = 30.0) -> Outcome:
 
 def _is_old_entry(entry) -> bool:
     b = entry.get("branch") if isinstance(entry, dict) else None
-    return isinstance(b, str) and (b == OLD_SAME_BRANCH or b.startswith(OLD_EXTERNAL_PREFIX))
+    return isinstance(b, str) and is_old_branch(b)
 
 
 def _gate_path() -> Path:
@@ -242,11 +289,13 @@ def _gate_set(key: str, failed_found: bool) -> None:
         pass
 
 
-def auto(cwd: Path) -> tuple[QuestsRef | None, str | None]:
+def auto(cwd: Path, deadline: float | None = None) -> tuple[QuestsRef | None, str | None]:
     """SessionStart: migrate an old board once. Returns (ref or None, one-line note or None).
 
     Never raises. A failed attempt is not retried for AUTO_TTL; the hint is repeated meanwhile.
     """
+    unreachable = ("Quests: couldn't reach the remote to check for an existing board; "
+                   "will retry next session.")
     hint = 'Quests: an old board was found but not migrated yet; run `quest migrate`.'
     try:
         key = locate.repo_key(cwd)
@@ -257,7 +306,12 @@ def auto(cwd: Path) -> tuple[QuestsRef | None, str | None]:
                 and 0 <= time.time() - prior[0] < AUTO_TTL:
             return None, (hint if prior[1] else None)
         try:
-            res = migrate(cwd, budget=AUTO_BUDGET)
+            budget = AUTO_BUDGET if deadline is None else max(deadline - time.monotonic(), 0.5)
+            res = migrate(cwd, budget=budget)
+        except Unreachable as e:
+            locate.clear_negative(key)  # offline says nothing about whether a board exists
+            _log(f"auto-migrate: {e}")
+            return None, unreachable
         except MigrateError as e:
             _gate_set(key, e.found)
             _log(f"auto-migrate: {e}")

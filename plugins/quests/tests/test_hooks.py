@@ -101,7 +101,7 @@ class HooksTest(unittest.TestCase):
         limit = declared["hooks"]["SessionStart"][0]["hooks"][0]["timeout"]
         seen = {}
 
-        def capture(ref, timeout=5, lock_wait=None, push_min=hooks.sync.PUSH_MIN):
+        def capture(ref, timeout=5, lock_wait=None, push_min=hooks.sync.PUSH_MIN, push=True):
             seen.update(timeout=timeout, lock_wait=lock_wait, push_min=push_min)
             return hooks.sync.SyncResult(False, [])
 

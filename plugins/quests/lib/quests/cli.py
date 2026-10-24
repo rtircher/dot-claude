@@ -137,7 +137,7 @@ def _not_fetched(ctx: _Ctx) -> int:
 def _find(qlog, tid: str):
     t = qlog.tickets.get(tid)
     if t is None:
-        raise _Fail(f"no such ticket: {tid}")
+        raise _Fail(f"no such quest: {tid}")
     return t
 
 
@@ -288,8 +288,23 @@ def _cmd_side(ctx: _Ctx) -> int:
     return code
 
 
+def _need_quest(qlog, tid: str) -> None:
+    if qlog is not None and tid not in qlog.tickets:
+        raise _Fail(f"no such quest: {tid}", 2)
+
+
+def _cmd_status(ctx: _Ctx) -> int:
+    qlog, _ = ctx.load()
+    _need_quest(qlog, ctx.args.id)
+    code = ctx.submit(ctx.op("set_status", id=ctx.args.id, status=ctx.args.status))
+    ctx.emit({"id": ctx.args.id, "synced": ctx.synced}, f"Updated {ctx.args.id}")
+    ctx.tail()
+    return code
+
+
 def _cmd_done(ctx: _Ctx) -> int:
     qlog, _ = ctx.load()
+    _need_quest(qlog, ctx.args.id)
     t = qlog.tickets.get(ctx.args.id) if qlog else None
     code = ctx.submit(ctx.op("set_status", id=ctx.args.id, status="done"))
     parent = qlog.tickets.get(t.parent) if t is not None and t.parent else None
@@ -346,7 +361,7 @@ _COMMANDS = {
     "log": _cmd_log, "html": _cmd_html, "show": _cmd_show, "next": _cmd_next, "sync": _cmd_sync,
     "add": _cmd_add, "take": _cmd_take, "note": _cmd_note, "main": _cmd_main, "side": _cmd_side, "done": _cmd_done,
     "drop": _simple_write("release", "Dropped {id}"),
-    "status": _simple_write("set_status", "Updated {id}", status="status"),
+    "status": _cmd_status,
     "link": _simple_write("add_link", "Linked {id}", link="link"),
 }
 

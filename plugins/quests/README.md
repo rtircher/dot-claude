@@ -41,6 +41,14 @@ This plugin used to be called `board`. Nothing is lost and nothing is deleted:
 - It also copies the old state directory's config entries into the new one, and moves any non-empty pending journal across so it replays on the next sync.
 - At session start, when no quest log is found but a marked old one is, the same migration runs once automatically within a 5 second network budget. If it fails, the session start prints a one-line hint and carries on.
 
+- A config entry that still names an old-style branch is never used as is: it is rewritten to the new branch once that branch is migrated, otherwise skipped. `quest init` refuses while a marked old branch exists, and tells you to run `quest migrate`.
+- If the remote cannot be reached, session start says so and retries next session. A journal moved by the session-start migration is pushed by the next normal sync, not by the hook.
+
+After switching:
+
+- Change `"board@dot-claude"` to `"quests@dot-claude"` under `enabledPlugins` in any `settings.json` that lists it.
+- Sessions or machines still running the old plugin keep writing to the old branch, and those later writes are not carried over. Update every machine, then run `quest migrate` again if needed (it only acts when the new branch is missing).
+
 The on-disk format inside the branch is unchanged (including the `goal` frontmatter key and the `board.json` marker file), so existing data reads as is.
 
 ## State
@@ -72,7 +80,7 @@ All commands accept `--json` and `--session <id>`. Session id falls back to `$QU
 
 `quest side` needs a current quest (one this session has taken and not finished); without one it exits 2 and says to use `quest add`.
 
-Exit codes: 0 ok, 1 error, 2 no quest log (or no current quest for `side`), 3 take refused, 4 setup or migration refused, 5 busy.
+Exit codes: 0 ok, 1 error, 2 no quest log (or no current quest for `side`, or an unknown id for `done` and `status`), 3 take refused, 4 setup or migration refused, 5 busy.
 
 ## Known limits
 

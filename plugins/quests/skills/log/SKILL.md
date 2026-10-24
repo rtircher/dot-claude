@@ -17,7 +17,7 @@ A shared quest log per repo, kept on a git branch, visible to every session. Goa
 ## Exit codes
 
 - 0: ok.
-- 2: no quest log for this repo (or, for `quest side`, no current quest). Offer setup (see below), or use `quest add` for a side quest.
+- 2: no quest log for this repo, no current quest (for `quest side`), or no such quest id (for `done` and `status`). Offer setup (see below), or use `quest add` for a side quest.
 - 3: take refused, another session holds the quest. Tell the user who holds it. Do not start the work.
 - 4: setup refused. Report the message verbatim. Change nothing.
 - 5: busy, another quest command is running. Retry once.

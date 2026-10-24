@@ -148,17 +148,112 @@ class MigrateTest(unittest.TestCase):
         self.assertEqual(code, 0, out + err)
         self.assertEqual(tip(ext, f"quests/{slug}"), tip(ext, f"board/{slug}"))
 
-    def test_other_repos_config_entries_are_carried_over_verbatim(self):
+    def test_other_repos_old_style_entries_are_rewritten_once_migrated_else_skipped(self):
+        other = gf.make_remote(self.tmp, "other.git", branch=OLD)
         self.old_state.mkdir(parents=True)
-        entry = {"mode": "same", "url": "git@example.com:acme/other.git", "branch": OLD}
-        (self.old_state / "config.json").write_text(json.dumps({"example.com/acme/other": entry}))
+        good = {"mode": "same", "url": str(other), "branch": OLD}
+        bad = {"mode": "same", "url": str(self.tmp / "gone.git"), "branch": OLD}
+        fine = {"mode": "same", "url": "x", "branch": NEW}
+        (self.old_state / "config.json").write_text(json.dumps(
+            {"example.com/acme/good": good, "example.com/acme/bad": bad, "example.com/acme/fine": fine}))
         self.run_cli("migrate")
         cfg = json.loads((self.state / "config.json").read_text())
-        self.assertEqual(cfg["example.com/acme/other"], entry)
-        self.assertIn(self.key, cfg)  # this repo's entry now points at the new branch
+        self.assertEqual(cfg["example.com/acme/good"], dict(good, branch=NEW))
+        self.assertEqual(tip(other, NEW), tip(other, OLD))
+        self.assertNotIn("example.com/acme/bad", cfg)
+        self.assertEqual(cfg["example.com/acme/fine"], fine)
         self.assertEqual(cfg[self.key]["branch"], NEW)
+        self.assertFalse(any(locate.is_old_branch(e["branch"]) for e in cfg.values()))
         self.run_cli("migrate")  # idempotent
         self.assertEqual(json.loads((self.state / "config.json").read_text()), cfg)
+
+    def test_old_style_config_entry_is_never_used_as_is(self):
+        self.state.mkdir(parents=True)
+        entry = {"mode": "same", "url": str(self.origin), "branch": OLD}
+        (self.state / "config.json").write_text(json.dumps({self.key: entry}))
+        self.assertIsNone(locate.resolve(self.repo))
+        self.assertEqual(self.run_cli("log")[0], 2)
+        old = tip(self.origin, OLD)
+        lines = hooks.session_start({"session_id": "s1", "cwd": str(self.repo)})
+        self.assertTrue(any("migrated the old board" in l for l in lines), lines)
+        self.assertEqual(tip(self.origin, NEW), old)
+        ref = locate.resolve(self.repo)
+        self.assertEqual(ref.branch, NEW)
+        self.assertEqual(self.run_cli("add", "Example task", "--session", "s1")[0], 0)
+        self.assertEqual(tip(self.origin, OLD), old)
+
+    def test_offline_first_run_retries_and_is_not_cached(self):
+        import time
+        gone = str(self.tmp / "gone.git")
+        gf.git(self.repo, "remote", "set-url", "origin", gone)
+        key = locate.repo_key(self.repo)
+        self.old_state.mkdir(parents=True)
+        (self.old_state / "config.json").write_text(json.dumps(
+            {key: {"mode": "same", "url": gone, "branch": OLD}}))
+        want = ["Quests: couldn't reach the remote to check for an existing board; will retry next session."]
+        for sid in ("s1", "s2"):
+            t0 = time.monotonic()
+            self.assertEqual(hooks.session_start({"session_id": sid, "cwd": str(self.repo)}), want)
+            self.assertLess(time.monotonic() - t0, 8)
+        self.assertFalse((self.state / "negative.json").exists() and
+                         key in json.loads((self.state / "negative.json").read_text()))
+        self.assertFalse((self.state / "migrate-attempts.json").exists())
+
+    def test_session_start_does_not_push_a_moved_journal(self):
+        jdir = self.old_state / "journal"
+        jdir.mkdir(parents=True)
+        op = {"op": "create_ticket", "at": "2026-01-01T00:00:00Z", "session": "s0",
+              "id": "t-jrnl1", "title": "Carried journal task", "goal": None, "parent": None, "links": []}
+        (jdir / f"{locate.slug(self.key)}.jsonl").write_text(json.dumps(op) + "\n")
+        old = tip(self.origin, OLD)
+        lines = hooks.session_start({"session_id": "s1", "cwd": str(self.repo)})
+        self.assertTrue(any("Carried journal task" in l or "Quests:" in l for l in lines))
+        self.assertEqual(tip(self.origin, NEW), old)  # not pushed from the hook
+        self.run_cli("sync")  # the next normal sync pushes it
+        self.assertNotEqual(tip(self.origin, NEW), old)
+        self.assertIn("t-jrnl1", self.run_cli("show", "t-jrnl1")[1])
+
+    def test_init_refuses_when_a_marked_old_branch_exists(self):
+        old = tip(self.origin, OLD)
+        code, out, err = self.run_cli("init", "--mode", "same")
+        self.assertEqual(code, 4)
+        self.assertIn("an old board exists on claude/board; run `quest migrate`", out + err)
+        self.assertIsNone(tip(self.origin, NEW))
+        self.assertEqual(tip(self.origin, OLD), old)
+
+    def test_concurrent_submit_does_not_lose_moved_ops(self):
+        import threading
+        from quests import sync
+        self.assertEqual(self.run_cli("init", "--mode", "same")[0], 4)
+        self.run_cli("migrate")
+        ref = locate.resolve(self.repo)
+        slug = locate.slug(self.key)
+        jdir = self.old_state / "journal"
+        jdir.mkdir(parents=True)
+        ops = [{"op": "create_ticket", "at": "2026-01-01T00:00:00Z", "session": "s0",
+                "id": f"t-old{i}", "title": f"Old {i}", "goal": None, "parent": None, "links": []}
+               for i in range(5)]
+        (jdir / f"{slug}.jsonl").write_text("".join(json.dumps(o) + "\n" for o in ops))
+        errors = []
+
+        def submit(i):
+            try:
+                op = dict(ops[0], id=f"t-new{i}", title=f"New {i}")
+                sync.submit(ref, op, lock_wait=30)
+            except Exception as e:  # noqa: BLE001
+                errors.append(e)
+
+        threads = [threading.Thread(target=migrate.migrate_state)] + \
+                  [threading.Thread(target=submit, args=(i,)) for i in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
+        sync.sync(ref)
+        from quests import store
+        have = set(store.load_quests(sync.checkout_dir(ref)).tickets)
+        self.assertEqual(have, {f"t-old{i}" for i in range(5)} | {f"t-new{i}" for i in range(4)})
 
     def test_pending_journal_moves_and_replays_on_next_sync(self):
         jdir = self.old_state / "journal"

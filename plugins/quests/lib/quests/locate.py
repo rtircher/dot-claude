@@ -13,6 +13,8 @@ from pathlib import Path
 from quests.gitutil import run_git
 
 SAME_BRANCH = "claude/quests"
+OLD_SAME_BRANCH = "claude/board"
+OLD_EXTERNAL_PREFIX = "board/"
 _LS_REMOTE_DEADLINE = 5.0
 NEGATIVE_TTL = 3600.0
 
@@ -162,15 +164,24 @@ def _ref_exists(cwd: Path, ref: str) -> bool:
         return False
 
 
-def resolve(cwd: Path) -> QuestsRef | None:
+def is_old_branch(branch: str) -> bool:
+    """A branch name from before the rename; the new plugin never reads or writes these."""
+    return branch == OLD_SAME_BRANCH or branch.startswith(OLD_EXTERNAL_PREFIX)
+
+
+def resolve(cwd: Path, deadline: float | None = None) -> QuestsRef | None:
+    """`deadline` is a time.monotonic() end shared with the caller's other network work."""
     cwd = Path(cwd)
     key = repo_key(cwd)
     if key is None:
         return None
     entry = _load_config().get(key)
     if isinstance(entry, dict) and all(isinstance(entry.get(k), str) for k in ("mode", "url", "branch")):
+        if is_old_branch(entry["branch"]):
+            return None  # needs `quest migrate`; never used as is, and not negative-cached
         return QuestsRef(key, entry["mode"], entry["url"], entry["branch"])
-    deadline = time.monotonic() + _LS_REMOTE_DEADLINE
+    if deadline is None:
+        deadline = time.monotonic() + _LS_REMOTE_DEADLINE
     probe = not _negative_fresh(key)
     ref = _discover(cwd, key, deadline, probe=probe)
     if ref is not None:
