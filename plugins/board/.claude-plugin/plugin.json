@@ -1,9 +1,0 @@
-{
-  "name": "board",
-  "description": "Shared, repo-local ticket board every session sees.",
-  "author": {
-    "name": "Renaud Tircher",
-    "email": "327881+rtircher@users.noreply.github.com"
-  },
-  "license": "MIT"
-}

@@ -19,9 +19,9 @@
       "description": "Personal software-development tooling: design-doc + adversarial-review + autonomous-feature skills, the babysit PR-loop command plus handover/takeover session-continuity commands, and coder/researcher subagents."
     },
     {
-      "name": "board",
-      "source": "./plugins/board",
-      "description": "Shared, repo-local ticket board every session sees"
+      "name": "quests",
+      "source": "./plugins/quests",
+      "description": "Shared, repo-local quest log (main quests and quests) every session sees"
     }
   ]
 }
