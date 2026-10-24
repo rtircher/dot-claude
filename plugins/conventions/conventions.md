@@ -250,6 +250,10 @@ subagents.
   PR's base for a stacked branch), never a stale local copy. Prefer fast-forward / linear history: one commit per
   reviewable unit; before review, squash doc-evolution thrash and fold in-branch
   reverts into their target.
+- **"Merge to main" means fast-forward only.** When asked to merge a branch into
+  `<default>`: `git fetch`, rebase the branch onto fresh `origin/<default>`, re-run the
+  gate, then `git merge --ff-only`. Never create a merge commit. If `origin/<default>`
+  moved in the meantime, rebase again instead of merging. Pushing is a separate go-ahead.
 - **Meaningful branch and worktree names.** When you create a branch or worktree
   yourself (via `EnterWorktree` or `git worktree add`), name it from the task as a
   descriptive `feat/…` / `fix/…` slug, never a random or auto-generated one. The
