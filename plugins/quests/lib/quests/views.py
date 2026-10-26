@@ -68,7 +68,7 @@ def _chain(qlog: QuestLog, t: Ticket) -> list[dict]:
 
 def _latest(tickets: list[Ticket]) -> Ticket:
     """The ticket a session is on now: its most recently claimed one."""
-    return max(tickets, key=lambda t: (t.owner.claimed_at, t.id))
+    return max(tickets, key=lambda t: (t.owner.claimed_at, t.owner.seq, t.id))
 
 
 def current_ticket(qlog, session: str) -> Ticket | None:

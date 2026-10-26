@@ -45,6 +45,14 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(qlog.goals["g-xyz89"], g)
         self.assertEqual(qlog.meta, {"schema": 1, "code_repo": "example/repo"})
 
+    def test_owner_seq_is_written_only_when_set_and_old_files_load(self):
+        store.write_ticket(self.root, make_ticket())
+        self.assertNotIn("seq", (self.root / "tickets" / "t-abc12.md").read_text())
+        self.assertEqual(store.load_quests(self.root).tickets["t-abc12"].owner.seq, 0)
+        t = make_ticket(owner=Owner("sess-1", "alice", "local", "2026-10-18T10:00:00Z", 4))
+        store.write_ticket(self.root, t)
+        self.assertEqual(store.load_quests(self.root).tickets["t-abc12"], t)
+
     def test_rank_is_written_only_when_set_and_old_files_load(self):
         store.write_ticket(self.root, make_ticket())
         text = (self.root / "tickets" / "t-abc12.md").read_text()

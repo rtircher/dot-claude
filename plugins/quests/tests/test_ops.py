@@ -82,6 +82,18 @@ class OpsTest(unittest.TestCase):
         self.assertEqual(t.owner.session, "s1")
         self.assertEqual(t.log[-1].text, "claim by s2 lost to alice")
 
+    def test_claims_get_increasing_sequence_and_replay_keeps_it(self):
+        self.run_ops(create_ops() + [{**create_ops()[1], "id": "t-2"}])
+        c1 = {"op": "claim", "at": "2026-10-18T10:00:00Z", "session": "s1", "id": "t-1", "owner": owner()}
+        c2 = {"op": "claim", "at": "2026-10-18T10:00:00Z", "session": "s1", "id": "t-2", "owner": owner()}
+        self.run_ops([c1, c2])
+        self.assertEqual((self.ticket("t-1").owner.seq, self.ticket("t-2").owner.seq), (1, 2))
+        self.run_ops([c1])  # same op replayed: unchanged
+        self.assertEqual(self.ticket("t-1").owner.seq, 1)
+        later = {**c1, "at": "2026-10-18T10:05:00Z", "owner": {**owner(), "claimed_at": "2026-10-18T10:05:00Z"}}
+        self.run_ops([later])  # a fresh take by the same session is newer than t-2's
+        self.assertEqual(self.ticket("t-1").owner.seq, 3)
+
     def test_take_same_session_is_refresh(self):
         self.run_ops(create_ops())
         self.run_ops([{"op": "claim", "at": "2026-10-18T10:00:00Z", "session": "s1",

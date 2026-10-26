@@ -25,6 +25,8 @@ class Owner:
     label: str
     where: str  # "local" or "cloud"
     claimed_at: str
+    # Order of claims as applied; breaks ties between claims in the same second. 0 on old files.
+    seq: int = 0
 
 
 @dataclass
@@ -136,6 +138,8 @@ def write_ticket(root: Path, t: Ticket) -> Path:
             "where": t.owner.where,
             "claimed_at": t.owner.claimed_at,
         }
+        if t.owner.seq:
+            owner["seq"] = t.owner.seq
     fields = [
         ("id", t.id),
         ("title", t.title),
@@ -199,7 +203,7 @@ def _read_ticket(path: Path) -> Ticket:
                 log.append(LogEntry(m.group(1), m.group(2), m.group(3)))
     rank = fm.get("rank")
     o = fm["owner"]
-    owner = Owner(o["session"], o["label"], o["where"], o["claimed_at"]) if o else None
+    owner = Owner(o["session"], o["label"], o["where"], o["claimed_at"], o.get("seq", 0)) if o else None
     return Ticket(
         id=fm["id"],
         title=fm["title"],

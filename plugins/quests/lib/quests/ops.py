@@ -113,8 +113,7 @@ def _with_ticket(fn):
     return handler
 
 
-@_with_ticket
-def _claim(t, op):
+def _claim(t, op, seq):
     if t.status in ("done", "dropped"):
         return [f"claim on {t.id} ignored: ticket is {t.status}"]
     new = _owner(op["owner"])
@@ -126,11 +125,20 @@ def _claim(t, op):
             _log(t, op, f"claim by {op['session']} lost to {cur.label}")
             t.updated = op["at"]
             return [f"claim on {t.id} by {op['session']} lost to {cur.label}"]
+    if cur is not None and cur.session == new.session and cur.claimed_at == new.claimed_at:
+        new.seq = cur.seq  # the same claim replayed
+    else:
+        new.seq = seq
     t.owner = new
     if t.status in ("todo", "blocked"):
         t.status = "in_progress"
     t.updated = op["at"]
     return []
+
+
+def _claim_handler(root, qlog, op):
+    seq = 1 + max((x.owner.seq for x in qlog.tickets.values() if x.owner is not None), default=0)
+    return _with_ticket(lambda t, o: _claim(t, o, seq))(root, qlog, op)
 
 
 @_with_ticket
@@ -272,7 +280,7 @@ def _move_ticket(root, qlog, op):
 _HANDLERS = {
     "create_goal": _create_goal,
     "create_ticket": _create_ticket,
-    "claim": _claim,
+    "claim": _claim_handler,
     "release": _release,
     "set_status": _set_status,
     "note": _note,

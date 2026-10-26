@@ -79,6 +79,13 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("99", s["format_error"])
         self.assertEqual(views.render_text(s).splitlines()[1], s["format_error"])
 
+    def test_latest_claim_in_the_same_second_follows_the_claim_sequence(self):
+        ts = iso(1)
+        for first, second in (("a", "z"), ("z", "a")):  # ids must not decide
+            b = qlog(tk(first, status="in_progress", owner=Owner("s1", "alice", "local", ts, 1)),
+                     tk(second, status="in_progress", owner=Owner("s1", "alice", "local", ts, 2)))
+            self.assertEqual(views.current_ticket(b, "s1").id, second)
+
     def test_next_limit_and_more(self):
         b = qlog(*[tk(f"t{i}", created=iso(100 - i)) for i in range(8)])
         s = views.summary(b, {}, NOW, None, True, next_limit=3)
