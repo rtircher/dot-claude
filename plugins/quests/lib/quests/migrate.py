@@ -24,6 +24,8 @@ OLD_ENV_REPO = "CLAUDE_BOARD_REPO"
 OLD_MARKER = "board.json"
 AUTO_BUDGET = 5.0
 AUTO_TTL = 3600.0
+# Below this much session budget a listing cannot finish; skip it rather than guess.
+AUTO_MIN_BUDGET = 1.0
 _NO_HOOKS = ["-c", "core.hooksPath=/dev/null"]
 
 
@@ -36,7 +38,14 @@ class MigrateError(Exception):
 
 
 class Unreachable(MigrateError):
-    """The remote could not be reached (or the network budget ran out); worth retrying later."""
+    """The remote could not be reached (or the network budget ran out); worth retrying later.
+
+    `timed_out` is set when the budget ran out, which says nothing about the remote.
+    """
+
+    def __init__(self, msg: str, found: bool = False, timed_out: bool = False):
+        super().__init__(msg, found)
+        self.timed_out = timed_out
 
 
 @dataclass
@@ -59,7 +68,7 @@ class _Deadline:
     def left(self) -> float:
         left = self.end - time.monotonic()
         if left <= 0:
-            raise Unreachable("timed out")
+            raise Unreachable("timed out", timed_out=True)
         return left
 
 
@@ -67,7 +76,7 @@ def _git(dl: _Deadline, args: list[str], cwd: Path | None):
     try:
         return run_git(args, cwd, dl.left())
     except subprocess.TimeoutExpired:
-        raise Unreachable(f"git {args[0]} timed out")
+        raise Unreachable(f"git {args[0]} timed out", timed_out=True)
     except OSError as e:
         raise Unreachable(f"cannot run git ({e})")
 
@@ -275,6 +284,13 @@ def ruled_out(cwd: Path, probe: locate.Probe) -> bool:
     return all(url in probe.heads and old not in probe.heads[url] for _, url, old, _ in _targets(cwd, key))
 
 
+def mark_ruled_out(cwd: Path) -> None:
+    """Record that nothing needs migrating, so later sessions skip the listing like after a clean run."""
+    key = locate.repo_key(cwd)
+    if key is not None:
+        _gate_set(key, False)
+
+
 def _is_old_entry(entry) -> bool:
     b = entry.get("branch") if isinstance(entry, dict) else None
     return isinstance(b, str) and is_old_branch(b)
@@ -318,9 +334,14 @@ def auto(cwd: Path, deadline: float | None = None) -> tuple[QuestsRef | None, st
                 and 0 <= time.time() - prior[0] < AUTO_TTL:
             return None, (hint if prior[1] else None)
         try:
-            budget = AUTO_BUDGET if deadline is None else max(deadline - time.monotonic(), 0.5)
+            budget = AUTO_BUDGET if deadline is None else deadline - time.monotonic()
+            if budget < AUTO_MIN_BUDGET and deadline is not None:
+                return None, None  # no time left, which is not the remote's fault; try next session
             res = migrate(cwd, budget=budget)
         except Unreachable as e:
+            if e.timed_out and deadline is not None:
+                _log(f"auto-migrate: {e}")
+                return None, None
             locate.clear_negative(key)  # offline says nothing about whether a board exists
             _log(f"auto-migrate: {e}")
             return None, unreachable

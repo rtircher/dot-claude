@@ -351,6 +351,35 @@ class MigrateTest(unittest.TestCase):
         self.assertEqual(tip(self.origin, NEW), old)
         self.assertTrue(any("migrated the old board" in l for l in lines), lines)
 
+    def test_ruled_out_session_is_not_relisted_by_later_sessions(self):
+        origin = gf.make_remote(self.tmp, "plain.git", branch=None)
+        repo = gf.make_code_repo(self.tmp, origin, name="plain")
+        external = gf.make_remote(self.tmp, "ext.git", branch=None)
+        os.environ["CLAUDE_QUESTS_REPO"] = str(external)
+        stack, calls = self._slow_ls_remote(0)
+        with stack:
+            for sid in ("s1", "s2", "s3"):
+                lines = hooks.session_start({"session_id": sid, "cwd": str(repo)})
+                self.assertEqual(lines, [hooks.NO_QUESTS])
+                if sid == "s1":
+                    self.assertEqual(len(calls), 2, calls)  # external and origin, one listing each
+        self.assertEqual(len(calls), 2, calls)
+
+    def test_out_of_time_is_not_reported_as_unreachable(self):
+        origin = gf.make_remote(self.tmp, "plain.git", branch=None)
+        repo = gf.make_code_repo(self.tmp, origin, name="plain")
+        stack, calls = self._slow_ls_remote(0.5)
+        with stack, mock.patch.object(hooks, "SESSION_NET_BUDGET", 0.3):
+            lines = hooks.session_start({"session_id": "s1", "cwd": str(repo)})
+        self.assertEqual(lines, [hooks.NO_QUESTS])
+        self.assertEqual(len(calls), 1, calls)  # resolve used the budget; no migration listing
+
+    def test_failed_listing_still_reports_unreachable(self):
+        repo = gf.make_code_repo(self.tmp, self.tmp / "gone.git", name="offline")
+        lines = hooks.session_start({"session_id": "s1", "cwd": str(repo)})
+        self.assertEqual(len(lines), 1)
+        self.assertIn("couldn't reach", lines[0])
+
     def test_no_old_board_keeps_the_plain_hint(self):
         origin = gf.make_remote(self.tmp, "plain.git", branch=None)
         repo = gf.make_code_repo(self.tmp, origin, name="plain")

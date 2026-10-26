@@ -101,11 +101,7 @@ def _summary_text(ref, session: str, push: bool = True) -> str:
     qlog = store.load_quests(d)
     sessions = views.load_sessions(locate.state_dir(), ref.key)
     s = views.summary(qlog, sessions, datetime.now(timezone.utc), session, synced)
-    text = views.render_text(s)
-    if store.log_format(qlog.meta) > store.FORMAT:
-        head, _, rest = text.partition("\n")
-        text = "\n".join([head, store.too_new_message(store.log_format(qlog.meta))] + ([rest] if rest else []))
-    return text
+    return views.render_text(s)
 
 
 def session_start(data: dict) -> list[str]:
@@ -128,7 +124,9 @@ def session_start(data: dict) -> list[str]:
     note = None
     migrated = False
     # Skipped when resolve's listing already saw no old branch: a second round trip can overrun the budget.
-    if ref is None and not migrate.ruled_out(cwd, probe):
+    if ref is None and migrate.ruled_out(cwd, probe):
+        migrate.mark_ruled_out(cwd)  # so the next session, which skips resolve's network, skips this too
+    elif ref is None:
         # An old `board` branch is carried over once. A journal it moves is not pushed from here.
         ref, note = migrate.auto(cwd, deadline=net_end)
         migrated = ref is not None
