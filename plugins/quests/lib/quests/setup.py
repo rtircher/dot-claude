@@ -100,6 +100,8 @@ def init(cwd: Path, mode: str, url: str | None) -> QuestsRef:
         _create(url, branch, key)
     elif not _is_quests(existing):
         raise SetupRefused(f"branch {branch} exists and is not a quest log; nothing changed")
+    elif store.log_format(json.loads(existing)) > store.FORMAT:
+        raise SetupRefused(store.too_new_message(store.log_format(json.loads(existing))))
     locate.save_config(ref)
     locate.clear_negative(key)
     return ref

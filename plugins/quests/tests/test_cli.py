@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from quests import cli
+from quests import cli, store
 from tests import gitfixture as gf
 
 BIN = Path(__file__).resolve().parents[1] / "bin" / "quest"
@@ -382,6 +382,34 @@ class CliTest(unittest.TestCase):
         code, out, _ = self.run_cli("log")
         self.assertEqual(code, 0)
         self.assertIn("(unsynced, not fetched yet)", out)
+
+    def make_too_new(self, n=store.FORMAT + 1):
+        other = self.tmp / "newer"
+        gf.git(self.tmp, "clone", "-q", "--branch", gf.BRANCH, str(self.origin), str(other))
+        meta = json.loads((other / "board.json").read_text())
+        meta["format"] = n
+        store.write_meta(other, meta)
+        gf.git(other, "add", "-A")
+        gf.git(other, "commit", "-q", "-m", "bump format")
+        gf.git(other, "push", "-q", "origin", f"HEAD:{gf.BRANCH}")
+
+    def test_too_new_log_reads_but_refuses_writes(self):
+        self.init_same()
+        tid = json.loads(self.run_cli("add", "Existing task", "--session", "s1", "--json")[1])["id"]
+        self.make_too_new(7)
+        msg = ("this quest log needs a newer quests plugin (log format 7, this plugin supports "
+               f"{store.FORMAT}); update dot-claude")
+        self.assertEqual(self.run_cli("log")[0], 0)
+        self.assertEqual(self.run_cli("sync")[0], 0)
+        for argv in (("add", "New task"), ("main", "add", "Goal"), ("note", tid, "hi"),
+                     ("status", tid, "done")):
+            code, out, err = self.run_cli(*argv, "--session", "s1")
+            self.assertEqual(code, 4, (argv, out, err))
+            self.assertIn(msg, out)
+        code, out, _ = self.run_cli("init", "--mode", "same")
+        self.assertEqual(code, 4)
+        self.assertIn(msg, out)
+        self.assertIn("Existing task", self.run_cli("log")[1])
 
     def test_wrapper_is_executable_and_valid(self):
         self.assertTrue(BIN.stat().st_mode & stat.S_IXUSR)

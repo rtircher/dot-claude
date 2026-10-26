@@ -135,6 +135,38 @@ class SyncTest(unittest.TestCase):
         tickets, _ = self.remote_tickets()
         self.assertEqual(set(tickets), {"t-1", "t-2"})
 
+    def push_format(self, n):
+        other = self.tmp / "fmt"
+        gf.git(self.tmp, "clone", "-q", "--branch", "claude/quests", str(self.remote), str(other))
+        store.write_meta(other, {"code_repo": "example/repo", "format": n})
+        gf.git(other, "add", "-A")
+        gf.git(other, "commit", "-q", "-m", "bump format")
+        gf.git(other, "push", "-q", "origin", "HEAD:claude/quests")
+
+    def test_too_new_remote_keeps_pending_op_unapplied(self):
+        sync.submit(self.ref, ticket_op("t-1"))
+        away = self.remote.rename(self.tmp / "away.git")
+        self.assertFalse(sync.submit(self.ref, ticket_op("t-2")).synced)
+        away.rename(self.remote)
+        self.push_format(store.FORMAT + 1)
+        res = sync.sync(self.ref)
+        self.assertFalse(res.synced)
+        self.assertEqual(res.too_new, store.FORMAT + 1)
+        journal = self.state / "journal" / "example-com-acme-widgets.jsonl"
+        self.assertIn("t-2", journal.read_text())
+        self.assertNotIn("t-2", self.remote_tickets()[0])
+        self.assertNotIn("t-2", store.load_quests(sync.checkout_dir(self.ref)).tickets)
+
+    def test_too_new_remote_refuses_submit_and_reads_still_work(self):
+        sync.submit(self.ref, ticket_op("t-1"))
+        self.push_format(store.FORMAT + 1)
+        res = sync.submit(self.ref, ticket_op("t-2"))
+        self.assertEqual(res.too_new, store.FORMAT + 1)
+        self.assertIn("t-2", (self.state / "journal" / "example-com-acme-widgets.jsonl").read_text())
+        read = sync.sync(self.ref)  # nothing new to push for a reader once the journal is parked
+        self.assertIn("t-1", store.load_quests(sync.checkout_dir(self.ref)).tickets)
+        self.assertEqual(read.too_new, store.FORMAT + 1)
+
     def test_clone_failure_keeps_journal(self):
         away = self.remote.rename(self.tmp / "away.git")
         res = sync.submit(self.ref, ticket_op("t-1"))

@@ -45,6 +45,19 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(qlog.goals["g-xyz89"], g)
         self.assertEqual(qlog.meta, {"schema": 1, "code_repo": "example/repo"})
 
+    def test_log_format_defaults_to_one_and_reads_newer(self):
+        self.assertEqual(store.log_format({"schema": 1}), 1)
+        self.assertEqual(store.log_format({"format": 2}), 2)
+        self.assertEqual(store.log_format({"format": "junk"}), 1)
+        self.assertEqual(store.read_format(self.root), 1)
+        store.write_meta(self.root, {"schema": 1, "format": store.FORMAT + 1})
+        self.assertEqual(store.read_format(self.root), store.FORMAT + 1)
+        self.assertEqual(store.read_format(self.root / "missing"), 1)
+        self.assertEqual(
+            store.too_new_message(3),
+            "this quest log needs a newer quests plugin (log format 3, this plugin supports "
+            f"{store.FORMAT}); update dot-claude")
+
     def test_awkward_titles_round_trip(self):
         title = 'OPNsense: "quoted" --- é'
         t = make_ticket(

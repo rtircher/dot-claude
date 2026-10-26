@@ -83,6 +83,19 @@ class HooksTest(unittest.TestCase):
         self.assertEqual((hb["state"], hb["where"], hb["session"]), ("active", "local", "s1"))
         self.assertEqual(hb["repo_key"], locate.repo_key(self.repo))
 
+    def test_session_start_reports_too_new_log(self):
+        from quests import store
+        self.init_quests()
+        other = self.tmp / "newer"
+        gf.git(self.tmp, "clone", "-q", "--branch", gf.BRANCH, str(self.origin), str(other))
+        store.write_meta(other, {"schema": 1, "code_repo": "example/repo", "format": store.FORMAT + 1})
+        gf.git(other, "add", "-A")
+        gf.git(other, "commit", "-q", "-m", "bump format")
+        gf.git(other, "push", "-q", "origin", f"HEAD:{gf.BRANCH}")
+        p = self.hook("session-start", {"session_id": "s1", "cwd": str(self.repo)})
+        self.assertIn(store.too_new_message(store.FORMAT + 1), p.stdout.splitlines())
+        self.assertIn("Set up backups", p.stdout)
+
     def test_session_start_offline_within_timeout(self):
         self.init_quests()
         self.origin.rename(self.tmp / "gone.git")

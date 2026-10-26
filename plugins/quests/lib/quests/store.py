@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Highest board.json "format" this plugin reads and writes; a missing key means 1.
+FORMAT = 2
+
 _ID_CHARS = string.ascii_lowercase + string.digits
 _LOG_RE = re.compile(r"^- (\S+) \(([^)\s]*)\) ?(.*)$")
 # Every character str.splitlines() treats as a line break (\r\n counts once).
@@ -59,6 +62,24 @@ class QuestLog:
     meta: dict
     goals: dict[str, Goal]
     tickets: dict[str, Ticket]
+
+
+def log_format(meta: dict) -> int:
+    f = meta.get("format", 1)
+    return f if isinstance(f, int) and not isinstance(f, bool) else 1
+
+
+def read_format(root: Path) -> int:
+    try:
+        meta = json.loads((Path(root) / "board.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 1
+    return log_format(meta) if isinstance(meta, dict) else 1
+
+
+def too_new_message(n: int) -> str:
+    return (f"this quest log needs a newer quests plugin (log format {n}, "
+            f"this plugin supports {FORMAT}); update dot-claude")
 
 
 def now_iso() -> str:

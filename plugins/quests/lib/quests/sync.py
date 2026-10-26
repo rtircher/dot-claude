@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from quests import gitutil, locate, ops
+from quests import gitutil, locate, ops, store
 from quests.locate import QuestsRef, slug, state_dir
 
 MAX_ATTEMPTS = 5
@@ -30,6 +30,8 @@ class QuestsBusy(Exception):
 class SyncResult:
     synced: bool
     warnings: list[str] = field(default_factory=list)
+    # Set when pending ops were left unapplied because the log format is newer than ours.
+    too_new: int | None = None
 
 
 def run_git(args, cwd, timeout=None):
@@ -131,6 +133,14 @@ def _commit_ops(cwd: Path, journal: list[dict], warnings: list[str], commit: boo
         _local([*_NO_HOOKS, *ident, "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", msg], cwd)
 
 
+def _too_new(cwd: Path, journal: list[dict]) -> int | None:
+    """The log's format when pending ops must not be applied to it, else None."""
+    if not journal:
+        return None
+    n = store.read_format(cwd)
+    return n if n > store.FORMAT else None
+
+
 def _reset_to_remote(cwd: Path, branch: str) -> bool:
     ref = f"refs/remotes/origin/{branch}"
     if _local(["show-ref", "--verify", "--quiet", ref], cwd, check=False).returncode != 0:
@@ -183,6 +193,9 @@ def _sync(ref: QuestsRef, timeout: float, push_min: float, push: bool = True) ->
             return _offline(cwd, ref, journal, warnings)
         if not _reset_to_remote(cwd, ref.branch):
             return SyncResult(False, warnings + ["quests branch missing on remote"])
+        newer = _too_new(cwd, journal)
+        if newer:
+            return SyncResult(False, warnings, too_new=newer)
         _commit_ops(cwd, journal, warnings, commit=True)
         last_warnings = warnings
         if not journal:
@@ -207,6 +220,9 @@ def _sync(ref: QuestsRef, timeout: float, push_min: float, push: bool = True) ->
 
 def _offline(cwd: Path, ref: QuestsRef, journal: list[dict], warnings: list[str]) -> SyncResult:
     if _reset_to_remote(cwd, ref.branch):
+        newer = _too_new(cwd, journal)
+        if newer:
+            return SyncResult(False, warnings, too_new=newer)
         _commit_ops(cwd, journal, warnings, commit=False)
     return SyncResult(False, warnings)
 

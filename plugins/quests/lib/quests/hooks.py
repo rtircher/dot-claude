@@ -101,7 +101,11 @@ def _summary_text(ref, session: str, push: bool = True) -> str:
     qlog = store.load_quests(d)
     sessions = views.load_sessions(locate.state_dir(), ref.key)
     s = views.summary(qlog, sessions, datetime.now(timezone.utc), session, synced)
-    return views.render_text(s)
+    text = views.render_text(s)
+    if store.log_format(qlog.meta) > store.FORMAT:
+        head, _, rest = text.partition("\n")
+        text = "\n".join([head, store.too_new_message(store.log_format(qlog.meta))] + ([rest] if rest else []))
+    return text
 
 
 def session_start(data: dict) -> list[str]:

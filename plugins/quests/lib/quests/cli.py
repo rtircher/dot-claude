@@ -113,8 +113,13 @@ class _Ctx:
         return {"op": name, "at": store.now_iso(), "session": self.session or "cli", **fields}
 
     def submit(self, op: dict) -> int:
+        local = self.load_local()
+        if local is not None and store.log_format(local.meta) > store.FORMAT:
+            raise _Fail(store.too_new_message(store.log_format(local.meta)), 4)
         res = sync.submit(self.ref, op)
         self.synced = res.synced
+        if res.too_new:  # the remote moved to a newer format; the op stays in the journal
+            raise _Fail(store.too_new_message(res.too_new), 4)
         lost = False
         needle = (f"claim on {op['id']} by {op['session']} lost to"
                   if op.get("op") == "claim" else None)
@@ -222,6 +227,8 @@ def _cmd_sync(ctx: _Ctx) -> int:
     locate.clear_negative(ctx.ref.key)
     res = sync.sync(ctx.ref)
     ctx.synced = res.synced
+    if res.too_new:
+        raise _Fail(store.too_new_message(res.too_new), 4)
     for w in res.warnings:
         print(f"warning: {w}", file=sys.stderr)
     ctx.emit({"synced": res.synced}, "Synced." if res.synced else UNSYNCED)
