@@ -124,6 +124,20 @@ export function goalTickets(summary, goalId) {
   return (summary.next || []).filter((t) => t.goal === goalId)
 }
 
+// Reorder buttons, in the order they are drawn.
+export const MOVES = [
+  { dir: 'top', label: 'Top' },
+  { dir: 'up', label: 'Up' },
+  { dir: 'down', label: 'Down' },
+  { dir: 'bottom', label: 'Bottom' },
+]
+
+// CLI args for moving a quest (kind 'quest') or a main quest (kind 'main').
+export function moveArgs(kind, id, dir) {
+  if (!MOVES.some((m) => m.dir === dir)) throw new Error(`unknown move: ${dir}`)
+  return kind === 'main' ? ['main', 'move', id, `--${dir}`] : ['move', id, `--${dir}`]
+}
+
 export function fileLink(path) {
   return 'file://' + encodeURI(path).replace(/[()]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
 }

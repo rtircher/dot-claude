@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { renderGlance, textBar, barSvg, repoName, ruleSvg, ticketDetail, goalTickets, fileLink, bandText } from './render.mjs'
+import { renderGlance, textBar, barSvg, repoName, ruleSvg, ticketDetail, goalTickets, fileLink, bandText, moveArgs, MOVES } from './render.mjs'
 
 const next = (n) =>
   Array.from({ length: n }, (_, i) => ({ id: `t${i + 1}`, title: `Example task ${i + 1}`, goal: 'g1' }))
@@ -209,4 +209,12 @@ test('band: the next-up title is cut to fit the width, the rest stays whole', ()
   assert.equal(bandText(s, { width: 35 }), 'Quests: 3 in progress · unsynced')
   // No width: never cut.
   assert.ok(bandText(s).includes('will not fit'))
+})
+
+test('moveArgs builds the quest and main quest move commands', () => {
+  assert.deepEqual(MOVES.map((m) => m.dir), ['top', 'up', 'down', 'bottom'])
+  assert.deepEqual(MOVES.map((m) => m.label), ['Top', 'Up', 'Down', 'Bottom'])
+  assert.deepEqual(moveArgs('quest', 't-1', 'top'), ['move', 't-1', '--top'])
+  assert.deepEqual(moveArgs('main', 'g-1', 'down'), ['main', 'move', 'g-1', '--down'])
+  assert.throws(() => moveArgs('quest', 't-1', 'sideways'))
 })

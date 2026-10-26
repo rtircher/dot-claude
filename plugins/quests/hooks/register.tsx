@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { renderGlance, textBar, barSvg, ruleSvg, ticketDetail, goalTickets, fileLink, bandText } from './render.mjs'
+import { renderGlance, textBar, barSvg, ruleSvg, ticketDetail, goalTickets, fileLink, bandText, moveArgs, MOVES } from './render.mjs'
 
 const PANE = 'quests-glance'
 const POLL_MS = 30_000
@@ -16,6 +16,7 @@ let noQuests = false
 let note: string | null = null // stale / busy note shown over the last good view
 let sessionId = ''
 let detail: string[] | null = null
+let detailId: string | null = null
 let fullLog: string | null = null
 let inFlight = false
 let timer: { cancel: () => void } | null = null
@@ -71,7 +72,23 @@ async function openPane($: any) {
   void refresh($)
 }
 
+// Move a quest or main quest, then re-read the log and show the CLI's one-line answer.
+async function moveItem($: any, kind: 'quest' | 'main', id: string, dir: string) {
+  let msg: string
+  try {
+    const r = await quest($, moveArgs(kind, id, dir))
+    const line = (r.stdout || r.stderr || 'quest failed').trim().split('\n')[0]
+    msg = r.exitCode === 0 ? line : `Move failed: ${line}`
+  } catch (err: any) {
+    msg = `Move failed: ${String(err?.message || err).split('\n')[0]}`
+  }
+  await refresh($)
+  note = msg
+  redraw($)
+}
+
 async function showTicket($: any, id: string) {
+  detailId = id
   try {
     const r = await quest($, ['show', id, '--json'])
     detail = r.exitCode === 0 ? ticketDetail(JSON.parse(r.stdout)) : [`Could not load ${id}`]
@@ -155,8 +172,16 @@ export const register: Register = on => {
       const [head, ...rest] = detail
       return (
         <Box flexDirection="column" gap={1}>
-          <Button key="back" onPress={() => { detail = null; redraw($) }}>Back</Button>
+          <Button key="back" onPress={() => { detail = null; detailId = null; redraw($) }}>Back</Button>
           <Text {...strong}>{head}</Text>
+          {detailId && (
+            <Box flexDirection="row" gap={1}>
+              {MOVES.map(m => (
+                <Button key={`mv-${m.dir}`} onPress={() => moveItem($, 'quest', detailId!, m.dir)}>{m.label}</Button>
+              ))}
+            </Box>
+          )}
+          {note && <Text {...note2} dimColor>{note}</Text>}
           <Box flexDirection="column">
             {rest.map((l, i) => <Text key={`d${i}`} {...note2} dimColor={l.startsWith('  ')}>{l}</Text>)}
           </Box>
@@ -199,6 +224,12 @@ export const register: Register = on => {
                       : <Text color="suggestion">{textBar(b.fraction)}</Text>}
                     {expanded.has(b.id) && (
                       <Box flexDirection="column" paddingLeft={2} marginTop={1}>
+                        <Box flexDirection="row" gap={1}>
+                          <Text {...note2} dimColor>Move main quest:</Text>
+                          {MOVES.map(m => (
+                            <Button key={`gm-${b.id}-${m.dir}`} plain dimColor label={m.label} onPress={() => moveItem($, 'main', b.id, m.dir)} />
+                          ))}
+                        </Box>
                         {goalTickets(summary, b.id).length === 0
                           ? <Text {...note2} dimColor>no ready quests in this main quest</Text>
                           : goalTickets(summary, b.id).map((t: any) => (
