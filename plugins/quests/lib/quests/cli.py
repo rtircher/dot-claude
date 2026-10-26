@@ -381,15 +381,22 @@ def _cmd_move(ctx: _Ctx) -> int:
         ctx.emit({"id": a.id, "error": str(own[0]), "synced": ctx.synced}, f"quest: {own[0]}")
         return 1
     after = ctx.load_local() or qlog
+
+    def place(q):
+        if goal:
+            gs = sorted(q.goals.values(), key=lambda g: (g.order, g.id))
+            return [g.id for g in gs].index(a.id) + 1
+        return views.position(q, q.tickets[a.id])
+
+    pos = place(after)
+    same = pos == place(qlog)  # e.g. --up with no ready quest above it
     if goal:
-        gs = sorted(after.goals.values(), key=lambda g: (g.order, g.id))
-        pos = [g.id for g in gs].index(a.id) + 1
-        text = f"Moved main quest {after.goals[a.id].title} to #{pos}"
+        title = after.goals[a.id].title
+        text = f"Main quest {title} is already #{pos}" if same else f"Moved main quest {title} to #{pos}"
     else:
         t = after.tickets[a.id]
-        pos = views.position(after, t)
         where = f"in {after.goals[t.goal].title}" if t.goal in after.goals else "in quests with no main quest"
-        text = f"Moved {a.id} to #{pos} {where}"
+        text = f"{a.id} is already #{pos} {where}" if same else f"Moved {a.id} to #{pos} {where}"
     ctx.emit({"id": a.id, "position": pos, "synced": ctx.synced}, text)
     ctx.tail()
     return code

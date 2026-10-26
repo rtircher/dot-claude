@@ -414,9 +414,21 @@ class CliTest(unittest.TestCase):
         code, out, _ = self.run_cli("move", c, "--up", "--json")
         self.assertEqual(json.loads(out), {"id": c, "position": 2, "synced": True})
 
+    def test_move_that_changes_nothing_says_so(self):
+        self.init_same()
+        gid = json.loads(self.run_cli("main", "add", "Camera work", "--json")[1])["id"]
+        a, b = self.add_ids("Task a", "Task b", main=gid)
+        for tid in (b, a):
+            self.assertEqual(self.run_cli("move", tid, "--top")[0], 0)
+        code, out, _ = self.run_cli("move", a, "--up")
+        self.assertEqual((code, out.strip()), (0, f"{a} is already #1 in Camera work"))
+        code, out, _ = self.run_cli("main", "move", gid, "--top")
+        self.assertEqual((code, out.strip()), (0, "Main quest Camera work is already #1"))
+
     def test_move_ticket_without_main_quest_names_the_group(self):
         self.init_same()
         a, b = self.add_ids("Task a", "Task b")
+        self.assertEqual(self.run_cli("move", a, "--top")[0], 0)  # creation times can tie
         out = self.run_cli("move", b, "--top")[1]
         self.assertEqual(out.strip(), f"Moved {b} to #1 in quests with no main quest")
 
@@ -457,13 +469,15 @@ class CliTest(unittest.TestCase):
 
     def test_move_survives_a_rejected_push_like_done(self):
         self.init_same()
-        a, b = self.add_ids("Task a", "Task b")
+        a, b, c = self.add_ids("Task a", "Task b", "Task c")
+        for tid in (c, b):  # creation times can tie, so fix the order first
+            self.assertEqual(self.run_cli("move", tid, "--top")[0], 0)
         self.reject_pushes()
         code, out, _ = self.run_cli("done", a)
         self.assertEqual(code, 0)
-        code, out, _ = self.run_cli("move", b, "--top")
+        code, out, _ = self.run_cli("move", c, "--top")
         self.assertEqual(code, 0, out)
-        self.assertIn(f"Moved {b} to #1", out)
+        self.assertIn(f"Moved {c} to #1", out)
         self.assertIn("(unsynced: will push on next sync)", out)
 
     def test_move_rejection_with_json_emits_an_error_document(self):
