@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from quests import store
+from quests import store, views
 from quests.store import Goal, LogEntry, Owner, Ticket
 
 
@@ -36,8 +36,23 @@ def _owner(d: dict) -> Owner:
     return Owner(d["session"], d["label"], d.get("where", "local"), d["claimed_at"])
 
 
+class Rejected(str):
+    """A warning that says the op itself was refused (a move), with the op for the caller to match."""
+
+    def __new__(cls, text: str, op: dict):
+        self = super().__new__(cls, text)
+        self.op = op
+        return self
+
+
 def apply_op(root: Path, op: dict) -> list[str]:
-    root = Path(root)
+    res = _apply(Path(root), op)
+    if str(op.get("op", "")).startswith("move_"):
+        res = [Rejected(w, op) for w in res]  # a move has no warnings but refusals
+    return res
+
+
+def _apply(root: Path, op: dict) -> list[str]:
     name = op.get("op")
     handler = _HANDLERS.get(name)
     if handler is None:
@@ -223,7 +238,7 @@ def _move_goal(root, qlog, op):
 def _move_ticket(root, qlog, op):
     """Reorder within the ticket's main quest. Ranks are written for the whole group, in its
     current effective order, then the ticket is placed. done and dropped tickets keep a place
-    in the group; up and down step past the nearest active sibling so the move shows in next up."""
+    in the group; up and down step past the nearest ready sibling so the move shows in next up."""
     tgt = _target(op)
     if isinstance(tgt, str):
         return [tgt]
@@ -239,7 +254,8 @@ def _move_ticket(root, qlog, op):
             return [f"move_ticket: {other} is in a different main quest than {t.id}"]
     group = sorted((x for x in qlog.tickets.values() if x.goal == t.goal), key=store.ticket_key)
     ids = [x.id for x in group]
-    active = {x.id for x in group if x.status in store.ACTIVE}
+    # Step past what "next up" shows (ready quests), so a move is always visible there.
+    active = {x.id for x in group if views.is_ready(qlog, x)}
     new = _place(ids, t.id, kind, other, active)
     if new == ids:
         return []

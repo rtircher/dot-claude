@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from quests.store import ACTIVE, QuestLog, Ticket, ticket_key
+from quests.store import QuestLog, Ticket, too_new_message, log_format, FORMAT, ticket_key
 
 _FMT = "%Y-%m-%dT%H:%M:%SZ"
 IDLE_AFTER = timedelta(minutes=15)
@@ -78,9 +78,15 @@ def current_ticket(qlog, session: str) -> Ticket | None:
     return _latest(mine) if mine else None
 
 
+def is_ready(qlog, t: Ticket) -> bool:
+    """What 'next up' lists: todo, unclaimed, and every blocker done."""
+    return (t.status == "todo" and t.owner is None
+            and all(b in qlog.tickets and qlog.tickets[b].status == "done" for b in t.blocked_by))
+
+
 def position(qlog, t: Ticket) -> int:
-    """1-based place of t among its main quest's active tickets (as 'next up' sees them)."""
-    group = [s for s in qlog.tickets.values() if s.goal == t.goal and (s.status in ACTIVE or s is t)]
+    """1-based place of t among its main quest's ready tickets, as the pane and 'next up' show them."""
+    group = [s for s in qlog.tickets.values() if s.goal == t.goal and (s is t or is_ready(qlog, s))]
     return sorted(group, key=ticket_key).index(t) + 1
 
 
@@ -126,15 +132,11 @@ def summary(qlog, sessions, now, current_session, synced, next_limit=5) -> dict:
     entries.sort(key=lambda e: (e["session"] != current_session, e["label"], e["session"]))
 
     order = {g.id: g.order for g in qlog.goals.values()}
-    ready = [
-        t for t in qlog.tickets.values()
-        if t.status == "todo" and t.owner is None
-        and all(b in qlog.tickets and qlog.tickets[b].status == "done" for b in t.blocked_by)
-    ]
+    ready = [t for t in qlog.tickets.values() if is_ready(qlog, t)]
     ready.sort(key=lambda t: (order.get(t.goal, 10**9), ticket_key(t)))
     nxt = [{"id": t.id, "title": t.title, "goal": t.goal} for t in ready[:next_limit]]
 
-    return {
+    out = {
         "repo": qlog.meta.get("code_repo", ""),
         "synced": synced,
         "goals": goals,
@@ -143,6 +145,9 @@ def summary(qlog, sessions, now, current_session, synced, next_limit=5) -> dict:
         "next_more": max(0, len(ready) - next_limit),
         "stale": stale,
     }
+    if log_format(qlog.meta) > FORMAT:
+        out["format_error"] = too_new_message(log_format(qlog.meta))
+    return out
 
 
 def _section(header: str, rows: list[str], budget: int, more_label: str,
@@ -160,7 +165,7 @@ def _section(header: str, rows: list[str], budget: int, more_label: str,
 
 
 def render_text(s: dict) -> str:
-    head = f"Quests: {s['repo']}" + ("" if s["synced"] else " (unsynced)")
+    head = f"Quests: {s['repo']}" + ("" if s["synced"] or s.get("format_error") else " (unsynced)")
     goal_rows = [f"  {g['title']}: {g['done']}/{g['total']}" for g in s["goals"]]
     sess_rows = []
     for e in s["sessions"]:
@@ -182,4 +187,6 @@ def render_text(s: dict) -> str:
         block = _section(name, rows, cap, label, extras.get(name, 0))
         lines += block
         avail -= len(block)
+    if s.get("format_error"):
+        lines.insert(1, s["format_error"])
     return "\n".join(lines[:MAX_LINES])

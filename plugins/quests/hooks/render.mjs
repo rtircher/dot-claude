@@ -104,7 +104,14 @@ export function renderGlance(summary, opts = {}) {
   }
   const notice =
     summary.fetched === false ? 'The quest log is not fetched yet (remote unreachable). Try again when online.' : null
-  return { unsynced: summary.synced === false, notice, sections: notice ? [] : sections }
+  const formatError = summary.format_error || null
+  return {
+    // A too-new log leaves the journal unapplied, which is not the same as being offline.
+    unsynced: summary.synced === false && !formatError,
+    formatError,
+    notice,
+    sections: notice ? [] : sections,
+  }
 }
 
 export function ticketDetail(t) {

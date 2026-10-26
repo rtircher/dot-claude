@@ -36,6 +36,12 @@ class RenderHtmlTest(unittest.TestCase):
                    tk("b", title="Ranked top", created="2026-10-18T10:00:00Z", rank=1000))
         self.assertLess(out.index("Ranked top"), out.index("First made"))
 
+    def test_html_keeps_dangling_main_quests_apart_when_sorting(self):
+        out = page(tk("a", title="Loose later", goal=None, created="2026-10-18T10:00:00Z"),
+                   tk("b", title="Dangling ranked", goal="g-gone", created="2026-10-18T09:00:00Z", rank=1000))
+        out = out[out.index("All main quests"):]
+        self.assertLess(out.index("Loose later"), out.index("Dangling ranked"))
+
     def test_html_has_no_external_urls(self):
         out = page(tk("a", links=["https://example.com/issue/1", "docs/plan.md"]))
         urls = re.findall(r'(?:src|href)="([^"]*)"', out)

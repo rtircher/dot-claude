@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from quests import locate, migrate, render_html, setup, store, sync, views
+from quests import locate, migrate, ops, render_html, setup, store, sync, views
 from quests.locate import QuestsRef
 
 NO_QUESTS = "No quest log for this repo. Run: quest init --mode same|external [--url URL]"
@@ -137,6 +137,8 @@ class _Ctx:
         needle = (f"claim on {op['id']} by {op['session']} lost to"
                   if op.get("op") == "claim" else None)
         for w in res.warnings:
+            if isinstance(w, ops.Rejected) and w.op == op:
+                continue  # the caller reports its own refusal
             print(f"warning: {w}", file=sys.stderr)
             lost = lost or (needle is not None and needle in w)
         return 3 if lost else 0
@@ -372,8 +374,11 @@ def _cmd_move(ctx: _Ctx) -> int:
     for tid in (a.id, a.before or a.after):
         if tid is not None and tid not in items:
             raise _Fail(f"no such {what}: {tid}", 2)
-    code = ctx.submit(ctx.op("move_goal" if goal else "move_ticket", id=a.id, to=_move_to(a)))
-    if ctx.warnings:  # the op was rejected at apply time; submit already printed why
+    op = ctx.op("move_goal" if goal else "move_ticket", id=a.id, to=_move_to(a))
+    code = ctx.submit(op)
+    own = [w for w in ctx.warnings if isinstance(w, ops.Rejected) and w.op == op]
+    if own:  # refused when applied; other warnings (push trouble) are not this move failing
+        ctx.emit({"id": a.id, "error": str(own[0]), "synced": ctx.synced}, f"quest: {own[0]}")
         return 1
     after = ctx.load_local() or qlog
     if goal:

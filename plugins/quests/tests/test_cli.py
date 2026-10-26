@@ -450,6 +450,45 @@ class CliTest(unittest.TestCase):
         code, out, _ = self.run_cli("main", "move", g3, "--after", g1, "--json")
         self.assertEqual(json.loads(out), {"id": g3, "position": 2, "synced": True})
 
+    def reject_pushes(self):
+        hook = self.origin / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.chmod(0o755)
+
+    def test_move_survives_a_rejected_push_like_done(self):
+        self.init_same()
+        a, b = self.add_ids("Task a", "Task b")
+        self.reject_pushes()
+        code, out, _ = self.run_cli("done", a)
+        self.assertEqual(code, 0)
+        code, out, _ = self.run_cli("move", b, "--top")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"Moved {b} to #1", out)
+        self.assertIn("(unsynced: will push on next sync)", out)
+
+    def test_move_rejection_with_json_emits_an_error_document(self):
+        self.init_same()
+        gid = json.loads(self.run_cli("main", "add", "Goal", "--json")[1])["id"]
+        (a,) = self.add_ids("Task a", main=gid)
+        (loose,) = self.add_ids("Loose task")
+        code, out, _ = self.run_cli("move", a, "--before", loose, "--json")
+        self.assertEqual(code, 1)
+        doc = json.loads(out)
+        self.assertEqual(doc["id"], a)
+        self.assertIn("different main quest", doc["error"])
+
+    def test_log_shows_the_too_new_line_instead_of_unsynced(self):
+        self.init_same()
+        self.add_ids("Task a")
+        self.make_too_new(7)
+        self.run_cli("add", "Pending", "--session", "s1")  # refused: stays journaled or is not queued
+        msg = store.too_new_message(7)
+        code, out, _ = self.run_cli("log")
+        self.assertEqual(code, 0)
+        self.assertIn(msg, out.splitlines())
+        data = json.loads(self.run_cli("log", "--json")[1])
+        self.assertEqual(data["format_error"], msg)
+
     def test_move_refused_on_too_new_log(self):
         self.init_same()
         (a,) = self.add_ids("Task a")

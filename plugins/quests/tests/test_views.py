@@ -63,12 +63,21 @@ class ViewsTest(unittest.TestCase):
                  tk("d", goal="g2", created=iso(1)), tk("e", goal=None, created=iso(9)), goals=goals)
         self.assertEqual([n["id"] for n in self.summ(b)["next"]], ["d", "c", "b", "a", "e"])
 
-    def test_position_counts_active_siblings(self):
-        b = qlog(tk("a", status="done", rank=1000), tk("b", rank=2000), tk("c", rank=3000),
-                 tk("z", goal=None))
+    def test_position_matches_what_next_up_shows(self):
+        b = qlog(tk("a", status="done", rank=1000), tk("m", status="in_progress", owner=own(), rank=1500),
+                 tk("b", rank=2000), tk("c", rank=3000), tk("z", goal=None))
         self.assertEqual(views.position(b, b.tickets["c"]), 2)
+        self.assertEqual([n["id"] for n in self.summ(b)["next"] if n["goal"] == "g1"], ["b", "c"])
         self.assertEqual(views.position(b, b.tickets["a"]), 1)
         self.assertEqual(views.position(b, b.tickets["z"]), 1)
+
+    def test_summary_carries_the_format_error_only_when_too_new(self):
+        b = qlog(tk("a"))
+        self.assertNotIn("format_error", self.summ(b))
+        b.meta["format"] = 99
+        s = self.summ(b)
+        self.assertIn("99", s["format_error"])
+        self.assertEqual(views.render_text(s).splitlines()[1], s["format_error"])
 
     def test_next_limit_and_more(self):
         b = qlog(*[tk(f"t{i}", created=iso(100 - i)) for i in range(8)])

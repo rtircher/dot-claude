@@ -18,7 +18,11 @@ let sessionId = ''
 let detail: string[] | null = null
 let detailId: string | null = null
 let fullLog: string | null = null
-let inFlight = false
+// One refresh at a time; a request made during one runs again right after it.
+let running: Promise<void> | null = null
+let rerun = false
+// The CLI's answer to the last move; polls do not clear it, the next user action does.
+let moveNote: string | null = null
 let timer: { cancel: () => void } | null = null
 let bandTimer: { cancel: () => void } | null = null
 const expanded = new Set<string>()
@@ -32,11 +36,28 @@ async function quest($: any, args: string[]) {
   return $.process.run([`${$.plugin.root}/bin/quest`, ...args], { cwd, timeoutMs: 20_000 })
 }
 
-async function refresh($: any) {
-  if (inFlight) return
-  inFlight = true
+function refresh($: any): Promise<void> {
+  if (running) {
+    rerun = true
+    return running
+  }
+  running = (async () => {
+    do {
+      rerun = false
+      await refreshOnce($)
+    } while (rerun)
+  })().finally(() => { running = null })
+  return running
+}
+
+async function ensureSession($: any) {
+  sessionId = sessionId || (await $.session.id())
+  return sessionId
+}
+
+async function refreshOnce($: any) {
   try {
-    sessionId = sessionId || (await $.session.id())
+    await ensureSession($)
     // Goals are expanded from the full ready list; otherwise the default 5.
     const limit = expanded.size > 0 ? '100' : '5'
     const r = await quest($, ['log', '--json', '--next-limit', limit, '--session', sessionId])
@@ -59,8 +80,6 @@ async function refresh($: any) {
   } catch (err: any) {
     const why = String(err?.message || err).split('\n')[0]
     note = summaryNow ? `stale: ${why}` : `Quest log unavailable: ${why}`
-  } finally {
-    inFlight = false
   }
   redraw($)
 }
@@ -76,21 +95,22 @@ async function openPane($: any) {
 async function moveItem($: any, kind: 'quest' | 'main', id: string, dir: string) {
   let msg: string
   try {
-    const r = await quest($, moveArgs(kind, id, dir))
+    const r = await quest($, [...moveArgs(kind, id, dir), '--session', await ensureSession($)])
     const line = (r.stdout || r.stderr || 'quest failed').trim().split('\n')[0]
     msg = r.exitCode === 0 ? line : `Move failed: ${line}`
   } catch (err: any) {
     msg = `Move failed: ${String(err?.message || err).split('\n')[0]}`
   }
   await refresh($)
-  note = msg
+  moveNote = msg
   redraw($)
 }
 
 async function showTicket($: any, id: string) {
   detailId = id
+  moveNote = null
   try {
-    const r = await quest($, ['show', id, '--json'])
+    const r = await quest($, ['show', id, '--json', '--session', await ensureSession($)])
     detail = r.exitCode === 0 ? ticketDetail(JSON.parse(r.stdout)) : [`Could not load ${id}`]
   } catch {
     detail = [`Could not load ${id}`]
@@ -172,7 +192,7 @@ export const register: Register = on => {
       const [head, ...rest] = detail
       return (
         <Box flexDirection="column" gap={1}>
-          <Button key="back" onPress={() => { detail = null; detailId = null; redraw($) }}>Back</Button>
+          <Button key="back" onPress={() => { detail = null; detailId = null; moveNote = null; redraw($) }}>Back</Button>
           <Text {...strong}>{head}</Text>
           {detailId && (
             <Box flexDirection="row" gap={1}>
@@ -181,7 +201,7 @@ export const register: Register = on => {
               ))}
             </Box>
           )}
-          {note && <Text {...note2} dimColor>{note}</Text>}
+          {moveNote && <Text {...note2} dimColor>{moveNote}</Text>}
           <Box flexDirection="column">
             {rest.map((l, i) => <Text key={`d${i}`} {...note2} dimColor={l.startsWith('  ')}>{l}</Text>)}
           </Box>
@@ -190,6 +210,7 @@ export const register: Register = on => {
     }
 
     const toggleGoal = (id: string) => {
+      moveNote = null
       expanded.has(id) ? expanded.delete(id) : expanded.add(id)
       redraw($)
       void refresh($)
@@ -197,9 +218,11 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" gap={2}>
-        {(note || vm.notice || vm.unsynced) && (
+        {(note || moveNote || vm.formatError || vm.notice || vm.unsynced) && (
           <Box flexDirection="column">
             {note && <Text {...note2} dimColor>{note}</Text>}
+            {moveNote && <Text {...note2} dimColor>{moveNote}</Text>}
+            {vm.formatError && <Text {...note2} color="warning">{vm.formatError}</Text>}
             {vm.notice && <Text {...note2} dimColor>{vm.notice}</Text>}
             {vm.unsynced && !vm.notice && <Text {...note2} color="warning">unsynced: showing the last known quest log</Text>}
           </Box>

@@ -253,6 +253,18 @@ class MoveTest(unittest.TestCase):
         self.run_ops([mv("move_ticket", "c", "down")])
         self.assertEqual(self.order(), ["a", "c", "b"])
 
+    def test_up_and_down_skip_siblings_that_are_not_ready(self):
+        self.run_ops([{"op": "claim", "at": "2026-10-18T10:00:00Z", "session": "s1", "id": "b",
+                       "owner": owner()}])
+        self.run_ops([mv("move_ticket", "c", "up")])
+        self.assertEqual(self.order(), ["c", "a", "b"])  # past a, not stopping at in-progress b
+
+    def test_rejections_are_marked_with_their_op(self):
+        op = mv("move_ticket", "zzz", "top")
+        (w,) = ops.apply_op(self.root, op)
+        self.assertIsInstance(w, ops.Rejected)
+        self.assertEqual(w.op, op)
+
     def test_noop_moves_change_nothing(self):
         before = self.files()
         for to in ("top", "up", {"before": "a"}, {"after": "a"}):

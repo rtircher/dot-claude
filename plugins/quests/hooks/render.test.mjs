@@ -218,3 +218,10 @@ test('moveArgs builds the quest and main quest move commands', () => {
   assert.deepEqual(moveArgs('main', 'g-1', 'down'), ['main', 'move', 'g-1', '--down'])
   assert.throws(() => moveArgs('quest', 't-1', 'sideways'))
 })
+
+test('a too-new log shows its message and not the unsynced warning', () => {
+  const vm = renderGlance({ ...fixture(), synced: false, format_error: 'needs a newer plugin' })
+  assert.equal(vm.formatError, 'needs a newer plugin')
+  assert.equal(vm.unsynced, false)
+  assert.equal(renderGlance(fixture()).formatError, null)
+})
