@@ -72,13 +72,17 @@ def _git(dl: _Deadline, args: list[str], cwd: Path | None):
         raise Unreachable(f"cannot run git ({e})")
 
 
-def _tip(dl: _Deadline, url: str, branch: str, cwd: Path | None) -> str | None:
-    """Commit the branch points to on `url`, or None when it is absent."""
-    p = _git(dl, ["ls-remote", "--heads", url, f"refs/heads/{branch}"], cwd)
+def _tips(dl: _Deadline, url: str, branches: list[str], cwd: Path | None) -> dict[str, str]:
+    """Commit each of `branches` points to on `url`, in one round trip; absent ones are left out."""
+    p = _git(dl, ["ls-remote", "--heads", url, *(f"refs/heads/{b}" for b in branches)], cwd)
     if p.returncode != 0:
         raise Unreachable(f"cannot reach {url}")
-    out = p.stdout.split()
-    return out[0] if out else None
+    tips = {}
+    for line in p.stdout.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].startswith("refs/heads/") and parts[1][11:] in branches:
+            tips[parts[1][11:]] = parts[0]
+    return tips
 
 
 def _is_marker(text: str) -> bool:
@@ -93,10 +97,10 @@ def migrate_branch(url: str, old: str, new: str, cwd: Path | None, dl: _Deadline
 
     status: exists | missing | unmarked | created
     """
-    have = _tip(dl, url, new, cwd)
-    if have is not None:
-        return "exists", have[:7]
-    if _tip(dl, url, old, cwd) is None:
+    tips = _tips(dl, url, [new, old], cwd)
+    if new in tips:
+        return "exists", tips[new][:7]
+    if old not in tips:
         return "missing", ""
     with tempfile.TemporaryDirectory() as tmp:
         t = Path(tmp)
@@ -261,6 +265,14 @@ def migrate(cwd: Path, budget: float = 30.0) -> Outcome:
     if not out.lines:
         out.lines.append("No old board found for this repo; nothing to migrate.")
     return out
+
+
+def ruled_out(cwd: Path, probe: locate.Probe) -> bool:
+    """True when `probe` already listed every place an old board could be, and found none."""
+    key = locate.repo_key(cwd)
+    if key is None:
+        return True
+    return all(url in probe.heads and old not in probe.heads[url] for _, url, old, _ in _targets(cwd, key))
 
 
 def _is_old_entry(entry) -> bool:

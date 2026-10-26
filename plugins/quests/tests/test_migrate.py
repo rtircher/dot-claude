@@ -305,6 +305,52 @@ class MigrateTest(unittest.TestCase):
             lines = hooks.session_start({"session_id": "s1", "cwd": str(self.repo)})
         self.assertEqual(len(lines), 1)
 
+    def _slow_ls_remote(self, delay):
+        """Wrap run_git in locate and migrate so every ls-remote costs `delay` seconds."""
+        import time
+        calls = []
+
+        def wrap(real):
+            def run(args, cwd, timeout=None):
+                if args and args[0] == "ls-remote":
+                    calls.append(args)
+                    if timeout is not None and timeout < delay:
+                        time.sleep(timeout)
+                        raise migrate.subprocess.TimeoutExpired(args, timeout)
+                    time.sleep(delay)
+                return real(args, cwd, timeout)
+            return run
+
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(locate, "run_git", wrap(locate.run_git)))
+        stack.enter_context(mock.patch.object(migrate, "run_git", wrap(migrate.run_git)))
+        return stack, calls
+
+    def test_missing_branches_on_a_slow_remote_are_not_unreachable(self):
+        origin = gf.make_remote(self.tmp, "plain.git", branch=None)
+        repo = gf.make_code_repo(self.tmp, origin, name="plain")
+        stack, calls = self._slow_ls_remote(0.4)
+        with stack, mock.patch.object(hooks, "SESSION_NET_BUDGET", 1.0):
+            lines = hooks.session_start({"session_id": "s1", "cwd": str(repo)})
+        self.assertEqual(lines, [hooks.NO_QUESTS])
+        self.assertEqual(len(calls), 1, calls)  # one round trip answers both branch names
+
+    def test_missing_branches_never_count_as_unreachable(self):
+        origin = gf.make_remote(self.tmp, "plain.git", branch=None)
+        repo = gf.make_code_repo(self.tmp, origin, name="plain")
+        dl = migrate._Deadline(30)
+        self.assertEqual(migrate.migrate_branch(str(origin), OLD, NEW, repo, dl), ("missing", ""))
+        import time
+        self.assertEqual(locate._remote_heads(str(origin), [NEW, OLD], time.monotonic() + 30, repo), set())
+
+    def test_old_branch_found_by_the_resolve_probe_still_migrates(self):
+        old = tip(self.origin, OLD)
+        stack, calls = self._slow_ls_remote(0.2)
+        with stack:
+            lines = hooks.session_start({"session_id": "s1", "cwd": str(self.repo)})
+        self.assertEqual(tip(self.origin, NEW), old)
+        self.assertTrue(any("migrated the old board" in l for l in lines), lines)
+
     def test_no_old_board_keeps_the_plain_hint(self):
         origin = gf.make_remote(self.tmp, "plain.git", branch=None)
         repo = gf.make_code_repo(self.tmp, origin, name="plain")

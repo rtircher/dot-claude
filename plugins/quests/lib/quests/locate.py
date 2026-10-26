@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from quests.gitutil import run_git
@@ -25,6 +25,15 @@ class QuestsRef:
     mode: str  # "same" or "external"
     url: str
     branch: str
+
+
+@dataclass
+class Probe:
+    """What resolve's network check listed: remote URL -> the branches present there.
+
+    A URL is missing when it was not listed (not probed, unreachable or out of time).
+    """
+    heads: dict[str, set[str]] = field(default_factory=dict)
 
 
 def state_dir() -> Path:
@@ -146,15 +155,26 @@ def clear_negative(key: str) -> None:
             pass
 
 
-def _remote_has_branch(url: str, branch: str, deadline: float, cwd: Path | None = None) -> bool:
+def _remote_heads(url: str, branches: list[str], deadline: float, cwd: Path | None = None) -> set[str] | None:
+    """Which of `branches` exist on `url`, in one round trip.
+
+    None only when the remote could not be listed in time; a missing branch is never None.
+    """
     left = deadline - time.monotonic()
     if left <= 0:
-        return False
+        return None
     try:
-        p = run_git(["ls-remote", "--exit-code", "--heads", url, f"refs/heads/{branch}"], cwd, left)
+        p = run_git(["ls-remote", "--heads", url, *(f"refs/heads/{b}" for b in branches)], cwd, left)
     except (OSError, subprocess.TimeoutExpired):
-        return False
-    return p.returncode == 0
+        return None
+    if p.returncode != 0:
+        return None
+    found = set()
+    for line in p.stdout.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].startswith("refs/heads/") and parts[1][11:] in branches:
+            found.add(parts[1][11:])
+    return found
 
 
 def _ref_exists(cwd: Path, ref: str) -> bool:
@@ -169,8 +189,11 @@ def is_old_branch(branch: str) -> bool:
     return branch == OLD_SAME_BRANCH or branch.startswith(OLD_EXTERNAL_PREFIX)
 
 
-def resolve(cwd: Path, deadline: float | None = None) -> QuestsRef | None:
-    """`deadline` is a time.monotonic() end shared with the caller's other network work."""
+def resolve(cwd: Path, deadline: float | None = None, probe: Probe | None = None) -> QuestsRef | None:
+    """`deadline` is a time.monotonic() end shared with the caller's other network work.
+
+    `probe`, when given, records what the remote listing saw (old branch names included).
+    """
     cwd = Path(cwd)
     key = repo_key(cwd)
     if key is None:
@@ -182,33 +205,40 @@ def resolve(cwd: Path, deadline: float | None = None) -> QuestsRef | None:
         return QuestsRef(key, entry["mode"], entry["url"], entry["branch"])
     if deadline is None:
         deadline = time.monotonic() + _LS_REMOTE_DEADLINE
-    probe = not _negative_fresh(key)
-    ref = _discover(cwd, key, deadline, probe=probe)
+    network = not _negative_fresh(key)
+    ref = _discover(cwd, key, deadline, probe=network, seen=probe)
     if ref is not None:
         try:
             save_config(ref)
         except OSError:
             pass
-    elif probe:
+    elif network:
         _mark_negative(key)
     return ref
 
 
-def _discover(cwd: Path, key: str, deadline: float, probe: bool = True) -> QuestsRef | None:
+def _discover(cwd: Path, key: str, deadline: float, probe: bool = True, seen: Probe | None = None) -> QuestsRef | None:
+    seen = seen if seen is not None else Probe()
     external = os.environ.get("CLAUDE_QUESTS_REPO")
     if external and probe:
-        branch = f"quests/{slug(key)}"
-        if _remote_has_branch(external, branch, deadline, cwd):
-            return QuestsRef(key, "external", external, branch)
+        s = slug(key)
+        branch = f"quests/{s}"
+        heads = _remote_heads(external, [branch, f"{OLD_EXTERNAL_PREFIX}{s}"], deadline, cwd)
+        if heads is not None:
+            seen.heads[external] = heads
+            if branch in heads:
+                return QuestsRef(key, "external", external, branch)
     origin = _origin_url(cwd)
     common = _common_dir(cwd)
     url = origin or common
     if url is None:
         return None
-    if (
-        _ref_exists(cwd, f"refs/heads/{SAME_BRANCH}")
-        or _ref_exists(cwd, f"refs/remotes/origin/{SAME_BRANCH}")
-        or (probe and origin is not None and _remote_has_branch("origin", SAME_BRANCH, deadline, cwd))
-    ):
+    if _ref_exists(cwd, f"refs/heads/{SAME_BRANCH}") or _ref_exists(cwd, f"refs/remotes/origin/{SAME_BRANCH}"):
         return QuestsRef(key, "same", url, SAME_BRANCH)
+    if probe and origin is not None:
+        heads = _remote_heads("origin", [SAME_BRANCH, OLD_SAME_BRANCH], deadline, cwd)
+        if heads is not None:
+            seen.heads[origin] = heads
+            if SAME_BRANCH in heads:
+                return QuestsRef(key, "same", url, SAME_BRANCH)
     return None

@@ -119,10 +119,12 @@ def session_start(data: dict) -> list[str]:
             _log_error("session-start env file")
     # One 5 s network budget for resolve and the old-board migration together.
     net_end = time.monotonic() + SESSION_NET_BUDGET
-    ref = locate.resolve(cwd, deadline=net_end)
+    probe = locate.Probe()
+    ref = locate.resolve(cwd, deadline=net_end, probe=probe)
     note = None
     migrated = False
-    if ref is None:
+    # Skipped when resolve's listing already saw no old branch: a second round trip can overrun the budget.
+    if ref is None and not migrate.ruled_out(cwd, probe):
         # An old `board` branch is carried over once. A journal it moves is not pushed from here.
         ref, note = migrate.auto(cwd, deadline=net_end)
         migrated = ref is not None

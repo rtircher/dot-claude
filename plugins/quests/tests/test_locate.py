@@ -45,7 +45,7 @@ class LocateTest(unittest.TestCase):
             self.assertIsNone(locate.resolve(code))
             self.assertTrue(all(c.args[0][0] != "ls-remote" for c in rg.call_args_list))
         locate.clear_negative(locate.repo_key(code))
-        with mock.patch.object(locate, "_remote_has_branch", return_value=False) as probe:
+        with mock.patch.object(locate, "_remote_heads", return_value=set()) as probe:
             self.assertIsNone(locate.resolve(code))
             self.assertTrue(probe.called)
 
