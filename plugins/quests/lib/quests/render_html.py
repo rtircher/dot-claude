@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from html import escape
 
-from quests.store import QuestLog, Ticket
+from quests.store import QuestLog, Ticket, ticket_key
 
 _CSS = """
 :root{--bg:#fafafa;--fg:#1c1c1e;--muted:#6b6b70;--card:#fff;--line:#d8d8de;--accent:#2f6fdb;
@@ -72,7 +72,7 @@ def _tree(qlog: QuestLog, nodes: list, kids: dict, seen: set) -> str:
 def _forest(qlog: QuestLog, tickets: list[Ticket]) -> str:
     """Tickets nested under their parents; missing parents and cycles fall back to roots."""
     ids = {t.id for t in tickets}
-    ordered = sorted(tickets, key=lambda t: (t.created, t.id))
+    ordered = sorted(tickets, key=ticket_key)
     kids: dict[str, list[Ticket]] = {}
     roots = []
     for t in ordered:

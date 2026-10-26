@@ -34,6 +34,15 @@ def _common() -> argparse.ArgumentParser:
     return p
 
 
+def _move_flags(p: argparse.ArgumentParser) -> None:
+    p.add_argument("id")
+    g = p.add_mutually_exclusive_group(required=True)
+    for name in ("top", "bottom", "up", "down"):
+        g.add_argument(f"--{name}", action="store_const", const=name, dest="to")
+    for name in ("before", "after"):
+        g.add_argument(f"--{name}", metavar="ID", dest=name)
+
+
 def _parser() -> argparse.ArgumentParser:
     c = _common()
     p = _Parser(prog="quest", description="Shared per-repo quest log.")
@@ -69,6 +78,8 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("title")
     a.add_argument("--link", action="append", default=[])
     gs.add_parser("list", parents=[c])
+    _move_flags(gs.add_parser("move", parents=[c]))
+    _move_flags(sub.add_parser("move", parents=[c]))
     sub.add_parser("html", parents=[c]).add_argument("--out")
     sub.add_parser("migrate", parents=[c])
     return p
@@ -85,6 +96,7 @@ class _Ctx:
         self.where = os.environ.get("QUESTS_WHERE") or ("cloud" if remote else "local")
         self.ref: QuestsRef | None = None
         self.synced = True
+        self.warnings: list[str] = []
 
     def out(self, text: str = "") -> None:
         print(text)
@@ -118,6 +130,7 @@ class _Ctx:
             raise _Fail(store.too_new_message(store.log_format(local.meta)), 4)
         res = sync.submit(self.ref, op)
         self.synced = res.synced
+        self.warnings = res.warnings
         if res.too_new:  # the remote moved to a newer format; the op stays in the journal
             raise _Fail(store.too_new_message(res.too_new), 4)
         lost = False
@@ -344,8 +357,43 @@ def _cmd_note(ctx: _Ctx) -> int:
     return code
 
 
+def _move_to(a) -> str | dict:
+    return a.to or ({"before": a.before} if a.before else {"after": a.after})
+
+
+def _cmd_move(ctx: _Ctx) -> int:
+    """Reorder a quest within its main quest, or (with `main move`) a main quest."""
+    a = ctx.args
+    goal = a.cmd == "main"
+    qlog, _ = ctx.load()
+    if qlog is None:
+        raise _Fail("quest log not fetched yet (remote unreachable); try again when online")
+    items, what = (qlog.goals, "main quest") if goal else (qlog.tickets, "quest")
+    for tid in (a.id, a.before or a.after):
+        if tid is not None and tid not in items:
+            raise _Fail(f"no such {what}: {tid}", 2)
+    code = ctx.submit(ctx.op("move_goal" if goal else "move_ticket", id=a.id, to=_move_to(a)))
+    if ctx.warnings:  # the op was rejected at apply time; submit already printed why
+        return 1
+    after = ctx.load_local() or qlog
+    if goal:
+        gs = sorted(after.goals.values(), key=lambda g: (g.order, g.id))
+        pos = [g.id for g in gs].index(a.id) + 1
+        text = f"Moved main quest {after.goals[a.id].title} to #{pos}"
+    else:
+        t = after.tickets[a.id]
+        pos = views.position(after, t)
+        where = f"in {after.goals[t.goal].title}" if t.goal in after.goals else "in quests with no main quest"
+        text = f"Moved {a.id} to #{pos} {where}"
+    ctx.emit({"id": a.id, "position": pos, "synced": ctx.synced}, text)
+    ctx.tail()
+    return code
+
+
 def _cmd_main(ctx: _Ctx) -> int:
     a = ctx.args
+    if a.main_cmd == "move":
+        return _cmd_move(ctx)
     if a.main_cmd == "list":
         qlog, _ = ctx.load()
         if qlog is None:
@@ -366,7 +414,7 @@ def _cmd_main(ctx: _Ctx) -> int:
 
 _COMMANDS = {
     "log": _cmd_log, "html": _cmd_html, "show": _cmd_show, "next": _cmd_next, "sync": _cmd_sync,
-    "add": _cmd_add, "take": _cmd_take, "note": _cmd_note, "main": _cmd_main, "side": _cmd_side, "done": _cmd_done,
+    "add": _cmd_add, "take": _cmd_take, "note": _cmd_note, "main": _cmd_main, "move": _cmd_move, "side": _cmd_side, "done": _cmd_done,
     "drop": _simple_write("release", "Dropped {id}"),
     "status": _cmd_status,
     "link": _simple_write("add_link", "Linked {id}", link="link"),

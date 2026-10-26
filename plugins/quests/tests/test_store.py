@@ -45,6 +45,22 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(qlog.goals["g-xyz89"], g)
         self.assertEqual(qlog.meta, {"schema": 1, "code_repo": "example/repo"})
 
+    def test_rank_is_written_only_when_set_and_old_files_load(self):
+        store.write_ticket(self.root, make_ticket())
+        text = (self.root / "tickets" / "t-abc12.md").read_text()
+        self.assertNotIn("rank", text)
+        self.assertIsNone(store.load_quests(self.root).tickets["t-abc12"].rank)
+        store.write_ticket(self.root, make_ticket(rank=2000))
+        self.assertIn("rank: 2000\n", (self.root / "tickets" / "t-abc12.md").read_text())
+        self.assertEqual(store.load_quests(self.root).tickets["t-abc12"].rank, 2000)
+
+    def test_ticket_key_ranked_first_by_rank_then_unranked_by_creation(self):
+        a = make_ticket(id="a", created="2026-10-18T09:00:00Z")
+        b = make_ticket(id="b", created="2026-10-18T09:01:00Z", rank=2000)
+        c = make_ticket(id="c", created="2026-10-18T09:02:00Z", rank=1000)
+        d = make_ticket(id="d", created="2026-10-18T09:03:00Z")
+        self.assertEqual([t.id for t in sorted([d, a, b, c], key=store.ticket_key)], ["c", "b", "a", "d"])
+
     def test_log_format_defaults_to_one_and_reads_newer(self):
         self.assertEqual(store.log_format({"schema": 1}), 1)
         self.assertEqual(store.log_format({"format": 2}), 2)

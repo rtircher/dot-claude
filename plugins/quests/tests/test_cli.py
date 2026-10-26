@@ -383,6 +383,81 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("(unsynced, not fetched yet)", out)
 
+    def add_ids(self, *titles, main=None):
+        ids = []
+        for t in titles:
+            extra = ["--main", main] if main else []
+            ids.append(json.loads(self.run_cli("add", t, "--session", "s1", "--json", *extra)[1])["id"])
+        return ids
+
+    def next_ids(self):
+        return [n["id"] for n in json.loads(self.run_cli("log", "--json", "--next-limit", "50")[1])["next"]]
+
+    def test_move_ticket_and_confirmation(self):
+        self.init_same()
+        gid = json.loads(self.run_cli("main", "add", "Camera work", "--json")[1])["id"]
+        a, b, c = self.add_ids("Task a", "Task b", "Task c", main=gid)
+        # Tickets made in one second tie on creation time, so fix the order explicitly first.
+        for tid in (c, b):
+            self.assertEqual(self.run_cli("move", tid, "--top")[0], 0)
+        code, out, err = self.run_cli("move", a, "--top")
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(out.strip(), f"Moved {a} to #1 in Camera work")
+        self.assertEqual(self.next_ids(), [a, b, c])
+        self.assertEqual(self.run_cli("move", a, "--down")[0], 0)
+        self.assertEqual(self.next_ids(), [b, a, c])
+        self.assertEqual(self.run_cli("move", b, "--after", c)[0], 0)
+        self.assertEqual(self.next_ids(), [a, c, b])
+        self.assertEqual(self.run_cli("move", b, "--before", a)[0], 0)
+        self.assertEqual(self.run_cli("move", c, "--bottom")[0], 0)
+        self.assertEqual(self.next_ids(), [b, a, c])
+        code, out, _ = self.run_cli("move", c, "--up", "--json")
+        self.assertEqual(json.loads(out), {"id": c, "position": 2, "synced": True})
+
+    def test_move_ticket_without_main_quest_names_the_group(self):
+        self.init_same()
+        a, b = self.add_ids("Task a", "Task b")
+        out = self.run_cli("move", b, "--top")[1]
+        self.assertEqual(out.strip(), f"Moved {b} to #1 in quests with no main quest")
+
+    def test_move_errors(self):
+        self.init_same()
+        gid = json.loads(self.run_cli("main", "add", "Goal", "--json")[1])["id"]
+        (a,) = self.add_ids("Task a", main=gid)
+        (loose,) = self.add_ids("Loose task")
+        code, out, _ = self.run_cli("move", "t-nope", "--top")
+        self.assertEqual((code, out.strip()), (2, "quest: no such quest: t-nope"))
+        self.assertEqual(self.run_cli("move", a, "--before", "t-nope")[0], 2)
+        code, out, err = self.run_cli("move", a, "--before", loose)
+        self.assertEqual(code, 1)
+        self.assertIn("different main quest", out + err)
+        self.assertEqual(self.run_cli("move", a)[0], 1)  # a position flag is required
+        self.assertEqual(self.run_cli("move", a, "--top", "--bottom")[0], 1)
+        code, out, _ = self.run_cli("main", "move", "g-nope", "--top")
+        self.assertEqual((code, out.strip()), (2, "quest: no such main quest: g-nope"))
+
+    def test_main_move(self):
+        self.init_same()
+        g1, g2, g3 = (json.loads(self.run_cli("main", "add", t, "--json")[1])["id"]
+                      for t in ("One", "Two", "Three"))
+        (t1,) = self.add_ids("In one", main=g1)
+        (t3,) = self.add_ids("In three", main=g3)
+        code, out, _ = self.run_cli("main", "move", g3, "--top")
+        self.assertEqual((code, out.strip()), (0, "Moved main quest Three to #1"))
+        self.assertEqual(self.next_ids(), [t3, t1])
+        goals = json.loads(self.run_cli("main", "list", "--json")[1])
+        self.assertEqual([g["id"] for g in goals], [g3, g1, g2])
+        code, out, _ = self.run_cli("main", "move", g3, "--after", g1, "--json")
+        self.assertEqual(json.loads(out), {"id": g3, "position": 2, "synced": True})
+
+    def test_move_refused_on_too_new_log(self):
+        self.init_same()
+        (a,) = self.add_ids("Task a")
+        self.make_too_new()
+        code, out, _ = self.run_cli("move", a, "--top")
+        self.assertEqual(code, 4)
+        self.assertIn("needs a newer quests plugin", out)
+
     def make_too_new(self, n=store.FORMAT + 1):
         other = self.tmp / "newer"
         gf.git(self.tmp, "clone", "-q", "--branch", gf.BRANCH, str(self.origin), str(other))

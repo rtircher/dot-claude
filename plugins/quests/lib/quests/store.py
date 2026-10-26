@@ -47,6 +47,8 @@ class Ticket:
     created: str
     updated: str
     log: list[LogEntry] = field(default_factory=list)
+    # Manual order within the ticket's main quest; None means creation order. Needs log format 2.
+    rank: int | float | None = None
 
 
 @dataclass
@@ -80,6 +82,16 @@ def read_format(root: Path) -> int:
 def too_new_message(n: int) -> str:
     return (f"this quest log needs a newer quests plugin (log format {n}, "
             f"this plugin supports {FORMAT}); update dot-claude")
+
+
+ACTIVE = ("todo", "in_progress", "blocked")
+
+
+def ticket_key(t: Ticket) -> tuple:
+    """Order of tickets within one main quest: ranked by rank, then unranked by creation."""
+    if t.rank is not None:
+        return (0, t.rank, t.created, t.id)
+    return (1, 0, t.created, t.id)
 
 
 def now_iso() -> str:
@@ -136,6 +148,8 @@ def write_ticket(root: Path, t: Ticket) -> Path:
         ("created", t.created),
         ("updated", t.updated),
     ]
+    if t.rank is not None:
+        fields.append(("rank", t.rank))
     lines = ["---"] + [f"{k}: {_dump(v)}" for k, v in fields] + ["---"]
     lines += [_title_line(t.title), "", "## Log"]
     lines += [f"- {e.at} ({_clean_session(e.session)}) {_clean(e.text)}" for e in t.log]
@@ -183,6 +197,7 @@ def _read_ticket(path: Path) -> Ticket:
             m = _LOG_RE.match(ln)
             if m:
                 log.append(LogEntry(m.group(1), m.group(2), m.group(3)))
+    rank = fm.get("rank")
     o = fm["owner"]
     owner = Owner(o["session"], o["label"], o["where"], o["claimed_at"]) if o else None
     return Ticket(
@@ -197,6 +212,7 @@ def _read_ticket(path: Path) -> Ticket:
         created=fm["created"],
         updated=fm["updated"],
         log=log,
+        rank=rank if isinstance(rank, (int, float)) and not isinstance(rank, bool) else None,
     )
 
 

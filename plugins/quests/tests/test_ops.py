@@ -191,5 +191,141 @@ class OpsTest(unittest.TestCase):
         self.assertEqual(t.links, ["https://example.com/y"])
 
 
+def mk(tid, minute, goal="g-1"):
+    return {"op": "create_ticket", "at": f"2026-10-18T09:{minute:02d}:00Z", "session": "s1",
+            "id": tid, "title": f"Task {tid}", "goal": goal, "parent": None, "links": []}
+
+
+def mv(kind, tid, to):
+    return {"op": kind, "at": "2026-10-18T12:00:00Z", "session": "s1", "id": tid, "to": to}
+
+
+class MoveTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        seed(self.root)
+        self.run_ops([create_ops()[0], mk("a", 1), mk("b", 2), mk("c", 3), mk("x", 4, goal=None)])
+
+    def run_ops(self, items):
+        warnings = []
+        for o in items:
+            warnings += ops.apply_op(self.root, o)
+        return warnings
+
+    def order(self, goal="g-1"):
+        q = store.load_quests(self.root)
+        return [t.id for t in sorted((t for t in q.tickets.values() if t.goal == goal),
+                                     key=store.ticket_key)]
+
+    def files(self):
+        return {p.name: p.read_text() for p in sorted(self.root.rglob("*")) if p.is_file()}
+
+    def test_unranked_tickets_keep_creation_order_and_no_rank_in_file(self):
+        self.assertEqual(self.order(), ["a", "b", "c"])
+        self.assertNotIn("rank", (self.root / "tickets" / "a.md").read_text())
+
+    def test_top_bottom_up_down(self):
+        self.assertEqual(self.run_ops([mv("move_ticket", "c", "top")]), [])
+        self.assertEqual(self.order(), ["c", "a", "b"])
+        self.run_ops([mv("move_ticket", "c", "bottom")])
+        self.assertEqual(self.order(), ["a", "b", "c"])
+        self.run_ops([mv("move_ticket", "c", "up")])
+        self.assertEqual(self.order(), ["a", "c", "b"])
+        self.run_ops([mv("move_ticket", "a", "down")])
+        self.assertEqual(self.order(), ["c", "a", "b"])
+        ranks = [store.load_quests(self.root).tickets[i].rank for i in "cab"]
+        self.assertEqual(ranks, sorted(ranks))
+        self.assertEqual(len(set(ranks)), 3)
+
+    def test_before_and_after(self):
+        self.run_ops([mv("move_ticket", "c", {"before": "a"})])
+        self.assertEqual(self.order(), ["c", "a", "b"])
+        self.run_ops([mv("move_ticket", "c", {"after": "a"})])
+        self.assertEqual(self.order(), ["a", "c", "b"])
+
+    def test_up_and_down_step_past_active_siblings_only(self):
+        self.run_ops([{"op": "set_status", "at": "2026-10-18T10:00:00Z", "session": "s1",
+                       "id": "b", "status": "done"}])
+        self.run_ops([mv("move_ticket", "c", "up")])
+        self.assertEqual(self.order(), ["c", "a", "b"])  # past a, not stopping at done b
+        self.run_ops([mv("move_ticket", "c", "down")])
+        self.assertEqual(self.order(), ["a", "c", "b"])
+
+    def test_noop_moves_change_nothing(self):
+        before = self.files()
+        for to in ("top", "up", {"before": "a"}, {"after": "a"}):
+            self.assertEqual(self.run_ops([mv("move_ticket", "a", to)]), [], to)
+        self.assertEqual(self.run_ops([mv("move_ticket", "c", "bottom"), mv("move_ticket", "c", "down")]), [])
+        self.assertEqual(self.files(), before)
+        self.assertEqual(store.read_format(self.root), 1)
+
+    def test_errors_change_nothing(self):
+        before = self.files()
+        for op in (mv("move_ticket", "zzz", "top"),
+                   mv("move_ticket", "a", {"before": "zzz"}),
+                   mv("move_ticket", "a", {"after": "x"}),  # x is in another group
+                   mv("move_ticket", "a", "sideways"),
+                   mv("move_ticket", "a", {"before": "b", "after": "c"}),
+                   mv("move_goal", "g-nope", "top"),
+                   mv("move_goal", "g-1", {"after": "g-nope"})):
+            w = self.run_ops([op])
+            self.assertEqual(len(w), 1, op)
+            self.assertTrue(w[0].startswith(op["op"] + ":"), w)
+        self.assertIn("different main quest", self.run_ops([mv("move_ticket", "a", {"after": "x"})])[0])
+        self.assertEqual(self.files(), before)
+
+    def test_group_none_is_its_own_group(self):
+        self.run_ops([mk("y", 5, goal=None), mv("move_ticket", "y", "top")])
+        self.assertEqual(self.order(None), ["y", "x"])
+        self.assertEqual(self.order(), ["a", "b", "c"])
+
+    def test_first_move_bumps_format_and_replay_is_stable(self):
+        self.assertEqual(store.read_format(self.root), 1)
+        self.run_ops([mv("move_ticket", "c", "top")])
+        self.assertEqual(store.read_format(self.root), 2)
+        self.assertEqual(store.load_quests(self.root).meta["code_repo"], "example/repo")
+        first = self.files()
+        self.run_ops([mv("move_ticket", "c", "top")])
+        self.assertEqual(self.files(), first)
+
+    def test_new_ticket_goes_to_bottom_of_ranked_group_only(self):
+        self.run_ops([mk("d", 6)])
+        self.assertIsNone(store.load_quests(self.root).tickets["d"].rank)
+        self.run_ops([mv("move_ticket", "c", "top"), mk("e", 7), mk("f", 8, goal="g-other")])
+        q = store.load_quests(self.root)
+        self.assertEqual(q.tickets["e"].rank, max(q.tickets[i].rank for i in "abcd") + 1000)
+        self.assertEqual(self.order()[-1], "e")
+        self.assertIsNone(q.tickets["f"].rank)
+
+    def test_set_goal_takes_bottom_of_ranked_group_else_drops_rank(self):
+        self.run_ops([create_ops()[0] | {"id": "g-2", "order": 2}, mk("p", 9, goal="g-2")])
+        self.run_ops([mv("move_ticket", "c", "top")])
+        self.run_ops([{"op": "set_goal", "at": "2026-10-18T13:00:00Z", "session": "s1",
+                       "id": "x", "goal": "g-1"}])
+        self.assertEqual(self.order()[-1], "x")
+        self.run_ops([{"op": "set_goal", "at": "2026-10-18T13:01:00Z", "session": "s1",
+                       "id": "c", "goal": "g-2"}])
+        self.assertIsNone(store.load_quests(self.root).tickets["c"].rank)
+        self.assertEqual(self.order("g-2"), ["c", "p"])  # unranked: by creation
+
+    def test_move_goal(self):
+        g = create_ops()[0]
+        self.run_ops([g | {"id": "g-2", "order": 2}, g | {"id": "g-3", "order": 3}])
+        goals = lambda: [x.id for x in sorted(store.load_quests(self.root).goals.values(),
+                                              key=lambda x: (x.order, x.id))]
+        self.assertEqual(self.run_ops([mv("move_goal", "g-3", "top")]), [])
+        self.assertEqual(goals(), ["g-3", "g-1", "g-2"])
+        self.run_ops([mv("move_goal", "g-3", "down")])
+        self.assertEqual(goals(), ["g-1", "g-3", "g-2"])
+        self.run_ops([mv("move_goal", "g-1", {"after": "g-2"})])
+        self.assertEqual(goals(), ["g-3", "g-2", "g-1"])
+        self.run_ops([mv("move_goal", "g-3", "bottom"), mv("move_goal", "g-3", "up")])
+        self.assertEqual(goals(), ["g-2", "g-3", "g-1"])
+        self.assertEqual(sorted(x.order for x in store.load_quests(self.root).goals.values()), [1, 2, 3])
+        self.assertEqual(store.read_format(self.root), 1)  # goals already had order
+
+
 if __name__ == "__main__":
     unittest.main()

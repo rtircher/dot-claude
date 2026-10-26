@@ -31,6 +31,11 @@ class RenderHtmlTest(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", out)
         self.assertNotIn('<b onclick', out)
 
+    def test_html_lists_tickets_in_rank_order(self):
+        out = page(tk("a", title="First made", created="2026-10-18T09:00:00Z"),
+                   tk("b", title="Ranked top", created="2026-10-18T10:00:00Z", rank=1000))
+        self.assertLess(out.index("Ranked top"), out.index("First made"))
+
     def test_html_has_no_external_urls(self):
         out = page(tk("a", links=["https://example.com/issue/1", "docs/plan.md"]))
         urls = re.findall(r'(?:src|href)="([^"]*)"', out)

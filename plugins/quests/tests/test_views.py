@@ -57,6 +57,19 @@ class ViewsTest(unittest.TestCase):
         ids = [n["id"] for n in self.summ(b)["next"]]
         self.assertEqual(sorted(ids), ["free", "unblocked"])
 
+    def test_next_uses_rank_within_a_goal_and_goal_order_first(self):
+        goals = [Goal("g1", "One", 2, []), Goal("g2", "Two", 1, [])]
+        b = qlog(tk("a", created=iso(5)), tk("b", created=iso(4), rank=1000), tk("c", created=iso(3), rank=500),
+                 tk("d", goal="g2", created=iso(1)), tk("e", goal=None, created=iso(9)), goals=goals)
+        self.assertEqual([n["id"] for n in self.summ(b)["next"]], ["d", "c", "b", "a", "e"])
+
+    def test_position_counts_active_siblings(self):
+        b = qlog(tk("a", status="done", rank=1000), tk("b", rank=2000), tk("c", rank=3000),
+                 tk("z", goal=None))
+        self.assertEqual(views.position(b, b.tickets["c"]), 2)
+        self.assertEqual(views.position(b, b.tickets["a"]), 1)
+        self.assertEqual(views.position(b, b.tickets["z"]), 1)
+
     def test_next_limit_and_more(self):
         b = qlog(*[tk(f"t{i}", created=iso(100 - i)) for i in range(8)])
         s = views.summary(b, {}, NOW, None, True, next_limit=3)

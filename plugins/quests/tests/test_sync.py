@@ -97,6 +97,42 @@ class SyncTest(unittest.TestCase):
         self.assertIn("first machine note", texts)
         self.assertIn("second machine note", texts)
 
+    def test_two_clones_moves_on_one_group_both_apply_in_sync_order(self):
+        for tid, minute in (("t-a", 1), ("t-b", 2), ("t-c", 3)):
+            op = ticket_op(tid)
+            op["at"] = f"2026-10-18T09:0{minute}:00Z"
+            sync.submit(self.ref, op)
+
+        def move(tid, to, session):
+            return {"op": "move_ticket", "at": T, "session": session, "id": tid, "to": to}
+
+        with self.machine("m1"):
+            sync.sync(self.ref)
+        with self.machine("m2"):
+            sync.sync(self.ref)
+        with self.machine("m1"):
+            offline = self.remote.rename(self.tmp / "away.git")
+            self.assertFalse(sync.submit(self.ref, move("t-c", "top", "s1")).synced)
+            offline.rename(self.remote)
+        with self.machine("m2"):
+            self.assertTrue(sync.submit(self.ref, move("t-b", "top", "s2")).synced)
+        with self.machine("m1"):
+            self.assertTrue(sync.sync(self.ref).synced)  # replays t-c top onto the tip with t-b first
+        tickets, view = self.remote_tickets()
+        order = sorted(tickets.values(), key=store.ticket_key)
+        self.assertEqual([t.id for t in order], ["t-c", "t-b", "t-a"])
+        ranks = [t.rank for t in order]
+        self.assertEqual(len(set(ranks)), 3)
+        self.assertEqual(store.read_format(view), 2)
+        subjects = gf.git(view, "log", "--format=%s").stdout.splitlines()
+        self.assertIn("quests: move_ticket t-b", subjects)
+        self.assertIn("quests: move_ticket t-c", subjects)
+        with self.machine("m2"):
+            self.assertTrue(sync.sync(self.ref).synced)
+            local = store.load_quests(sync.checkout_dir(self.ref))
+            self.assertEqual([t.id for t in sorted(local.tickets.values(), key=store.ticket_key)],
+                             ["t-c", "t-b", "t-a"])
+
     def test_two_local_sessions_share_lock(self):
         sync.submit(self.ref, ticket_op("t-0"))
         errors = []

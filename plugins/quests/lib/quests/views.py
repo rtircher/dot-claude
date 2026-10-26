@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from quests.store import QuestLog, Ticket
+from quests.store import ACTIVE, QuestLog, Ticket, ticket_key
 
 _FMT = "%Y-%m-%dT%H:%M:%SZ"
 IDLE_AFTER = timedelta(minutes=15)
@@ -78,6 +78,12 @@ def current_ticket(qlog, session: str) -> Ticket | None:
     return _latest(mine) if mine else None
 
 
+def position(qlog, t: Ticket) -> int:
+    """1-based place of t among its main quest's active tickets (as 'next up' sees them)."""
+    group = [s for s in qlog.tickets.values() if s.goal == t.goal and (s.status in ACTIVE or s is t)]
+    return sorted(group, key=ticket_key).index(t) + 1
+
+
 def summary(qlog, sessions, now, current_session, synced, next_limit=5) -> dict:
     goals_sorted = sorted(qlog.goals.values(), key=lambda g: (g.order, g.id))
     goals = []
@@ -125,7 +131,7 @@ def summary(qlog, sessions, now, current_session, synced, next_limit=5) -> dict:
         if t.status == "todo" and t.owner is None
         and all(b in qlog.tickets and qlog.tickets[b].status == "done" for b in t.blocked_by)
     ]
-    ready.sort(key=lambda t: (order.get(t.goal, 10**9), t.created, t.id))
+    ready.sort(key=lambda t: (order.get(t.goal, 10**9), ticket_key(t)))
     nxt = [{"id": t.id, "title": t.title, "goal": t.goal} for t in ready[:next_limit]]
 
     return {
