@@ -78,9 +78,11 @@
  *                                    // is an override only (e.g. fable's cap is tight), never a default
  *       effort?: string,             // 'low'|'medium'|'high'|'xhigh'|'max'
  *     },                             // keys: a lens key (see LENS_PANELS; diffs have
- *   },                               // their own panel) or 'verify' (skeptics).
+ *   },                               // their own panel; 'prose' is the advisory diff lens)
+ *                                    // or 'verify' (skeptics).
  *                                    // DEFAULT_TIERS names every slot: mechanical lenses
- *                                    // (scope-yagni, gaps, simplicity-yagni, duplication) on
+ *                                    // (scope-yagni, gaps, simplicity-yagni, duplication,
+ *                                    // and the advisory diff-only prose) on
  *                                    // sonnet, reasoning lenses and the verify skeptics on
  *                                    // fable. Effort is pinned too: medium on the mechanical
  *                                    // lenses, high on reasoning lenses (diff correctness
@@ -121,10 +123,15 @@ const LENS_PANELS = {
   diff: [
     { key: 'correctness', brief: "bugs, broken invariants, security holes, cross-package coupling, not style" },
     { key: 'simplicity-yagni', brief: "needless complexity, a simpler design that does the same, reinvented helpers the codebase already has, abstraction/config/generality this change does not need. For every new class, base class, registry, flag, setting, or extension point ask how many concrete users it has in this diff; one means inline it. Safety floor, per the conventions' \"Simplicity never trims the safety floor\" rule: never propose trimming input validation at trust boundaries, data-loss error handling, security, accessibility, or migration backfill/lock/rollback code. Tag each finding in suggested_fix `cut now` when it can be deleted or inlined in this change, `follow-up` when it is pre-existing over-build, each with an approximate net-lines figure" },
-    { key: 'testing', brief: "judge coverage by decision branches, not line percentage: list each new or changed if/else, match, except, or early return in the production diff and name the test that exercises it; flag branches with none. Curate, don't append, per the conventions' \"Test suite discipline: curate, don't append\" rule: flag tests that exercise a branch another test already covers, tests that cannot fail such as asserting a mock's return, a snapshot of a constant, or a getter/setter/pass-through, over-mocking that tests the mock, integration or e2e tests that re-assert a unit-covered branch, a missing regression test for the bug being fixed, and brittle tests coupled to implementation detail. For each redundant test name the surviving test and say `delete` or `merge into a parametrize table`; a removal is a finding, same as a gap. Report the suite delta as `tests +N added / ~M edited / -K deleted vs B branches touched`; added far above branches with zero deleted is a major finding by default" },
+    { key: 'testing', brief: "judge coverage by decision branches, not line percentage: list each new or changed if/else, match, except, or early return in the production diff and name the test that exercises it; flag branches with none. Curate, don't append, per the conventions' \"Test suite discipline: curate, don't append\" rule: flag tests that exercise a branch another test already covers, over-mocking that tests the mock, integration or e2e tests that re-assert a unit-covered branch, a missing regression test for the bug being fixed, and brittle tests coupled to implementation detail, such as asserting that specific internal calls were made. Per the conventions' \"A test that cannot fail is worse than none\" rule, flag tests that cannot fail: asserting a mock's configured return, `is not None` or \"didn't raise\" as the only assertion, a try/except that swallows the assert, a snapshot of a constant or one regenerated without reading its diff, a getter/setter/pass-through, or an assertion on source text or config the test reads back instead of on behavior; a test that cannot fail leaves its branch untested, so rate it as that gap. For each new or changed test, trace whether it would still pass with the production change reverted, and whether its expected value comes from an independent oracle rather than from the code under test; a test that passes either way is a finding. Per the conventions' \"Deterministic by construction\" rule, flag sleeps, wall clock, unseeded randomness, live network, and order-dependent fixtures. For each redundant test name the surviving test and say `delete` or `merge into a parametrize table`; a removal is a finding, same as a gap. Report the suite delta as `tests +N added / ~M edited / -K deleted vs B branches touched`; added far above branches with zero deleted is a major finding by default" },
     { key: 'duplication', brief: "the same logic introduced more than once. Two forms: (a) copy-pasted or near-identical blocks added within THIS diff, across functions or files, that should share one implementation; (b) logic in this diff that re-implements something the codebase already has elsewhere (a validator, a parser, a business rule) without reusing it. Distinct from simplicity-yagni's reinvented-helper check, which flags unnecessary abstraction and complexity — this lens flags redundant OCCURRENCES of the same logic regardless of how simple each occurrence is. For each instance, list every location it appears and name the one that should remain or the extraction point." },
   ],
 }
+
+// Advisory, diffs only: runs beside the panel, but its findings never reach
+// `findings`, the skeptics, `verdicts`, or the panel count, so it can neither
+// block nor, by failing, cap the verdict.
+const PROSE_LENS = { key: 'prose', brief: "the prose this change ships, judged against the conventions' \"Writing style\" and \"Code comments\" sections: the PR description when one is given, the commit messages in the range, and the code comments, docstrings, and docs the diff adds or changes. Flag a comment that narrates what the code plainly does instead of why, describes the change's history or process rather than the final state (\"now\", \"previously\", \"after review\", \"fixed X\"), or no longer matches the code beside it; a PR description or commit body that restates the diff or omits the why a reviewer cannot read off it; internal laundry (ticket dispositions, reviewer attributions, tool names); filler, hedging, em dashes, and wordy phrasing where a shorter one says the same. Quote the offending text in location and give the rewrite in suggested_fix. Skip code formatting, naming, and anything a linter enforces" }
 
 const REVIEW_SCHEMA = {
   type: 'object',
@@ -156,6 +163,25 @@ const REVIEW_SCHEMA = {
       properties: {
         ship: { type: 'boolean' },
         reason: { type: 'string', description: 'One sentence.' },
+      },
+    },
+  },
+}
+
+// Prose findings: REVIEW_SCHEMA's finding shape without severity, and no verdict.
+const { severity: _severity, ...PROSE_FINDING_PROPS } = REVIEW_SCHEMA.properties.findings.items.properties
+const PROSE_SCHEMA = {
+  type: 'object',
+  required: ['findings'],
+  additionalProperties: false,
+  properties: {
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['objection', 'confidence', 'location', 'suggested_fix'],
+        additionalProperties: false,
+        properties: PROSE_FINDING_PROPS,
       },
     },
   },
@@ -250,6 +276,15 @@ function lensPrompt(lens, art) {
   return `${preamble ? `${preamble}\n\n` : ''}${open} Report only findings that fall under this lens. End with a single verdict (ship / don't-ship) and one sentence why. Return everything via the structured output tool.`
 }
 
+// The advisory prose lens, diffs only. Apart from lensPrompt because it also
+// reads the commit messages and asks for neither severity nor verdict: nothing
+// it returns may move the review's verdict.
+function prosePrompt(art) {
+  const range = art.diffRange || ''
+  const preamble = adversarialPreamble(art)
+  return `${preamble ? `${preamble}\n\n` : ''}Review the prose of the diff ${art.diffRange || 'of the current branch'} through ONE lens only: ${PROSE_LENS.key} (${PROSE_LENS.brief}). Run \`${gitPrefix(art)} diff ${range}\` to see the changes and \`${gitPrefix(art)} log --format=%B ${range}\` for the commit messages, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context. Wording is this lens's subject, so a prose problem is not a style nit here. Findings are advisory: they carry no severity, and there is no verdict, so return findings only. Return everything via the structured output tool.`
+}
+
 // `git -C <repoDir>` so reviewers target the artifact's repo even when the
 // orchestrating session runs elsewhere (a workflow's cwd is the orchestrator's).
 function gitPrefix(art) {
@@ -257,9 +292,9 @@ function gitPrefix(art) {
 }
 
 // Fixed routing, every slot named (conventions, "Model selection", owns the
-// why): mechanical lenses on the worker tier (sonnet); reasoning lenses, the diff
-// correctness and testing lenses, and the verify skeptics on the reasoning tier
-// (fable). Nothing inherits: the coordinator runs a stronger tier, so an omitted
+// why): mechanical lenses, the advisory diff prose lens included, on the worker
+// tier (sonnet); reasoning lenses, the diff correctness and testing lenses, and
+// the verify skeptics on the reasoning tier (fable). Nothing inherits: the coordinator runs a stronger tier, so an omitted
 // model would put every slot on the coordinator tier and multiply usage across
 // the fan-out. Effort is pinned for the same reason: an omitted effort falls to
 // the agent definition's default (dev:researcher, which the skeptics run as, is
@@ -277,6 +312,7 @@ const DEFAULT_TIERS = {
   'simplicity-yagni': { model: 'sonnet', effort: 'medium' },
   testing: { model: 'fable', effort: 'high' },
   duplication: { model: 'sonnet', effort: 'medium' },
+  prose: { model: 'sonnet', effort: 'medium' },
   verify: { model: 'fable', effort: 'high' },
 }
 
@@ -450,6 +486,18 @@ function buildReviewers(art) {
       agentType: 'dev:reviewer',
     }).then(tag(lens.key, 'claude')),
   )
+}
+
+// No tag(): prose never joins the panel fold, so it needs no handle or family.
+function buildProse(art) {
+  return () =>
+    agent(prosePrompt(art), {
+      label: 'lens:prose',
+      phase: 'Review',
+      schema: PROSE_SCHEMA,
+      ...tierOpts(art, PROSE_LENS.key),
+      agentType: 'dev:reviewer',
+    })
 }
 
 // Synthesis: plain JS between agent stages, blind to model identity.
@@ -633,19 +681,25 @@ phase('Review')
 const ext = { names: runExternal ? (externalNames.length ? externalNames : [null]) : [] }
 ext.thunks = ext.names.map((n) => externalCourier(art, n))
 const claudeThunks = buildReviewers(art)
-const reviewers = [...claudeThunks, ...ext.thunks]
-const dispatched = reviewers.length
+// The advisory prose lens (diffs only) rides in the same parallel as the panel
+// so it adds no wall clock, but it is not a panel member: `dispatched` and the
+// panel counts exclude it.
+const proseThunks = art.artifactType === 'diff' ? [buildProse(art)] : []
+const panelThunks = [...claudeThunks, ...ext.thunks]
+const dispatched = panelThunks.length
 log(`Dispatching ${dispatched} reviewer(s) on ${art.artifactType} ${art.artifactPath || art.diffRange || ''}`.trim())
 // ONE parallel; parallel preserves order, so slots [0, claudeThunks.length)
-// are Claude votes and the rest are external couriers. The split is by
+// are Claude votes, the next ext.thunks.length slots are external couriers,
+// and the tail is the advisory prose lens. The split is by
 // DISPATCH IDENTITY (index offset), never by any field on the returned
 // object: the payload is courier-controlled. Do NOT filter nulls before
 // slicing; that would shift the offsets. A null in an EXTERNAL slot is
 // deliberately KEPT: externalVoteProblem turns it into a visible
 // external.dropped entry instead of a silent absence.
-const returnedAll = await parallel(reviewers)
+const returnedAll = await parallel([...panelThunks, ...proseThunks])
 const claudeVotes = returnedAll.slice(0, claudeThunks.length).filter(Boolean)
-const externalRaw = returnedAll.slice(claudeThunks.length)
+const externalRaw = returnedAll.slice(claudeThunks.length, claudeThunks.length + ext.thunks.length)
+const proseRaw = proseThunks.length ? returnedAll[claudeThunks.length + ext.thunks.length] : undefined
 const externalReturned = externalRaw.flatMap((r, i) => splitScriptVotes(r, ext.names[i]))
 // Only the script's explicit configured:false means "this machine has no
 // external reviewers"; a failed or garbled courier counts as configured, so it
@@ -726,6 +780,8 @@ phase('Synthesize')
 // ranked list, so a contested blocker still gates ship.
 const findings = rank(annotated.filter((f) => !f.verification || f.verification.status !== 'refuted'))
 const refuted = annotated.filter((f) => f.verification && f.verification.status === 'refuted')
+// Advisory prose findings: verified before speculative, never folded into `findings`.
+const proseFindings = proseRaw ? [...(proseRaw.findings || [])].sort((a, b) => (a.confidence === 'verified' ? 0 : 1) - (b.confidence === 'verified' ? 0 : 1)) : []
 
 return {
   artifact: { path: art.artifactPath || null, type: art.artifactType, range: art.diffRange || null },
@@ -737,6 +793,15 @@ return {
   hasBlockerOrMajor: findings.some((f) => f.severity !== 'minor'),
   // Unanimously refuted by skeptics; kept with full reasoning for transparency, not silently dropped.
   refuted,
+  // Advisory, diffs only (null for a spec or plan): style findings from the prose
+  // lens. Never in `findings`, never skeptic-checked, never in `verdicts` or the
+  // panel counts, so they cannot move hasBlockerOrMajor. A null return is
+  // ran:false, not a missing lens.
+  prose: art.artifactType !== 'diff'
+    ? null
+    : proseRaw
+      ? { ran: true, findings: proseFindings }
+      : { ran: false, reason: 'prose lens returned nothing', findings: [] },
   external: {
     requested: externalRequested,
     ran: realExternalVotes.map((r) => ({ handle: r.handle, family: r.family, kind: r.reviewer.kind, ...(r.reviewer.model ? { model: r.reviewer.model } : {}) })),

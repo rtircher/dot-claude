@@ -96,9 +96,9 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
   config error.
 - `tiers`: normally omitted. `DEFAULT_TIERS` in
   `<plugin>/workflows/adversarial-review.js` names every slot
-  (mechanical lenses sonnet at medium effort; reasoning lenses, diff correctness
-  included, and the verify skeptics fable at high) and accepts only
-  `fable`/`opus`/`sonnet`; no slot inherits the session model or effort. An override
+  (mechanical lenses, prose included, sonnet at medium effort; reasoning lenses,
+  diff correctness included, and the verify skeptics fable at high) and accepts
+  only `fable`/`opus`/`sonnet`; no slot inherits the session model or effort. An override
   replaces one key (a lens key or `verify`; values `{model, effort}`) and needs a
   concrete reason about this artifact: the user naming the effort, or a measured
   gain (a run at `high` missed what `xhigh` caught on this kind of change). A
@@ -112,7 +112,10 @@ Dispatch the whole pass as `Workflow` with `name: "dev:review-workflow"` and arg
 The workflow runs the lens panel, every configured external reviewer (couriers
 pinned to sonnet at low effort), schema-validated findings, a skeptic verify pass
 on uncorroborated blocker/major findings, and synthesis blind to model identity.
-Present its result per the Output section.
+For a diff it also runs the advisory `prose` lens in the same fan-out and returns
+it as `prose` (`{ran, findings}`; `null` for a spec or plan): those findings
+never reach `findings`, `verdicts`, or `panel`. Present its result per the
+Output section.
 
 **Extra lens.** When the loaded focus declares `Extra lens: <skill>`, run one
 direct agent alongside the Workflow (or the manual panel), the way a declared
@@ -161,6 +164,14 @@ Findings are
 it; **speculative** = inferred from a smell or a partial read. Every finding
 carries a label: a confident-sounding hunch that was never checked is the
 panel's main failure mode.
+
+For a diff, also dispatch the advisory prose lens in the same message: the
+`PROSE_LENS` constant beside `LENS_PANELS` (not a panel entry), with `model:` and
+`effort:` from `DEFAULT_TIERS.prose`. Besides the diff, it reads the commit
+messages (`git -C <repoDir> log --format=%B <range>`). It returns findings only
+(`{ objection, confidence, location, suggested_fix }`: no severity, no verdict).
+They skip synthesis and go straight to the Prose section; they never join the
+punch list, a verdict, or step 5's panel account.
 
 ### 4. External reviewers (additive; consent and binding apply on both paths)
 
@@ -300,7 +311,11 @@ manual path, report the same facts from your own fold. `external.configured:
 false` is a Claude-only panel, not a failure unless the user asked for
 external review; then append step 4's setup hint. Item 3 is the mandatory
 extra-lens line above. The step 5 `unverified (single reviewer, manual path)`
-mark feeds the contract's punch list on the manual path.
+mark feeds the contract's punch list on the manual path. Item 7 is the Prose
+section, for a diff only: on the Workflow path present the result's `prose` (a
+`ran: false` result prints `prose: not_run (<prose.reason>)`); on the manual
+path present step 3's prose findings, or `prose: not_run (<reason>)` when that
+agent returned nothing. A spec or plan has no Prose section.
 
 Then stop. Do not edit the artifact, do not block any next step, do not
 re-review. The user decides what to act on. If they ask you to address findings,

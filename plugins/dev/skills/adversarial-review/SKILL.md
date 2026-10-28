@@ -17,8 +17,8 @@ Hard caps this skill states and enforces.
 |---|---|---|
 | Quick | main session | at most 3 area reviewers, one message, never more than 3 in parallel; +1 focus-declared extra lens as a second wave after they return = 4 max; 1 when the diff is small |
 | Quick | subagent | 0 (inline single pass) |
-| Full | Workflow path | 4 + N + 12 for a diff or spec, 3 + N + 12 for a plan (N = external names), +1 when the extra lens fires |
-| Full | manual / cloud path | 3 to 4 lens agents; externals run through Bash |
+| Full | Workflow path | 5 + N + 12 for a diff (4 lenses + prose), 4 + N + 12 for a spec, 3 + N + 12 for a plan (N = external names), +1 when the extra lens fires |
+| Full | manual / cloud path | 3 to 5 lens agents (a diff adds the prose lens); externals run through Bash |
 | Gated | | at most 3 rounds, 50 + 3N total |
 
 Rounds exist only in gated review; the full tier's per-invocation budget is not multiplied by rounds.
@@ -92,14 +92,15 @@ Read `full.md` or `quick.md` (absolute path beside this file, in this skill's ba
 ## Output contract
 
 1. First line: `tier: quick|full · agents: N · <single-pass|areas: a, b, c> · externals: <who | none (quick) | shortfall (reason)> · focus: <file it came from | none | unavailable (no clone) | read from working tree>`. `N` includes the focus-declared extra lens when it fired.
-2. Full tier only: `panel: dispatched N lenses, returned M; missing: …`. A missing lens caps the verdict at don't-ship-yet.
+2. Full tier only: `panel: dispatched N lenses, returned M; missing: …`. A missing lens caps the verdict at don't-ship-yet. The advisory prose lens (item 7) is not a panel lens and is never counted here.
 3. Whenever the focus declares an `Extra lens:`, a mandatory line: `extra lens: <name>: ran | not applicable (<reason>) | not_run (<reason>)`.
 4. A reviewer orientation list of 3 to 6 `file:line` spots, written by the main session from the PR metadata and diff it already fetched, emitted in the same message as the dispatch, before agents return.
 5. A punch list, blocker / major / minor. Within a severity, verified before speculative. Duplicates collapse into one entry marked `x2`.
 6. A `## Simplify` section with `cut now` or `follow-up` per item; these never move the verdict.
-7. For a PR, the post plan: number every entry of items 5 and 6 `#1..#n`, show each entry's post tag (`[required]`, `[optional]`, `[follow-up]`), and end with the one-line plan, all per the Tags and What gets posted sections of `<plugin>/skills/post-review-comments/SKILL.md`. A Simplify `cut now` item is `[optional]`, a `follow-up` item `[follow-up]`.
-8. A verdict, led by verified findings. Quick: `ship (quick, unverified)` or `don't-ship (quick)`, never a bare `ship`. Full: `ship` or `don't-ship`.
-9. The next-step offer. Full tier: end with `Cheaper next time: say "quick pass" (1 to 4 agents, unverified).`
+7. Diff only: a `## Prose` section from the prose lens, one line per finding giving the quoted location, the problem, and the rewrite; these never move the verdict. A prose run that returned nothing prints `prose: not_run (<reason>)`, never a missing lens.
+8. For a PR, the post plan: number every entry of items 5 and 6, plus each Prose entry anchored on a diff line (a comment, docstring, or doc line), `#1..#n`, show each entry's post tag (`[required]`, `[optional]`, `[follow-up]`), and end with the one-line plan, all per the Tags and What gets posted sections of `<plugin>/skills/post-review-comments/SKILL.md`. A Simplify `cut now` item is `[optional]`, a `follow-up` item `[follow-up]`, a Prose entry `[optional]`. A Prose entry on the PR description or a commit message has nothing to anchor: list it unnumbered, outside the plan line.
+9. A verdict, led by verified findings. Quick: `ship (quick, unverified)` or `don't-ship (quick)`, never a bare `ship`. Full: `ship` or `don't-ship`.
+10. The next-step offer. Full tier: end with `Cheaper next time: say "quick pass" (1 to 4 agents, unverified).`
 
 Chat only. Nothing is posted without an explicit "post"; on that, use the `dev:post-review-comments` skill. "post" posts the plan as shown; "post + #n" adds a held finding.
 

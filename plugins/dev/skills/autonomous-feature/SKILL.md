@@ -283,8 +283,8 @@ the build is the asymmetry this phase exists to close — passing tests confirm 
 code does what you told it to, not that what you told it to do is right.
 
 Run the `adversarial-review` skill on the completed work (the branch diff). Its
-diff panel runs correctness, simplicity & YAGNI, testing, and duplication lenses.
-External reviewers run per *Third-party review* above. For a **multi-task** plan, also run the final cross-implementation
+diff panel runs correctness, simplicity & YAGNI, testing, and duplication lenses,
+beside an advisory prose lens whose findings never gate. External reviewers run per *Third-party review* above. For a **multi-task** plan, also run the final cross-implementation
 symmetry pass (`model: sonnet`, `opus` for a large or subtle diff) over the full branch diff to catch type asymmetry,
 parallel-structure drift, undocumented behavior, and cross-package coupling that
 per-task work misses.

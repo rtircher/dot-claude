@@ -60,16 +60,22 @@ belongs to the router.
 
    Each reviewer's brief is fixed: the four `brief`s of the `diff` panel in
    `LENS_PANELS` (`<plugin>/workflows/adversarial-review.js`) as one checklist,
-   in code order, verbatim.
+   in code order, verbatim, then the `brief` of `PROSE_LENS` (the constant beside
+   it) marked advisory: its findings carry no severity, go to the Prose section,
+   and never move the area verdict. Only the reviewer whose slice is first (or
+   the single pass) covers the PR description and commit messages, so they are
+   not reviewed once per area.
 
    The brief also carries the focus text, the PR description fenced as in
    the router's PR description section, the findings schema
    (`{ objection, severity (blocker | major | minor), confidence (verified |
-   speculative), location, suggested_fix }`), and a per-area verdict phrased
-   `ship (quick, unverified)` or `don't-ship (quick)`, never a bare `ship`.
+   speculative), location, suggested_fix }`; prose findings drop `severity`),
+   and a per-area verdict phrased `ship (quick, unverified)` or
+   `don't-ship (quick)`, never a bare `ship`.
 
 4. **Consolidate** in the main session with no extra agent: dedupe, promote
-   cross-area findings, then apply the router's output contract. When the
+   cross-area findings, route the prose findings to `## Prose` (never the punch
+   list or the verdict), then apply the router's output contract. When the
    extra lens ran, cross-check each blocker/major from the area reviewers:
    would the extra lens's model have caught it too? If not, name the
    mechanism it lacks, not just "it missed this".
