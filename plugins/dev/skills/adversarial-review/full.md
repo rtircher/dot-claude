@@ -113,9 +113,9 @@ The workflow runs the lens panel, every configured external reviewer (couriers
 pinned to sonnet at low effort), schema-validated findings, a skeptic verify pass
 on uncorroborated blocker/major findings, and synthesis blind to model identity.
 For a diff it also runs the advisory `prose` lens in the same fan-out and returns
-it as `prose` (`{ran, findings}`; `null` for a spec or plan): those findings
-never reach `findings`, `verdicts`, or `panel`. Present its result per the
-Output section.
+it as `prose` (`{ran, findings}`, plus `reason` when `ran` is false; `null` for a
+spec or plan): those findings never reach `findings`, `verdicts`, or `panel`.
+Present its result per the Output section.
 
 **Extra lens.** When the loaded focus declares `Extra lens: <skill>`, run one
 direct agent alongside the Workflow (or the manual panel), the way a declared
@@ -168,10 +168,11 @@ panel's main failure mode.
 For a diff, also dispatch the advisory prose lens in the same message: the
 `PROSE_LENS` constant beside `LENS_PANELS` (not a panel entry), with `model:` and
 `effort:` from `DEFAULT_TIERS.prose`. Besides the diff, it reads the commit
-messages (`git -C <repoDir> log --format=%B <range>`). It returns findings only
-(`{ objection, confidence, location, suggested_fix }`: no severity, no verdict).
-They skip synthesis and go straight to the Prose section; they never join the
-punch list, a verdict, or step 5's panel account.
+messages (`git -C <repoDir> log --format=%B <range>`, in the two-dot form: three
+dots in `git log` also takes in commits that landed on the base). It returns
+findings only (`{ objection, confidence, location, suggested_fix }`: no severity,
+no verdict). They skip synthesis and go straight to the Prose section; they never
+join the punch list, a verdict, or step 5's panel account.
 
 ### 4. External reviewers (additive; consent and binding apply on both paths)
 

@@ -83,6 +83,15 @@ test('diff with a courier: prose is read from the tail slot, not folded as exter
   assert.deepEqual(result.prose, { ran: true, findings: [verified] })
 })
 
+// A failed panel lens leaves a null in the middle of the one parallel(); the
+// prose answer must still be read by position, so filtering nulls before
+// slicing would hand it a different slot.
+test('diff with a failed panel lens: prose is still read from its own slot', async () => {
+  const { result } = await review(diffArgs, { 'lens:correctness': null, 'lens:prose': { findings: [verified] } })
+  assert.deepEqual(result.prose, { ran: true, findings: [verified] })
+  assert.deepEqual(result.panel, { dispatched: 4, returned: 3, dropped: 1 })
+})
+
 test('diff: the prose agent gets the range, the commit log, the preamble, no severity or verdict', async () => {
   const { dispatched } = await review(
     { ...diffArgs, focus: 'auth paths', prDescription: 'Adds the retry wrapper.' },
@@ -90,13 +99,40 @@ test('diff: the prose agent gets the range, the commit log, the preamble, no sev
   )
   const prose = dispatched.find((d) => d.opts.label === 'lens:prose')
   assert.ok(prose.prompt.includes('git -C "/tmp/x" diff main...HEAD'))
-  assert.ok(prose.prompt.includes('git -C "/tmp/x" log --format=%B main...HEAD'))
   assert.ok(prose.prompt.includes('In scope: auth paths.'))
   assert.ok(prose.prompt.includes('Adds the retry wrapper.'))
+  assert.ok(!prose.prompt.includes('No PR description was given'))
   assert.ok(!prose.prompt.includes("don't-ship"))
   const { opts } = prose
   assert.deepEqual([opts.agentType, opts.phase, opts.model, opts.effort], ['dev:reviewer', 'Review', 'sonnet', 'medium'])
   assert.deepEqual(opts.schema.required, ['findings'])
   assert.deepEqual(opts.schema.properties.findings.items.required, ['objection', 'confidence', 'location', 'suggested_fix'])
   assert.deepEqual(Object.keys(opts.schema.properties), ['findings'])
+})
+
+test('diff with no PR description: the prose agent is told not to report its absence', async () => {
+  const { dispatched } = await review(diffArgs, { 'lens:prose': { findings: [] } })
+  const prose = dispatched.find((d) => d.opts.label === 'lens:prose')
+  assert.ok(prose.prompt.includes('No PR description was given: do not report its absence.'))
+})
+
+// `git log A...B` is the symmetric difference, so the log takes the two-dot form.
+for (const [range, logRange] of [
+  ['main...HEAD', 'main..HEAD'],
+  ['main..HEAD', 'main..HEAD'],
+]) {
+  test(`diff ${range}: the diff keeps the range, the commit log reads ${logRange}`, async () => {
+    const { dispatched } = await review({ ...diffArgs, diffRange: range }, { 'lens:prose': { findings: [] } })
+    const { prompt } = dispatched.find((d) => d.opts.label === 'lens:prose')
+    assert.ok(prompt.includes(`git -C "/tmp/x" diff ${range}\``))
+    assert.ok(prompt.includes(`git -C "/tmp/x" log --format=%B ${logRange}\``))
+  })
+}
+
+test('diff with no diffRange: the prose prompt has no commit log command', async () => {
+  const { diffRange: _drop, ...noRange } = diffArgs
+  const { dispatched } = await review(noRange, { 'lens:prose': { findings: [] } })
+  const prose = dispatched.find((d) => d.opts.label === 'lens:prose')
+  assert.ok(prose.prompt.includes('git -C "/tmp/x" diff'))
+  assert.ok(!/git\b[^`]*\blog\b/.test(prose.prompt))
 })

@@ -28,7 +28,7 @@ appear in the body; after the tag comes the problem, why it matters, and the fix
 | Tag | Author's move | Findings |
 |---|---|---|
 | `[required]` | Fix before merge | A blocker or major on code this PR adds or changes |
-| `[optional]` | Their call, no reply needed | A verified minor on changed code, a Simplify `cut now` item, or a non-blocking question (body opens with "Question:") |
+| `[optional]` | Their call, no reply needed | A verified minor on changed code, a Simplify `cut now` item, a non-blocking question (body opens with "Question:"), or a Prose entry on a comment, docstring, or doc line (ranked after all the others; one on the PR description or a commit message has no diff line and is never posted) |
 | `[follow-up]` | Not this PR; a ticket or a "no" is enough | Code the PR does not change, work beyond the PR's goal, a Simplify `follow-up` item |
 
 A blocker or major is `[required]` only when it is verified and no skeptic contested it.

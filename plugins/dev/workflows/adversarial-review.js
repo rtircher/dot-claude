@@ -131,7 +131,7 @@ const LENS_PANELS = {
 // Advisory, diffs only: runs beside the panel, but its findings never reach
 // `findings`, the skeptics, `verdicts`, or the panel count, so it can neither
 // block nor, by failing, cap the verdict.
-const PROSE_LENS = { key: 'prose', brief: "the prose this change ships, judged against the conventions' \"Writing style\" and \"Code comments\" sections: the PR description when one is given, the commit messages in the range, and the code comments, docstrings, and docs the diff adds or changes. Flag a comment that narrates what the code plainly does instead of why, describes the change's history or process rather than the final state (\"now\", \"previously\", \"after review\", \"fixed X\"), or no longer matches the code beside it; a PR description or commit body that restates the diff or omits the why a reviewer cannot read off it; internal laundry (ticket dispositions, reviewer attributions, tool names); filler, hedging, em dashes, and wordy phrasing where a shorter one says the same. Quote the offending text in location and give the rewrite in suggested_fix. Skip code formatting, naming, and anything a linter enforces" }
+const PROSE_LENS = { key: 'prose', brief: "the prose this change ships, judged against the conventions' \"Writing style\" and \"Code comments\" sections: the PR description when one is given, the commit messages in the range, and the code comments, docstrings, and docs the diff adds or changes. Flag a comment or doc that narrates what the code plainly does instead of why, describes the change's history or process rather than the final state (\"now\", \"previously\", \"after review\", \"fixed X\"; a commit message describes a change by nature, so this rule is for comments and docs only), or no longer matches the code beside it; a PR description or commit body that restates the diff or omits the why a reviewer cannot read off it; internal laundry (ticket dispositions, reviewer attributions, tool names); filler, hedging, em dashes, and wordy phrasing where a shorter one says the same. Quote the offending text in location and give the rewrite in suggested_fix. Skip code formatting, naming, and anything a linter enforces" }
 
 const REVIEW_SCHEMA = {
   type: 'object',
@@ -281,8 +281,13 @@ function lensPrompt(lens, art) {
 // it returns may move the review's verdict.
 function prosePrompt(art) {
   const range = art.diffRange || ''
+  // `git log` reads A...B as the symmetric difference, which would also take in
+  // commits that landed on the base after the branch point: log the two-dot form.
+  // With no range there is nothing to scope the log to, so skip it.
+  const log = range ? ` and \`${gitPrefix(art)} log --format=%B ${range.replace('...', '..')}\` for the commit messages` : ''
+  const noPr = art.prDescription ? '' : ' No PR description was given: do not report its absence.'
   const preamble = adversarialPreamble(art)
-  return `${preamble ? `${preamble}\n\n` : ''}Review the prose of the diff ${art.diffRange || 'of the current branch'} through ONE lens only: ${PROSE_LENS.key} (${PROSE_LENS.brief}). Run \`${gitPrefix(art)} diff ${range}\` to see the changes and \`${gitPrefix(art)} log --format=%B ${range}\` for the commit messages, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context. Wording is this lens's subject, so a prose problem is not a style nit here. Findings are advisory: they carry no severity, and there is no verdict, so return findings only. Return everything via the structured output tool.`
+  return `${preamble ? `${preamble}\n\n` : ''}Review the prose of the diff ${art.diffRange || 'of the current branch'} through ONE lens only: ${PROSE_LENS.key} (${PROSE_LENS.brief}). Run \`${gitPrefix(art)} diff ${range}\` to see the changes${log}, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context.${noPr} Wording is this lens's subject, so a prose problem is not a style nit here. Findings are advisory: they carry no severity, and there is no verdict, so return findings only. Return everything via the structured output tool.`
 }
 
 // `git -C <repoDir>` so reviewers target the artifact's repo even when the
