@@ -98,7 +98,7 @@ export const meta = {
     'Internal workflow the adversarial-review skill dispatches for its full tier: lens-panel fan-out, schema-validated findings, blind synthesis into one ranked objection list. Not a user entry point; invoke the skill.',
   phases: [
     { title: 'Review', detail: 'one reviewer per lens (specs, plans, and diffs each have a panel), in parallel' },
-    { title: 'Verify', detail: 'a skeptic adjudicates each uncorroborated blocker/major finding (confirm / reframe / refute)' },
+    { title: 'Verify', detail: 'two skeptics adjudicate each uncorroborated blocker/major finding (confirm / reframe / refute)' },
     { title: 'Synthesize', detail: 'dedup + rank blind to model identity' },
   ],
 }
@@ -188,21 +188,21 @@ const PROSE_SCHEMA = {
 }
 
 // Adversarial verify. Lenses are disjoint by design, so a blocker/major usually
-// rides on one reviewer's read with no second opinion. One skeptic per batch
-// adjudicates each such finding (confirm / reframe / refute). A refuted finding
-// leaves `findings` but stays in `refuted` with the skeptic's reasoning.
-// Measured over 30 full-tier reviews, verify was about half the cost of a run;
-// a unanimity guard across three skeptics bought little beyond the one refutation.
+// rides on one reviewer's read with no second opinion. Two skeptics per batch
+// adjudicate each such finding (confirm / reframe / refute). A finding is demoted
+// to `refuted` only when both refute it, and stays in `refuted` with their reasoning.
+// One skeptic was tried to cut cost (verify was about half a run) but could refute
+// a real blocker or major unseen. Minor findings are never verified.
 //
 // Fan-out is BOUNDED: findings are ranked, chunked into groups of VERIFY_BATCH,
 // and each chunk gets VERIFY_VOTES skeptics, capped at MAX_VERIFY_AGENTS dispatches
-// (4 agents cover 20 findings). A per-finding fan-out is unbounded in the finding
+// (8 agents cover 20 findings). A per-finding fan-out is unbounded in the finding
 // count: 21 findings once dispatched 63 agents. Findings beyond the cap are kept,
 // annotated as contested-unverified (they still gate ship), and the drop is
 // logged, never a silent truncation.
-const VERIFY_VOTES = 1
+const VERIFY_VOTES = 2
 const VERIFY_BATCH = 5 // findings adjudicated per skeptic agent
-const MAX_VERIFY_AGENTS = 4 // hard ceiling on verify dispatches per run
+const MAX_VERIFY_AGENTS = 8 // hard ceiling on verify dispatches per run
 
 const VERDICT_SCHEMA = {
   type: 'object',
@@ -595,7 +595,7 @@ Return one verdict for EVERY finding listed, via the structured output tool.`
 }
 
 // Adjudicate skeptic ballots into a verification verdict. Demote (refuted) only when
-// every ballot that returned refutes; with one skeptic per batch that is its ballot.
+// every ballot that returned refutes.
 // A reframe keeps the finding, so a real-but-mis-framed issue is never buried.
 function adjudicate(votes) {
   const skeptics = votes.length
@@ -795,7 +795,7 @@ return {
   findings,
   // Confirmed AND contested blocker/major findings gate; only refuted ones drop out.
   hasBlockerOrMajor: findings.some((f) => f.severity !== 'minor'),
-  // Refuted by the skeptic; kept with full reasoning for transparency, not silently dropped.
+  // Refuted by both skeptics; kept with full reasoning for transparency, not silently dropped.
   refuted,
   // Advisory, diffs only (null for a spec or plan): style findings from the prose
   // lens. Never in `findings`, never skeptic-checked, never in `verdicts` or the

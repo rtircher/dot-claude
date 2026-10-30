@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 // Runs the whole adversarial-review script with stubbed globals and counts the
-// verify agents it dispatches: one skeptic per batch of 5, at most 4 agents.
+// verify agents it dispatches: two skeptics per batch of 5, at most 8 agents.
 const src = readFileSync(fileURLToPath(new URL('./adversarial-review.js', import.meta.url)), 'utf8').replace('export const meta', 'const meta')
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const run = new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', src)
@@ -35,15 +35,15 @@ async function verifyRun(n) {
   return { result, verifyLabels }
 }
 
-test('7 uncorroborated findings dispatch 2 verify agents, one per batch', async () => {
+test('7 uncorroborated findings dispatch 4 verify agents, two per batch', async () => {
   const { result, verifyLabels } = await verifyRun(7)
-  assert.deepEqual(verifyLabels.sort(), ['verify:0.0', 'verify:1.0'])
+  assert.deepEqual(verifyLabels.sort(), ['verify:0.0', 'verify:0.1', 'verify:1.0', 'verify:1.1'])
   assert.equal(result.refuted.length, 7)
 })
 
-test('25 findings dispatch 4 verify agents; 5 are capped out and stay contested', async () => {
+test('25 findings dispatch 8 verify agents; 5 are capped out and stay contested', async () => {
   const { result, verifyLabels } = await verifyRun(25)
-  assert.equal(verifyLabels.length, 4)
+  assert.equal(verifyLabels.length, 8)
   assert.equal(result.refuted.length, 20)
   const unverified = result.findings.filter((f) => f.verification.status === 'contested')
   assert.equal(unverified.length, 5)
