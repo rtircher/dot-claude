@@ -117,15 +117,13 @@ subagents.
   the remaining cost from what the same kind of step cost earlier in the session;
   if it fits, keep going. Respawn only when it clearly does not fit, at a natural
   boundary, and prefer a handover over mid-task compaction.
-- **From 50% context the `delegation-gate` hook denies bulk read/search in the
+- **From 50% context the `delegation-gate` hook denies bulk Read/Grep in the
   main loop after 3 round-trips per turn (1 past the last band).** Bulk means
-  Read without offset+limit, Grep content mode without head_limit, and Bash
-  whose output is unbounded by construction: `cat`/`grep -r`/`find` with no
-  limiter, whole-file `git diff`/`git show`, `git log` or `jj log -r` with no
-  `-n`, `gh pr view` without `--json`. A denial is not an error to retry:
-  dispatch a researcher/Explore subagent, or make the read targeted (Read with
-  offset+limit, Grep with head_limit, `--stat`/`--name-only`, `-n N`,
-  `| head -50`). Subagents are never gated. Kill switch for a session that
+  Read without offset+limit (or a limit over 250 lines) and Grep content mode
+  without head_limit. Bash is not gated: Claude Code truncates its output. A
+  denial is not an error to retry: dispatch a researcher/Explore subagent, or
+  make the read targeted (Read with offset+limit, Grep with head_limit).
+  Subagents are never gated. Kill switch for a session that
   legitimately needs deep inline reading: `DELEGATION_GATE=off`.
 <!-- main-session-only: end -->
 

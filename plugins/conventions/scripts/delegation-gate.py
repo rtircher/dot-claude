@@ -12,23 +12,19 @@ advice does not.
 What is gated (only when armed):
   - Read without offset/limit, or with limit > FREE_READ_LINES
   - Grep with output_mode "content" and no head_limit
-  - Bash pipelines whose output is unbounded by construction: a read/search
-    binary (cat, rg, grep, find, awk, sed) or a bulk SCM view (git diff/show/
-    log, jj log/diff/show, gh pr view/diff) with no limiter (`| head`,
-    `| tail`, `| wc`, grep -c/-l), no compact flag (--stat, --name-only,
-    --oneline, -n N, --json ...), and no downstream consumer. Leading
-    `cd X &&`, `VAR=... ;`, `echo ...;` and loop keywords are seen through,
-    so `cd repo && git diff a b -- f` is judged on the diff.
+
+Bash is not gated. Claude Code truncates every Bash result
+(`bashOutputMaxChars`), so one call adds at most a few thousand tokens, while
+judging a command by its shape mostly catches narrow lookups (`grep -n key f`,
+`jj log -r @`), and each denial costs a retry round-trip that re-reads the
+whole context.
 
 What is never gated:
   - Subagent tool calls — subagents are the delegates. Claude Code sets
     `agent_id` in the hook input only for them; subagent turns are written to
     their own subagents/*.jsonl, so transcript_path still names the parent's
     transcript and its context would otherwise be judged
-  - Targeted reads (offset+limit), compact greps, Glob
-  - Bash that writes (redirect, heredoc, sed -i, find -delete/-exec), that is
-    bounded (head/tail/wc/sed -n small range, --stat, -n N), or that feeds a
-    non-filter program (`cat f | python3 x.py`)
+  - Targeted reads (offset+limit), compact greps, Glob, Bash
   - Any turn that already dispatched an Agent (the model is delegating;
     verifying results inline is fine)
   - The first FREE_ROUNDTRIPS bulk-read round-trips of a turn (a round-trip
@@ -58,157 +54,10 @@ Env overrides:
 import importlib.util
 import json
 import os
-import re
-import shlex
 import sys
 
 TAIL_BYTES = 2 * 1024 * 1024
 FREE_READ_LINES = 250
-# Binaries whose default output is the whole input.
-READ_BINS = {"cat", "tac", "rg", "grep", "egrep", "fgrep", "find", "awk", "sed",
-             "bat", "less", "more", "strings"}
-# SCM views whose default output is unbounded (a whole-file diff, a full log).
-READ_SUBCMDS = {("git", "diff"), ("git", "show"), ("git", "log"),
-                ("jj", "log"), ("jj", "diff"), ("jj", "show"), ("jj", "op", "log"),
-                ("gh", "pr", "view"), ("gh", "pr", "diff")}
-READ_SUBCMDS_BY_BIN = {}
-for _k in READ_SUBCMDS:
-    READ_SUBCMDS_BY_BIN.setdefault(_k[0], []).append(_k)
-# A pipeline containing one of these is bounded regardless of what feeds it.
-LIMITERS = {"head", "tail", "wc", "md5sum", "sha1sum", "sha256sum", "cksum"}
-# Text filters: a pipeline ending in one of these still emits the (filtered)
-# stream. Anything else at the tail is a consumer and the pipeline is exempt.
-FILTERS = READ_BINS | {"sort", "uniq", "cut", "tr", "jq", "yq", "xargs", "tee",
-                       "column", "paste", "nl", "rev", "fold", "fmt", "expand",
-                       "unexpand"}
-# Flags that make an SCM view or a grep compact on their own.
-COMPACT_FLAGS_RE = re.compile(
-    r"(?:^|\s)(?:--stat|--shortstat|--numstat|--dirstat|--name-only|--name-status"
-    r"|--oneline|--no-patch|--summary|--check|--quiet|--exit-code|--json|--jq"
-    r"|--count|--files-with-matches|--files-without-match|--max-count(?:=|\s)\d+"
-    r"|--limit(?:=|\s)\d+|-[A-Za-z]*[cLlqs][A-Za-z]*|-m\s*\d+|-n\s*\d+|-\d+)(?=\s|$)"
-)
-WRITE_REDIRECT_RE = re.compile(r"(?<![<>\d])>{1,2}(?!&)")
-SED_RANGE_RE = re.compile(r"(\d+),(\d+)\s*p\b")
-SHELL_PREFIX_RE = re.compile(
-    r"^(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|do|then|else|elif|if|while|until|!"
-    r"|time|command|builtin|nice|sudo|env)\s+)+"
-)
-
-
-def split_unquoted(text, seps):
-    """Split on any of `seps` outside single/double quotes; drop heredoc bodies."""
-    out, buf, quote, i = [], [], None, 0
-    lines = text.split("\n")
-    kept = []
-    skip_until = None
-    for line in lines:
-        if skip_until is not None:
-            if line.strip() == skip_until:
-                skip_until = None
-            continue
-        m = re.search(r"<<-?\s*['\"]?(\w+)['\"]?", line)
-        if m:
-            skip_until = m.group(1)
-        kept.append(line)
-    text = "\n".join(kept)
-    while i < len(text):
-        ch = text[i]
-        if quote:
-            buf.append(ch)
-            if ch == quote:
-                quote = None
-            elif ch == "\\" and quote == '"' and i + 1 < len(text):
-                i += 1
-                buf.append(text[i])
-            i += 1
-            continue
-        if ch in ("'", '"'):
-            quote = ch
-            buf.append(ch)
-            i += 1
-            continue
-        matched = next((s for s in seps if text.startswith(s, i)), None)
-        if matched:
-            out.append("".join(buf))
-            buf = []
-            i += len(matched)
-            continue
-        buf.append(ch)
-        i += 1
-    out.append("".join(buf))
-    return [seg.strip() for seg in out if seg.strip()]
-
-
-def command_words(segment):
-    """The command name and its arguments, minus env assignments and shell keywords."""
-    seg = SHELL_PREFIX_RE.sub("", segment.strip())
-    try:
-        return shlex.split(seg, posix=True)
-    except ValueError:
-        return seg.split()
-
-
-def pipeline_is_bulk(pipeline):
-    stages = split_unquoted(pipeline, ["|"])
-    if not stages:
-        return False
-    if WRITE_REDIRECT_RE.search(pipeline):
-        return False  # writes somewhere; whatever reaches context is small
-    heads = []
-    for stage in stages:
-        words = command_words(stage)
-        if not words:
-            return False
-        heads.append(words)
-    first = heads[0]
-    name = os.path.basename(first[0])
-    args = " ".join(first[1:])
-    if name in READ_SUBCMDS_BY_BIN:
-        sub = tuple(first[: 1 + max(len(k) - 1 for k in READ_SUBCMDS_BY_BIN[name])])
-        if not any(sub[: len(k)] == k for k in READ_SUBCMDS_BY_BIN[name]):
-            return False
-    elif name not in READ_BINS:
-        return False
-    if (name, first[1] if len(first) > 1 else "") == ("jj", "log") and not re.search(
-        r"(?:^|\s)(?:-r|--revisions)(?:=|\s)", args
-    ):
-        return False
-    if name == "sed":
-        if re.search(r"(?:^|\s)(?:-i|--in-place)", args):
-            return False
-        m = SED_RANGE_RE.search(args)
-        if m and int(m.group(2)) - int(m.group(1)) <= FREE_READ_LINES:
-            return False
-        if re.search(r"(?:^|\s)-n\s+'?\d+p'?", args):
-            return False
-    if name == "find" and re.search(r"\s-(?:delete|exec|execdir|ok|okdir)\b", args):
-        return False
-    if COMPACT_FLAGS_RE.search(args):
-        return False
-    for words in heads[1:]:
-        tail_name = os.path.basename(words[0])
-        if tail_name in LIMITERS:
-            return False
-        if tail_name in ("grep", "rg", "egrep") and COMPACT_FLAGS_RE.search(
-            " ".join(words[1:])
-        ):
-            return False
-    last = os.path.basename(heads[-1][0])
-    if len(heads) > 1 and last not in FILTERS:
-        return False  # a consumer program, not a dump into context
-    return True
-
-
-def bash_is_bulk_read(command):
-    """True if any pipeline in `command` dumps unbounded output into context."""
-    try:
-        for segment in split_unquoted(command, ["&&", "||", ";", "\n"]):
-            if pipeline_is_bulk(segment):
-                return True
-        return False
-    except Exception:
-        return False  # ambiguity fails open
 
 
 def is_bulk_read(tool_name, tool_input):
@@ -222,8 +71,6 @@ def is_bulk_read(tool_name, tool_input):
             tool_input.get("output_mode") == "content"
             and tool_input.get("head_limit") is None
         )
-    if tool_name == "Bash":
-        return bash_is_bulk_read(tool_input.get("command", ""))
     return False
 
 
@@ -376,10 +223,9 @@ def main():
         "read/search round-trips inline. Do not retry this call as-is. Either "
         "(a) dispatch a researcher/Explore subagent (Agent tool, explicit "
         "model:) briefed to return conclusions, not file dumps; (b) make the "
-        f"read targeted — Read with offset+limit ≤{FREE_READ_LINES} lines, Grep "
-        "with head_limit, or in Bash a compact form (`--stat`/`--name-only`, "
-        "`-n N`, `| head -50`, `sed -n 'a,bp'` over a small range) — which stays "
-        "allowed; or (c) if this session is wrapping up, write the handover and "
+        f"read targeted — Read with offset+limit ≤{FREE_READ_LINES} lines or Grep "
+        "with head_limit — which stays allowed; or (c) if this session is "
+        "wrapping up, write the handover and "
         "respawn instead. "
         "(conventions: Delegation)"
     )

@@ -82,7 +82,7 @@ consumer's clone.
 - `bash plugins/dev/scaffold/tests/run-tests.sh` is the manual test gate for changes
   to the seed or scaffold (bash -n, shellcheck, and the fake-harness suites).
 - `python3 -m unittest discover -s plugins/conventions/tests` covers the
-  delegation-gate Bash detector (which commands count as a bulk read).
+  delegation gate (which Read/Grep calls count as bulk, and who is exempt).
 
 ## Versioning
 
