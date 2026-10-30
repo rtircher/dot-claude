@@ -98,7 +98,7 @@ export const meta = {
     'Internal workflow the adversarial-review skill dispatches for its full tier: lens-panel fan-out, schema-validated findings, blind synthesis into one ranked objection list. Not a user entry point; invoke the skill.',
   phases: [
     { title: 'Review', detail: 'one reviewer per lens (specs, plans, and diffs each have a panel), in parallel' },
-    { title: 'Verify', detail: 'skeptics adjudicate each uncorroborated blocker/major finding (confirm / reframe / refute)' },
+    { title: 'Verify', detail: 'a skeptic adjudicates each uncorroborated blocker/major finding (confirm / reframe / refute)' },
     { title: 'Synthesize', detail: 'dedup + rank blind to model identity' },
   ],
 }
@@ -188,22 +188,21 @@ const PROSE_SCHEMA = {
 }
 
 // Adversarial verify. Lenses are disjoint by design, so a blocker/major usually
-// rides on one reviewer's read with no second opinion.
-// Skeptics adjudicate each such finding (confirm / reframe / refute); a finding is
-// demoted to `refuted` ONLY on unanimous refutation, so a real-but-mis-framed issue
-// is never buried by a wording nitpick.
+// rides on one reviewer's read with no second opinion. One skeptic per batch
+// adjudicates each such finding (confirm / reframe / refute). A refuted finding
+// leaves `findings` but stays in `refuted` with the skeptic's reasoning.
+// Measured over 30 full-tier reviews, verify was about half the cost of a run;
+// a unanimity guard across three skeptics bought little beyond the one refutation.
 //
-// Fan-out is BOUNDED. The naive shape (VERIFY_VOTES agents per finding) is
-// unbounded in the finding count and has blown up in practice: a spec review
-// with 21 uncorroborated blocker/major findings dispatched 63 verify agents.
-// Instead, skeptics adjudicate BATCHES: findings are
-// ranked, chunked into groups of VERIFY_BATCH, and each chunk gets VERIFY_VOTES
-// skeptics, capped at MAX_VERIFY_AGENTS dispatches total. Findings beyond the
-// cap are kept, annotated as contested-unverified (they still gate ship), and
-// the drop is logged — never a silent truncation.
-const VERIFY_VOTES = 3
+// Fan-out is BOUNDED: findings are ranked, chunked into groups of VERIFY_BATCH,
+// and each chunk gets VERIFY_VOTES skeptics, capped at MAX_VERIFY_AGENTS dispatches
+// (4 agents cover 20 findings). A per-finding fan-out is unbounded in the finding
+// count: 21 findings once dispatched 63 agents. Findings beyond the cap are kept,
+// annotated as contested-unverified (they still gate ship), and the drop is
+// logged, never a silent truncation.
+const VERIFY_VOTES = 1
 const VERIFY_BATCH = 5 // findings adjudicated per skeptic agent
-const MAX_VERIFY_AGENTS = 12 // hard ceiling on verify dispatches per run
+const MAX_VERIFY_AGENTS = 4 // hard ceiling on verify dispatches per run
 
 const VERDICT_SCHEMA = {
   type: 'object',
@@ -595,9 +594,9 @@ For each finding, judge whether a REAL underlying issue exists, independent of h
 Return one verdict for EVERY finding listed, via the structured output tool.`
 }
 
-// Adjudicate skeptic ballots into a verification verdict. Demote (refuted) ONLY on
-// unanimous refutation; any high-confidence support, or a non-unanimous split, keeps
-// the finding (confirmed/contested) so a real-but-mis-framed issue is never buried.
+// Adjudicate skeptic ballots into a verification verdict. Demote (refuted) only when
+// every ballot that returned refutes; with one skeptic per batch that is its ballot.
+// A reframe keeps the finding, so a real-but-mis-framed issue is never buried.
 function adjudicate(votes) {
   const skeptics = votes.length
   const refuted = votes.filter((v) => v.verdict === 'refuted').length
@@ -606,7 +605,7 @@ function adjudicate(votes) {
   const reframedAs = (votes.find((v) => v.verdict === 'reframe' && v.corrected_framing) || {}).corrected_framing || null
   let status
   if (skeptics === 0) status = 'contested' // unverifiable, do not clear it
-  else if (refuted === skeptics) status = 'refuted' // unanimous refutation, demote
+  else if (refuted === skeptics) status = 'refuted' // every ballot refutes, demote
   else if (supportsHigh || supports > refuted) status = 'confirmed'
   else status = 'contested'
   return {
@@ -742,7 +741,7 @@ if (verified.length) {
   const batches = []
   for (let i = 0; i < indexed.length; i += VERIFY_BATCH) batches.push(indexed.slice(i, i + VERIFY_BATCH))
   log(
-    `Verifying ${verified.length} uncorroborated blocker/major finding(s): ${batches.length} batch(es) x ${VERIFY_VOTES} skeptics = ${batches.length * VERIFY_VOTES} agent(s)` +
+    `Verifying ${verified.length} uncorroborated blocker/major finding(s): ${batches.length} batch(es) x ${VERIFY_VOTES} skeptic(s) = ${batches.length * VERIFY_VOTES} agent(s)` +
       (capSkipped.length ? `; ${capSkipped.length} finding(s) beyond the ${MAX_VERIFY_AGENTS}-agent cap stay unverified (kept as contested)` : ''),
   )
   const votes = (
@@ -781,7 +780,7 @@ capSkipped.forEach((f) => verificationByFinding.set(f, adjudicate([])))
 const annotated = deduped.map((f) => ({ ...f, verification: verificationByFinding.get(f) || null }))
 
 phase('Synthesize')
-// Demote only the unanimously-refuted; confirmed and contested findings stay in the
+// Demote only the refuted; confirmed and contested findings stay in the
 // ranked list, so a contested blocker still gates ship.
 const findings = rank(annotated.filter((f) => !f.verification || f.verification.status !== 'refuted'))
 const refuted = annotated.filter((f) => f.verification && f.verification.status === 'refuted')
@@ -794,9 +793,9 @@ return {
   panel: { dispatched, returned: panelVotes.length, dropped: dispatched - panelVotes.length },
   verdicts: panelVotes.map((r) => ({ reviewer: r.handle, ship: r.verdict.ship, reason: r.verdict.reason })),
   findings,
-  // Confirmed AND contested blocker/major findings gate; only unanimously-refuted ones drop out.
+  // Confirmed AND contested blocker/major findings gate; only refuted ones drop out.
   hasBlockerOrMajor: findings.some((f) => f.severity !== 'minor'),
-  // Unanimously refuted by skeptics; kept with full reasoning for transparency, not silently dropped.
+  // Refuted by the skeptic; kept with full reasoning for transparency, not silently dropped.
   refuted,
   // Advisory, diffs only (null for a spec or plan): style findings from the prose
   // lens. Never in `findings`, never skeptic-checked, never in `verdicts` or the

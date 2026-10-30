@@ -17,14 +17,14 @@ Hard caps this skill states and enforces.
 |---|---|---|
 | Quick | main session | at most 3 area reviewers, one message, never more than 3 in parallel; +1 focus-declared extra lens as a second wave after they return = 4 max; 1 when the diff is small |
 | Quick | subagent | 0 (inline single pass) |
-| Full | Workflow path | 5 + N + 12 for a diff (4 lenses + prose), 4 + N + 12 for a spec, 3 + N + 12 for a plan (N = external names), +1 when the extra lens fires |
+| Full | Workflow path | 5 + N + 4 for a diff (4 lenses + prose), 4 + N + 4 for a spec, 3 + N + 4 for a plan (N = external names), +1 when the extra lens fires |
 | Full | manual / cloud path | 3 to 5 lens agents (a diff adds the prose lens); externals run through Bash |
-| Gated | | at most 3 rounds, 50 + 3N total |
+| Gated | | at most 3 rounds, 32 + 3N total |
 
 Rounds exist only in gated review; the full tier's per-invocation budget is not multiplied by rounds.
 
 - Every review prints its tier and actual agent count on the first line.
-- Quick never escalates to full on its own; it offers escalation and states the cost, for example "full panel: about 20 agents".
+- Quick never escalates to full on its own; it offers escalation and states the cost, for example "full panel: about 13 agents".
 - Full offers nothing cheaper automatically. Its output ends with a one-line hint that "quick pass" exists, so the cheap path is discoverable without full picking it for the user.
 
 ## Step 0: resolve input

@@ -81,7 +81,7 @@ belongs to the router.
    mechanism it lacks, not just "it missed this".
 
 5. **Offer next steps.** Escalate to the full panel, stating its agent count
-   (for example "full panel: about 20 agents" at work with the extra lens),
+   (for example "full panel: about 13 agents" at work with the extra lens),
    fix the verified blockers, draft inline comments, or stop.
 
 This tier omits externals, the verify pass, the digest, and synthesis voting,
