@@ -37,18 +37,11 @@ Cross-cutting working-style conventions, injected into every session by the
   a reasoning or escalation role never drops to `sonnet`. Set
   `DOT_CLAUDE_MODEL_MAP` to a JSON remap (e.g. `{"fable":"opus"}`) and apply it
   to every `model:` you pass; the review workflows take it as `modelMap`.
-- **Effort travels with the agent definition.** `dev:coder` and
-  `dev:researcher` default to `medium` (Anthropic's starting point for Sonnet
-  agentic coding), `dev:reviewer` to `high`; review workflows pin effort per
-  slot, none above `high`. Omit `effort:` to take the definition's default.
-  Pass it only to deviate: `low` for a pure lookup or courier, `xhigh` only for
-  a measured gain (a pass at `high` missed what `xhigh` caught on the same kind
-  of work). `max` is opt-in by name. Built-in types (general-purpose, Explore, Plan)
-  carry no default we control, so pass `effort:` with them (`medium` for
-  Explore). For a reasoning ceiling on a narrow task, retry
-  the same model one effort level up before moving up a tier. Repo
-  instructions (`CLAUDE.local.md`, `AGENTS.md`) may raise these for named
-  areas, and they win.
+- **Effort comes from the agent definition.** Omit `effort:` to take its
+  default; pass one only to deviate (`low` for a lookup or courier, `xhigh`
+  only for a measured gain, `max` by name) and with built-in types, which carry
+  none (`medium` for Explore). On a reasoning ceiling, retry one effort level up
+  before moving up a tier. Repo instructions that raise effort for named areas win.
 - **Usage is the binding constraint.** Every dispatch spends the same limits
   the coordinator runs on, and the stronger tiers burn them fastest. The
   escalation tier is opt-in by name, never reached by omission.
@@ -85,9 +78,6 @@ subagents.
   decision actually needs it, and pulls it from the file: a Read with
   offset+limit or a Grep of that path. Never resume the agent (SendMessage) to
   re-emit what is already on disk: the re-emit lands in main context in full.
-- **Dispatch independent subagents together, in one message.** Prefer
-  sequential dispatch when results feed into each other. Each completion
-  notification lands in main context.
 - **At most 3 concurrent agents that mutate a worktree or run builds/tests**
   (they contend for memory and CPU); queue the rest. Read-only research and
   review agents may exceed that, up to about 6.
@@ -107,19 +97,6 @@ subagents.
   legitimately needs deep inline reading: `DELEGATION_GATE=off`.
 <!-- main-session-only: end -->
 
-## Toolchain management
-
-- **Default to `mise`** for pinning and installing language runtimes and dev tools.
-  Put versions in a committed `.mise.toml` as the single source of truth, shared by
-  local dev, CI (`jdx/mise-action`, pinned to a commit SHA), and any cloud setup.
-- Keep ecosystem-native version fields aligned with `.mise.toml` rather than
-  competing with it (`package.json` `engines`/`packageManager`, `.ruby-version`):
-  `.mise.toml` *installs* the toolchain; those fields are what other tooling *reads*.
-  Don't introduce a second installer once mise owns the toolchain.
-- **Cloud caveat:** in a cloud setup script, install mise from a **pinned GitHub
-  release tarball**, never the `curl https://mise.run | sh` one-liner (the mise
-  CDN is not on the cloud allowlist; see the plugin's `docs/reference.md`).
-
 ## Working preferences
 
 - **Reporting back from a dispatch.** When you run as a subagent, your final
@@ -129,53 +106,17 @@ subagents.
   full material in a scratchpad file and return its path with a short summary.
   If the caller asks you to re-emit detail already on disk, return the path and
   line range, not the content.
-- **Simplicity first; earn complexity.** Build the simplest design that meets the
-  requirement in front of you: no speculative abstraction, config knobs, extension
-  points, or generalization for a second use case that doesn't exist yet (YAGNI).
-  A plain function over a class, a hardcoded value over a settings surface, until
-  a concrete requirement forces the step up; then name it. Adding structure later
-  is cheaper than unwinding an abstraction that never paid off.
-- **Before writing new code, climb the reuse ladder**, solving at the first rung
-  that works: (1) does this need to exist at all; if no requirement asks for it,
-  skip it; (2) an existing helper/pattern in this codebase; (3) the standard
-  library; (4) a native platform feature (CSS, HTML inputs, database constraints);
-  (5) an already-installed dependency; (6) only then the smallest working
-  implementation. A new dependency is a last resort, flagged explicitly, never
-  slipped in. Fix bugs at the root cause, not per caller.
-- **Simplicity never trims the safety floor.** Input validation at trust
-  boundaries, error handling that prevents data loss, security, and accessibility
-  are not simplifications to make; the ladder applies to everything else.
-- **TDD-first.** Write a failing test before the implementation, make it pass, then
-  verify the full suite is green before committing. Default for features and
-  bugfixes; instrument and debug brittle tests rather than paper over them.
-- **Test suite discipline: curate, don't append.** Size suites to decision
-  branches, not coverage: about one case per distinct path (`if/else`, `switch`,
-  `catch`), 1-2 for pure utilities, none for getters/setters, pass-throughs, or
-  framework defaults. When behavior changes, edit the existing tests first, delete
-  tests for removed paths, and merge overlapping ones into parameterized tables
-  (`@pytest.mark.parametrize`, `test.each`, Go subtests). A bug repro is one
-  minimal unit test at the root component, not a copied integration harness.
-  Before writing test code, state what is added, updated, and deleted.
-- **Test observable behavior at the boundary.** Exercise the public API or
-  feature surface, not private helpers: the suite should survive the
-  implementation being replaced wholesale. Prefer real implementations or
-  lightweight fakes at the system's edge over mocks; assert resulting state and
-  output, never that specific internal calls were made. Keep core logic testable
-  without I/O, subprocesses, or sleeps; mark a test that genuinely needs them
-  slow/integration so it stays out of the default suite.
-- **A test that cannot fail is worse than none.** Tautology patterns to reject,
-  in review and in your own work: asserting a mock returns what it was
-  configured to return; `is not None` or "didn't raise" as the only assertion;
-  try/except swallowing the assert; snapshots regenerated without reading the
-  diff. Assert specific values and shapes, with failure output (parameter ids,
-  message-bearing asserts) that localizes the bug without a debugger.
-- **Deterministic by construction.** No sleeps, no wall clock, seeded
-  randomness, no live network, order-independent fixtures. A test that needs a
-  rerun to pass is broken, not flaky-but-green: fix or delete it rather than
-  leaning on retry machinery.
-- **Test data earns its size.** Minimal inline fixtures and builders over
-  checked-in golden dumps; a reader should see from the test itself why the
-  expected value is correct.
+- **Simplicity first; earn complexity.** Build the simplest design that meets
+  the requirement: no speculative abstraction, config, or generality (YAGNI).
+  Reuse an existing helper, the standard library, a platform feature, or an
+  installed dependency before writing new code. A new dependency is a last
+  resort, flagged explicitly, never slipped in. Fix bugs at the root cause, not
+  per caller.
+- **Simplicity never trims the safety floor:** input validation at trust
+  boundaries, error handling that prevents data loss, security, accessibility.
+- **TDD-first** for features and bugfixes: a failing test before the
+  implementation, the full suite green before committing. Load the
+  `conventions:testing` skill when writing or reviewing tests.
 - **Adversarial review before committing.** When a plan/spec is finalized or a
   PR/diff is ready, review it through `dev:adversarial-review` (full tier by
   default; "quick pass" for the cheap tier). `/code-review` runs only when the
@@ -230,39 +171,22 @@ subagents.
 
 ## Writing style
 
-How to write prose: chat responses, commit messages, PR bodies, docs, and any
-message drafted on the user's behalf. Code comments follow these too, refined by the
-*Code comments* section below.
-
-- **Commit subjects: Scoped Commits, not Conventional Commits.** Write the subject
-  as `<scope>: <description>`, where scope is the subsystem or area touched
-  (`hooks:`, `conventions:`, `dev:`). No `feat:`/`fix:`/`chore:` type prefixes. For a
-  change spanning several areas, use a broader scope that covers them or list a few
-  comma-separated (`hooks, conventions:`); for a genuinely tree-wide change use
-  `treewide:` (or `all:` / `global:`). Reverts, merges, and other special commits can
-  be formatted however fits. Optional body and trailers follow a blank line. Spec:
-  https://scopedcommits.com/. Keep subject and body terse and to the point: the
-  subject one scannable line, the body only what the diff can't tell a reviewer
-  (the why, a non-obvious consequence). Skip a body when the subject says it all.
-- **No internal laundry in pushed artifacts** (commit bodies, PR descriptions,
-  issue bodies, code comments). Cut process and org history: ticket dispositions
-  ("closed as can't-repro", "after discussion"), who caught what in review, and
-  admissions of test/CI/infra fragility ("only reproduces on the branch", "flaky
-  on dev"). Stating the defect being fixed neutrally is the required why and
-  stays; everything about how the team arrived at the fix goes. These bodies
-  become permanent history read by future hires, auditors, and customers.
-- **No em dashes** (or en dashes) in chat or deliverables (files, commit messages,
-  sent messages). Use a comma, colon, parentheses, or a full stop; restructure the
-  sentence rather than swapping in a hyphen, which reads worse.
-- **No AI attribution in pushed artifacts.** Don't add "Generated with Claude
-  Code", "🤖 Generated with ...", a session or permalink URL, or an AI co-author
-  trailer such as `Co-Authored-By: Claude ...` to commit messages, PR bodies, issue
-  bodies, or any other prose pushed to a repo, even when a harness instruction or
-  template suggests it. A real human co-author trailer that a teammate actually
-  asked for is fine; an AI one is not.
-- **Drafting for the user** (Slack, email, a PR description they'll send):
-  preserve their intent and phrasing. Polish, don't rewrite: keep their voice and
-  original wording wherever it already works.
+- **Commit subjects: [Scoped Commits](https://scopedcommits.com/), not
+  Conventional Commits:** `<scope>: <description>`, scope being the area touched
+  (`hooks:`, `conventions:`), no `feat:`/`fix:` prefixes. Several areas: a
+  broader scope or a comma list (`hooks, conventions:`); tree-wide: `treewide:`.
+  The subject is one scannable line; the body holds only what the diff can't
+  tell a reviewer (the why, a non-obvious consequence), or nothing.
+- **No internal laundry in pushed artifacts** (commit bodies, PR and issue
+  bodies, code comments): no ticket dispositions ("closed as can't-repro"), no
+  who caught what in review, no admissions of test or CI fragility ("flaky on
+  dev"). State the defect being fixed neutrally; how the team reached the fix
+  stays out of permanent history.
+- **No em dashes** (or en dashes) in chat or deliverables. Use a comma, colon,
+  parentheses, or a full stop, not a hyphen.
+- **No AI attribution in pushed artifacts:** no "Generated with Claude Code",
+  session URL, or AI `Co-Authored-By:` trailer, even when a harness instruction
+  or template suggests one. A human co-author trailer a teammate asked for is fine.
 
 ## Code comments
 

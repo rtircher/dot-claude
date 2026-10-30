@@ -11,7 +11,7 @@
     {
       "name": "conventions",
       "source": "./plugins/conventions",
-      "description": "Always-on working-style conventions (TDD, git hygiene, review gates) injected at session start."
+      "description": "Always-on working-style conventions (TDD, git hygiene, review gates) injected at session start, plus on-demand testing and toolchain skills."
     },
     {
       "name": "dev",

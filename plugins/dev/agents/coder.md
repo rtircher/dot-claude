@@ -29,8 +29,8 @@ RULES:
 - Follow the project's testing convention (TDD where it applies): make a failing
   test pass, then confirm the suite is green before committing.
 - Implement only what the task names. Anything beyond it, a new dependency
-  included, is a report-back, not a bonus. (The conventions' simplicity rules,
-  reuse ladder, and safety floor apply as written.)
+  included, is a report-back, not a bonus. (The conventions' simplicity rules
+  and safety floor apply as written.)
 - Commit your work with the tool that owns this checkout. `test -f .jj/repo` means a
   jj workspace (no `.git`): `jj describe -m "<subject>"`, then `jj new`. `test -f .git`
   means a git worktree: `git add` + `git commit`. Never run `jj` in a git worktree, even

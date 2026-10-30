@@ -1,6 +1,6 @@
 {
   "name": "conventions",
-  "description": "Always-on personal working-style conventions injected at session start.",
+  "description": "Always-on personal working-style conventions injected at session start, plus on-demand testing and toolchain skills.",
   "author": {
     "name": "Renaud Tircher",
     "email": "327881+rtircher@users.noreply.github.com"

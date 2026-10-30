@@ -22,7 +22,7 @@ never add an AI co-author trailer to compensate.
 
 ## Testing-rule sources
 
-The "Test observable behavior at the boundary" rule distills matklad's
+The `testing` skill's "Test observable behavior at the boundary" rule distills matklad's
 "How to Test" (https://matklad.github.io/2021/05/31/how-to-test.html):
 test features at observable boundaries (the suite should survive an
 implementation swap), prefer real implementations/fakes over interaction
@@ -32,13 +32,6 @@ snapshot sprawl outside languages with strong tooling for it), the shared
 `check`-function pattern, coverage marks, and its skepticism of TDD for
 small-scale design (our TDD-first rule is workflow discipline, not design
 methodology; the two coexist).
-
-## mise in cloud setup scripts
-
-`mise.run` and the mise CDN are NOT on the Claude-Code-web Trusted allowlist,
-but `github.com` and `nodejs.org` are. In a cloud setup script, install mise
-from a pinned GitHub release tarball, not the `curl https://mise.run | sh`
-one-liner.
 
 ## Opting out of the git workflow rules
 
