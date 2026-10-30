@@ -312,7 +312,11 @@ manual path, report the same facts from your own fold. `external.configured:
 false` is a Claude-only panel, not a failure unless the user asked for
 external review; then append step 4's setup hint. Item 3 is the mandatory
 extra-lens line above. The step 5 `unverified (single reviewer, manual path)`
-mark feeds the contract's punch list on the manual path. Item 7 is the Prose
+mark feeds the contract's punch list on the manual path. Item 5's Refuted
+section comes from the result's `refuted` array on the Workflow path: print
+each entry's `objection`, `severity`, `location`, and the reasoning from its
+`verification.votes`; the manual path has no verify pass, so it prints no
+Refuted section. Item 7 is the Prose
 section, for a diff only: on the Workflow path present the result's `prose` (a
 `ran: false` result prints `prose: not_run (<prose.reason>)`); on the manual
 path present step 3's prose findings, or `prose: not_run (<reason>)` when that
