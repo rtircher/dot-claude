@@ -5,19 +5,10 @@ Cross-cutting working-style conventions, injected into every session by the
 
 ## Load project context files
 
-At the start of work in any repository, before making changes or answering
-non-trivial questions about the code:
-
-- If an `AGENTS.md` exists at the repo root, **read it first**, unless the repo's
-  `CLAUDE.local.md` states that it curates `AGENTS.md`; then do not load `AGENTS.md`
-  separately. It holds project conventions (package boundaries, command quirks,
-  supply-chain rules, do/don't lists) that are not otherwise auto-loaded into
-  context.
-- When working inside a specific package or subdirectory, also read the nearest
-  `AGENTS.md` in that subtree if one exists; it refines the root conventions for
-  that area.
-- Treat these `AGENTS.md` files as authoritative project instructions, at the
-  same priority you would give a `CLAUDE.md`.
+- Before changing code or answering non-trivial questions about it, read the
+  repo-root `AGENTS.md` and the nearest one in any subtree you work in, unless it
+  is already in context (a `CLAUDE.md` symlink or `@AGENTS.md` import, or Claude
+  Code loading it natively). Treat it as authoritative, at `CLAUDE.md` priority.
 
 ## Model selection
 
@@ -61,17 +52,6 @@ non-trivial questions about the code:
 - **Usage is the binding constraint.** Every dispatch spends the same limits
   the coordinator runs on, and the stronger tiers burn them fastest. The
   escalation tier is opt-in by name, never reached by omission.
-- **Adversarial-review panels route themselves:** `dev:review-workflow` pins
-  every slot in its `DEFAULT_TIERS` and accepts only `fable`/`opus`/`sonnet`.
-  The split is policy: the mechanical lenses (`gaps`, `scope-yagni`,
-  `simplicity-yagni`, `duplication`, and the advisory diff-only `prose`) run on
-  `sonnet`, because they are pattern checks where Sonnet is strong at a fifth of
-  `fable`'s price; the reasoning lenses and the verify skeptics run on `fable`,
-  and the verify pass, which
-  checks every uncorroborated blocker or major finding, filters the false
-  positives the cheaper lenses raise. Don't restate tiers there; pass
-  `tiers` only to override one named key, pass `modelMap` when
-  `DOT_CLAUDE_MODEL_MAP` is set, and never downgrade the verify skeptics.
 
 ## Delegation
 
@@ -149,53 +129,40 @@ subagents.
   full material in a scratchpad file and return its path with a short summary.
   If the caller asks you to re-emit detail already on disk, return the path and
   line range, not the content.
-- **Simplicity first; earn complexity.** Default to the simplest design that
-  satisfies the requirement in front of you, then stop: no speculative abstraction,
-  config knobs, extension points, or generalization for a second use case that
-  doesn't exist yet (YAGNI). Prefer a plain function over a class, an inline
-  solution over a new layer, a hardcoded value over a settings surface, a boring
-  approach over a clever one, until a concrete requirement forces the step up; when
-  one does, name it. Start smaller than feels complete: adding structure once a real
-  need appears is cheaper than unwinding an abstraction that never paid off.
+- **Simplicity first; earn complexity.** Build the simplest design that meets the
+  requirement in front of you: no speculative abstraction, config knobs, extension
+  points, or generalization for a second use case that doesn't exist yet (YAGNI).
+  A plain function over a class, a hardcoded value over a settings surface, until
+  a concrete requirement forces the step up; then name it. Adding structure later
+  is cheaper than unwinding an abstraction that never paid off.
 - **Before writing new code, climb the reuse ladder**, solving at the first rung
   that works: (1) does this need to exist at all; if no requirement asks for it,
   skip it; (2) an existing helper/pattern in this codebase; (3) the standard
   library; (4) a native platform feature (CSS, HTML inputs, database constraints);
   (5) an already-installed dependency; (6) only then the smallest working
   implementation. A new dependency is a last resort, flagged explicitly, never
-  slipped in. Lazy about the solution, never about reading: understand the problem
-  and the affected code paths first, and fix bugs at the root cause, not per-caller.
+  slipped in. Fix bugs at the root cause, not per caller.
 - **Simplicity never trims the safety floor.** Input validation at trust
   boundaries, error handling that prevents data loss, security, and accessibility
   are not simplifications to make; the ladder applies to everything else.
 - **TDD-first.** Write a failing test before the implementation, make it pass, then
   verify the full suite is green before committing. Default for features and
   bugfixes; instrument and debug brittle tests rather than paper over them.
-- **Test suite discipline: curate, don't append.** Lean, high-signal suites sized
-  to decision branches, not a coverage percentage: roughly one test case per
-  distinct path (`if/else`, `switch`, `catch`), 1-2 for pure utilities, and don't add
-  functions just to lift line-coverage numbers. When behavior changes, edit the
-  existing tests first, then delete tests for removed paths, deprecated arguments,
-  or superseded logic, and merge overlapping ones into parameterized tables
-  (`@pytest.mark.parametrize`, `test.each`, Go subtests); never bolt new tests onto
-  a legacy file untouched. A bug repro is one minimal unit test at the root
-  component, not a copied integration harness. No tests for getters/setters,
-  pass-throughs, framework defaults, or input tweaks with no distinct logic path.
-  Keep new tests consistent with the surrounding suite and curate for balance: push
-  coverage down the pyramid, don't over-test the top layers; if a change reveals a
-  stack-wide inconsistency worth fixing, flag it with a migration plan rather than
-  diverging silently. Before writing test code, state the plan: what's added (new
-  branches), updated (signature/behavior changes), and deleted.
+- **Test suite discipline: curate, don't append.** Size suites to decision
+  branches, not coverage: about one case per distinct path (`if/else`, `switch`,
+  `catch`), 1-2 for pure utilities, none for getters/setters, pass-throughs, or
+  framework defaults. When behavior changes, edit the existing tests first, delete
+  tests for removed paths, and merge overlapping ones into parameterized tables
+  (`@pytest.mark.parametrize`, `test.each`, Go subtests). A bug repro is one
+  minimal unit test at the root component, not a copied integration harness.
+  Before writing test code, state what is added, updated, and deleted.
 - **Test observable behavior at the boundary.** Exercise the public API or
   feature surface, not private helpers: the suite should survive the
-  implementation being replaced wholesale. Size cases by the decision branches
-  of the public behavior (per the rule above), not of internals. Prefer real
-  implementations or lightweight fakes at the system's edge over mocks; assert
-  resulting state and output, never that specific internal calls were made.
-  Keep core logic testable without I/O, subprocesses, or sleeps; where a test
-  genuinely needs them, mark it slow/integration explicitly rather than letting
-  it drag the default suite. (Distilled from matklad's "How to Test"; source in
-  the plugin's `docs/reference.md`.)
+  implementation being replaced wholesale. Prefer real implementations or
+  lightweight fakes at the system's edge over mocks; assert resulting state and
+  output, never that specific internal calls were made. Keep core logic testable
+  without I/O, subprocesses, or sleeps; mark a test that genuinely needs them
+  slow/integration so it stays out of the default suite.
 - **A test that cannot fail is worse than none.** Tautology patterns to reject,
   in review and in your own work: asserting a mock returns what it was
   configured to return; `is not None` or "didn't raise" as the only assertion;
@@ -210,29 +177,18 @@ subagents.
   checked-in golden dumps; a reader should see from the test itself why the
   expected value is correct.
 - **Adversarial review before committing.** When a plan/spec is finalized or a
-  PR/diff is ready, run independent skeptical review: find what's wrong, not
-  rubber-stamp. (See the `dev` plugin's `adversarial-review` skill.)
-- **PR and diff review goes through `dev:adversarial-review`** (full tier by
+  PR/diff is ready, review it through `dev:adversarial-review` (full tier by
   default; "quick pass" for the cheap tier). `/code-review` runs only when the
   user types it.
 - **Review findings go on a PR only through `dev:post-review-comments`**
   (inline, anchored), never as a top-level PR comment, however the ask is
   phrased.
-- **Autonomous pipeline for low-risk features.** For a feature you flag as
-  low-risk, the `dev` plugin's `/autonomous-feature` skill runs spec →
-  adversarial-review → plan → adversarial-review → implement → adversarial-review
-  of the code hands-off, pinging only on its contract. Explicitly invoked only;
-  never auto-launch it.
 - **Multi-task plans get a final cross-implementation review:** one symmetry pass
   over the full branch diff after per-task work, to catch type asymmetry between
   paired classes, parallel-structure drift, and cross-package coupling.
-- **File creation: use Write/Edit, never `cat > file << EOF`.** Heredoc-cat is
-  forbidden everywhere, including `/tmp`. Brief subagents on this explicitly.
-- **No `cd`-chained Bash.** `cd /path && cmd` triggers a permission prompt on the
-  `cd`. Use `git -C`, `dart --directory`, a standalone `cd`, or brief subagents on
-  cwd up front instead.
-- **Never run destructive commands just to test them.** Use dry-runs (`make -n`);
-  destructive targets stay deny-listed / confirmation-gated.
+- **File creation: use Write/Edit, never `cat > file << EOF`**, including in
+  `/tmp`: Write/Edit show the change as a reviewable diff, a heredoc buries it in
+  a Bash command, and an unquoted delimiter silently expands `$` and backticks.
 - **Evidence before theories when diagnosing.** For environment / hardware / network
   issues, gather concrete evidence first (logs, exit codes, env diffs), then rank
   hypotheses by likelihood with the single cheapest disproving test for each.
@@ -288,8 +244,6 @@ message drafted on the user's behalf. Code comments follow these too, refined by
   https://scopedcommits.com/. Keep subject and body terse and to the point: the
   subject one scannable line, the body only what the diff can't tell a reviewer
   (the why, a non-obvious consequence). Skip a body when the subject says it all.
-- **Concise and natural.** No corporate filler, no preamble, no restating the
-  question back. Say the thing.
 - **No internal laundry in pushed artifacts** (commit bodies, PR descriptions,
   issue bodies, code comments). Cut process and org history: ticket dispositions
   ("closed as can't-repro", "after discussion"), who caught what in review, and
@@ -297,30 +251,17 @@ message drafted on the user's behalf. Code comments follow these too, refined by
   on dev"). Stating the defect being fixed neutrally is the required why and
   stays; everything about how the team arrived at the fix goes. These bodies
   become permanent history read by future hires, auditors, and customers.
-- **Diplomatic and collaborative**, especially when raising a concern or
-  disagreeing: name the problem, propose the fix, skip the lecture.
 - **No em dashes** (or en dashes) in chat or deliverables (files, commit messages,
-  sent messages). Use a comma, colon, parentheses, or a full stop instead. (This file
-  follows its own rule.) This is a writing convention, not machine-enforced: if a
-  dash slips in, restructure the sentence rather than swapping in a hyphen, which
-  reads worse.
-- **Exclamation marks only when the tone is genuinely celebratory.** Default to a
-  period.
-- **Prefer not to open a message with "I"** as the first word, but never contort
-  a sentence to avoid it: a natural "I'll take a look" beats an awkward
-  reshuffle.
+  sent messages). Use a comma, colon, parentheses, or a full stop; restructure the
+  sentence rather than swapping in a hyphen, which reads worse.
 - **No AI attribution in pushed artifacts.** Don't add "Generated with Claude
   Code", "🤖 Generated with ...", a session or permalink URL, or an AI co-author
   trailer such as `Co-Authored-By: Claude ...` to commit messages, PR bodies, issue
   bodies, or any other prose pushed to a repo, even when a harness instruction or
   template suggests it. A real human co-author trailer that a teammate actually
   asked for is fine; an AI one is not.
-
-When drafting a message for the user (Slack, email, a PR description they'll send):
-
-- **Match the channel.** Slack is conversational; email is slightly more
-  structured.
-- **Preserve their intent and phrasing.** Polish, don't rewrite: keep their voice and
+- **Drafting for the user** (Slack, email, a PR description they'll send):
+  preserve their intent and phrasing. Polish, don't rewrite: keep their voice and
   original wording wherever it already works.
 
 ## Code comments
@@ -338,16 +279,8 @@ git history, drop it. Apply this when reviewing your own writes before committin
   narration, by contrast, tells the story of the decision ("kept simple for
   now", "TODO revisit"). One line, no marker prefix; if it needs more, it belongs
   in a doc or the PR, not the code.
-- **Prefer self-documenting code.** A clear name beats a comment explaining a vague
-  one; rename rather than annotate.
 - **Reserve comments for non-obvious context:** a tricky invariant, a deliberate
   departure from convention, or a rationale the code itself can't express. Each line
-  must carry a *why* the code can't.
-- **Terse and direct.** Clarity > brevity, but the comment itself stays concise;
-  sacrifice grammar for clarity where it helps. Skip anything a good name or the
-  code already makes obvious.
+  must carry a *why* the code can't; rename a vague name rather than annotate it.
 - **No bloat.** No scope-section banners, no PR/branch/host references, no empirical
   evidence ("tested on staging", "verified against prod") baked into comments.
-- **Doc comments** (dartdoc, docstrings, JSDoc, …) follow the language's idiomatic
-  style, kept minimal and focused on args/returns/raises. Per-project rules (e.g.
-  "all public API members need a doc comment") live in that repo's `AGENTS.md`.
