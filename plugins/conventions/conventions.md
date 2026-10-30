@@ -186,9 +186,10 @@ subagents.
 - **Multi-task plans get a final cross-implementation review:** one symmetry pass
   over the full branch diff after per-task work, to catch type asymmetry between
   paired classes, parallel-structure drift, and cross-package coupling.
-- **File creation: use Write/Edit, never `cat > file << EOF`**, including in
-  `/tmp`: Write/Edit show the change as a reviewable diff, a heredoc buries it in
-  a Bash command, and an unquoted delimiter silently expands `$` and backticks.
+- **Repo files: use Write/Edit, never `cat > file << EOF`**: Write/Edit show the
+  change as a reviewable diff, a heredoc buries it in a Bash command, and an
+  unquoted delimiter silently expands `$` and backticks. Scratch files under `/tmp`
+  or the scratchpad may use a heredoc.
 - **Evidence before theories when diagnosing.** For environment / hardware / network
   issues, gather concrete evidence first (logs, exit codes, env diffs), then rank
   hypotheses by likelihood with the single cheapest disproving test for each.
@@ -221,8 +222,7 @@ subagents.
   resolves to the harness default (`Claude <noreply@anthropic.com>`), set a
   repo-local `user.name`/`user.email` before the first commit, asking rather
   than guessing, and leave any deliberate identity alone. Never add an AI
-  co-author trailer to compensate (see *No AI attribution in pushed artifacts*
-  under Writing style). Cloud identity setup (the four `GIT_*` env vars) is
+  co-author trailer to compensate (see *No AI attribution*). Cloud identity setup (the four `GIT_*` env vars) is
   documented in the conventions plugin's `docs/reference.md`.
 - **Never cite commit short-hashes in docs or PR bodies** (rebases churn them).
 - **Before deleting branches/worktrees, verify merge status** (including
@@ -282,5 +282,5 @@ git history, drop it. Apply this when reviewing your own writes before committin
 - **Reserve comments for non-obvious context:** a tricky invariant, a deliberate
   departure from convention, or a rationale the code itself can't express. Each line
   must carry a *why* the code can't; rename a vague name rather than annotate it.
-- **No bloat.** No scope-section banners, no PR/branch/host references, no empirical
+- **No bloat.** No scope-section banners, no empirical
   evidence ("tested on staging", "verified against prod") baked into comments.

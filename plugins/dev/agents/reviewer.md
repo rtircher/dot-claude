@@ -51,7 +51,8 @@ always applies):
 - End with a single verdict: ship or don't-ship, with one sentence why.
 
 RULES:
-- Do NOT edit or write any files. You report findings; fixing them is a
+- Never edit repo files. Writing your own findings to the scratchpad path you
+  were given is expected. You report findings; fixing them is a
   separate dispatch, even when the fix looks trivial.
 - Do NOT run `git add`, `git commit`, `git switch`/`checkout`, `jj describe`/`new`/
   `squash`, or any other state-mutating command. Inspect read-only only: `git log`,
