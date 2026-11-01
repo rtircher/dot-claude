@@ -6,13 +6,13 @@ context size (input + cache-read + cache-creation tokens), and when it crosses
 a new band emits a nudge to delegate or respawn (see conventions.md,
 "Delegation"). Each band warns once per session.
 
-The budget is min(effective session window, 250k). The window is derived from
+The budget is min(effective session window, 300k). The window is derived from
 the model id on the same transcript entry the usage comes from: models with a
 native 1M window count as 1M, everything else — including unknown or future
 ids — falls back to 200k (conservative: warns early, never late). A "[1m]"
 marker in the model id also counts as 1M, though in practice the API echo
 strips that suffix, so a 200k-native model running the 1m beta is treated as
-200k. The 250k cap is a cost budget, not the physical window: on 1M-window
+200k. The 300k cap is a cost budget, not the physical window: on 1M-window
 models the whole context is still re-read every turn, so the cap bounds the
 per-turn spend instead of letting the session grow to the window.
 
@@ -29,7 +29,7 @@ fifth to a third of the budget before any work happens.
 
 Env overrides:
   CONTEXT_WATCH_WINDOW  budget in tokens; when set, used verbatim (skips the
-                        model lookup and the 250k cap)
+                        model lookup and the 300k cap)
   CONTEXT_WATCH_BANDS   comma-separated warn thresholds in percent (default 50,70,85)
 """
 import json
@@ -39,7 +39,7 @@ import tempfile
 
 TAIL_BYTES = 512 * 1024
 
-BUDGET_CAP = 250_000
+BUDGET_CAP = 300_000
 FALLBACK_WINDOW = 200_000
 # Canonical model-id prefixes with a native 1M window, from the Claude Code
 # model table (2.1.219). 200k-native and unknown ids both fall back to 200k,

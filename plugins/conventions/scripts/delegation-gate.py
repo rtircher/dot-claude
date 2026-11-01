@@ -45,7 +45,7 @@ Env overrides:
                              no dispatches, so advice and teeth now arrive together)
   DELEGATION_GATE_ROUNDTRIPS free bulk round-trips per turn when armed (default 3)
   CONTEXT_WATCH_WINDOW       shared with context-watch: when set, used verbatim;
-                             otherwise the budget is min(model window, 250k) via
+                             otherwise the budget is min(model window, 300k) via
                              context-watch's effective_window() (200k fallback
                              if the helper can't load — stricter, never laxer)
   CONTEXT_WATCH_BANDS        shared with context-watch (default 50,70,85; only
@@ -75,7 +75,7 @@ def is_bulk_read(tool_name, tool_input):
 
 
 def compute_budget(model):
-    """min(model window, 250k) via context-watch's helper; env override wins."""
+    """min(model window, 300k) via context-watch's helper; env override wins."""
     override = os.environ.get("CONTEXT_WATCH_WINDOW")
     if override:
         return int(override)
