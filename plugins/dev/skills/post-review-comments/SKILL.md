@@ -12,9 +12,10 @@ Reference for turning a finding list into inline GitHub review comments that lan
 
 Naive posting misplaces comments, for two independent reasons:
 
-1. **The batch reviews endpoint anchors by diff `position`, not file line.** `POST
-   /repos/{o}/{r}/pulls/{n}/reviews` with `comments[].line` is unreliable, it can be
-   interpreted as a diff-position offset, so comments drift or land on blank `+` lines.
+1. **A comment without `commit_id` and `side` anchors by diff `position`.** Without them,
+   `comments[].line` can be read as a diff-position offset, so comments drift or land on
+   blank `+` lines. With `commit_id`, `line` and `side`, the batch reviews endpoint anchors
+   as reliably as the single-comment one.
 2. **Line numbers parsed from `gh pr diff` drift by 1 to 3 lines** vs the actual file. The
    `+N` hunk arithmetic is easy to miscount (context lines, `@@` bases), and the drift is
    silent, the comment still posts, just on the wrong line.
@@ -32,8 +33,12 @@ appear in the body; after the tag comes the problem, why it matters, and the fix
 | `[follow-up]` | Not this PR; a ticket or a "no" is enough | Code the PR does not change, work beyond the PR's goal, a Simplify `follow-up` item |
 
 A blocker or major is `[required]` only when it is verified and no skeptic contested it.
-A missing test is `[required]` only when the untested code is the core of what the PR does;
-otherwise it is `[optional]`.
+**Test findings post as one comment.** Every finding about the tests (a missing edge case,
+an assert that cannot fail, a test that repeats another, a fixture that hides the code under
+test) goes into a single `[required]` comment: one bullet per finding with its `file:line`,
+anchored on the most load-bearing line of the main test file. It blocks the PR until the
+tests get another pass, without a thread per gap. On a re-review, only test findings on
+lines changed since the last round go in, as a new comment that links the earlier one.
 Confirm a speculative, contested, or `unverified (single reviewer, manual path)` one against
 the code at the pinned SHA first; if you cannot, post it as an `[optional]` question.
 
@@ -85,8 +90,23 @@ the import line, the function signature).
 
 ## The procedure
 
-Post each comment with `scripts/post-comment.sh` (beside this file), one call per finding.
-Write the body, tag first, to a file, then run from a clone of the PR's repo:
+Post a round's comments as **one review** with `scripts/post-review.sh` (beside this file):
+one notification for the author instead of one per comment. Write each body, tag first, to a
+file, list them in a plan file (`[{path, pattern, body_file, side?}]`), then run from a clone
+of the PR's repo:
+
+```bash
+post-review.sh --pr <n> --remote <remote> --plan <plan.json> --summary-file <file> [--sha <sha>]
+```
+
+It locates every line the way `post-comment.sh` does, stages the comments as a pending
+review (visible only to you), checks each comment's `diff_hunk`, then submits the review as
+`COMMENT`. If any comment landed on the wrong line, it deletes the pending review, prints
+where each landed and exits 3: fix the pattern and rerun. It refuses to start while you have
+another pending review on the PR (see Pending-review collision).
+
+Use `scripts/post-comment.sh` for a single comment, or to repost one bad comment of a
+submitted review:
 
 ```bash
 post-comment.sh --pr <n> --remote <remote> --path <file> --pattern '<ERE for the line>' \
@@ -104,7 +124,7 @@ script runs the fixed sequence:
    (it must match exactly one line). That file's line numbers are what GitHub's `line`
    parameter expects; never use line numbers from `gh pr diff`.
 3. **Post** to the single-comment endpoint `/pulls/{n}/comments` with `line` and
-   `side: RIGHT`, not the batch endpoint. For a comment on a deleted line, make the same
+   `side: RIGHT`. For a comment on a deleted line, make the same
    `gh api` call by hand with `side: LEFT` and the old-file line.
 4. **Verify** via the last line of the comment's `diff_hunk`, which is the line it attached
    to. Exit 3 means it landed elsewhere: the script prints the delete command; delete and
@@ -115,15 +135,13 @@ inside a diff hunk of the PR, without posting.
 
 ## Grouping vs individual comments
 
-- **One combined review** (summary + inline comments, submitted as `event: COMMENT`) reads
-  best, but the batch endpoint is the fragile one. If you use it, verify all anchors and be
-  ready to fix, see the trade-off below.
-- **Individual comments** are anchor-reliable but appear ungrouped. Prefer these when
-  correctness matters more than tidiness.
+- **One review per round** is the default: `post-review.sh`. Its pending-stage check means
+  a misplaced comment never reaches the author.
+- **Individual comments** (`post-comment.sh`) are for a single finding, or a fix to a
+  submitted review.
 - A **submitted** review cannot be deleted (only *pending* ones can). If a submitted review
-  has misplaced comments, delete the individual bad comments
-  (`DELETE /pulls/comments/{id}`) and repost them with `post-comment.sh`, you cannot re-add them to the
-  already-submitted review, so they become standalone. Anchors correct beats grouping tidy.
+  has a misplaced comment, delete that comment (`DELETE /pulls/comments/{id}`) and repost it
+  with `post-comment.sh`; it becomes standalone.
 
 ## Pending-review collision
 
