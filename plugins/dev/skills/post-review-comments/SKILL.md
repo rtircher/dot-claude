@@ -1,6 +1,6 @@
 ---
 name: post-review-comments
-description: Post review findings as inline GitHub PR comments that land on the right lines (SHA-pinned anchors, one comment per finding, verified via diff_hunk), each tagged [required], [optional], or [follow-up], with optional ones capped at 5. Use when the user says "post these comments", "post the review", or "post inline comments on the PR", after any review (adversarial-review, a manual read, or another review skill). Posts only on an explicit ask.
+description: Post review findings as inline GitHub PR comments that land on the right lines (SHA-pinned anchors, one comment per finding, verified via diff_hunk), each tagged [required], [optional], or [follow-up], with optional ones capped at 5 per PR across rounds. Use when the user says "post these comments", "post the review", or "post inline comments on the PR", after any review (adversarial-review, a manual read, or another review skill). Posts only on an explicit ask.
 ---
 
 # Posting review comments
@@ -32,18 +32,37 @@ appear in the body; after the tag comes the problem, why it matters, and the fix
 | `[follow-up]` | Not this PR; a ticket or a "no" is enough | Code the PR does not change, work beyond the PR's goal, a Simplify `follow-up` item |
 
 A blocker or major is `[required]` only when it is verified and no skeptic contested it.
+A missing test is `[required]` only when the untested code is the core of what the PR does;
+otherwise it is `[optional]`.
 Confirm a speculative, contested, or `unverified (single reviewer, manual path)` one against
 the code at the pinned SHA first; if you cannot, post it as an `[optional]` question.
 
 ## What gets posted
 
-Every `[required]` and `[follow-up]` posts. At most **5** `[optional]` post, taken in the
-review's rank order; the rest are **held**. Never posted:
+Every `[required]` and `[follow-up]` posts. At most **5** `[optional]` post per PR, across
+all rounds, taken in the review's rank order; the rest are **held**. Never posted:
 
 - a speculative minor;
 - a trade-off or gap the PR description already discloses, unless the finding shows the
   disclosure is wrong or understates the risk;
-- a preference with no consequence.
+- a preference with no consequence;
+- a nitpick: naming, style, wording, a duplicated constant or helper, an assert that could
+  be stronger. An `[optional]` posts only when it shows a real risk: a bug, or a missing
+  test on a path that can break in production.
+
+**A re-review posts less.** Before building the plan, list the top-level inline comments
+this account already left on the PR (`gh api repos/{o}/{r}/pulls/{n}/comments --paginate`,
+your login, `in_reply_to_id` null). If there are any, this round is a re-review:
+
+- A finding already raised, resolved or not, is never posted again in new words. When the
+  fix for it is wrong, post that as a new `[required]` that links the earlier comment.
+- `[required]` posts when not already raised.
+- `[optional]` and `[follow-up]` post only on lines changed since the previous round, and
+  `[optional]` only while slots remain: 5 minus the `[optional]` comments already on the PR.
+  The rest are held.
+
+Name the reason in the plan line: `held: #7 (PR optional cap)`, `held: #8 (unchanged since
+last round)`, `not posted: #3 (raised earlier)`.
 
 Number every finding `#1..#n` (the review's numbering when it has one) and write one plan
 line:
