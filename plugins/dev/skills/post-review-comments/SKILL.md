@@ -33,14 +33,13 @@ appear in the body; after the tag comes the problem, why it matters, and the fix
 | `[follow-up]` | Not this PR; a ticket or a "no" is enough | Code the PR does not change, work beyond the PR's goal, a Simplify `follow-up` item |
 
 A blocker or major is `[required]` only when it is verified and no skeptic contested it.
-**Test findings post as one comment.** Every finding about the tests (a missing edge case,
-an assert that cannot fail, a test that repeats another, a fixture that hides the code under
-test) goes into a single `[required]` comment: one bullet per finding with its `file:line`,
-anchored on the most load-bearing line of the main test file. It blocks the PR until the
-tests get another pass, without a thread per gap. On a re-review, only test findings on
-lines changed since the last round go in, as a new comment that links the earlier one.
-Confirm a speculative, contested, or `unverified (single reviewer, manual path)` one against
-the code at the pinned SHA first; if you cannot, post it as an `[optional]` question.
+**Test findings: critical ones inline, the rest as one comment.** A test that cannot fail on
+the PR's core behaviour, or a missing test on a path that can break in production, posts
+inline on its line as its own `[required]`. Every other test-quality finding (structure, a
+missing edge case, a test that repeats another, a fixture that hides the code under test)
+goes into a single `[required]` comment on the first changed line of the main test file,
+one bullet per finding with its `file:line`. On a re-review, only test findings on lines
+changed since the last round go in, as a new comment that links the earlier one.
 
 ## What gets posted
 
