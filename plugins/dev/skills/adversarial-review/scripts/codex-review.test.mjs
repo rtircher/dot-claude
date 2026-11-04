@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -76,5 +76,41 @@ test('CLI exits 2 with a companion-not-found reason when no companion is install
     assert.match(out.stderr, /companion not found/)
   } finally {
     rmSync(empty, { recursive: true, force: true })
+  }
+})
+
+test('CLI passes the configured model and effort to the structured turn', () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-review-stub-'))
+  const scripts = join(root, 'scripts')
+  const lib = join(scripts, 'lib')
+  const companion = join(scripts, 'codex-companion.mjs')
+  const capture = join(root, 'options.json')
+  mkdirSync(lib, { recursive: true })
+  writeFileSync(companion, '')
+  writeFileSync(join(lib, 'codex.mjs'), `
+    import { writeFileSync } from 'node:fs'
+    export async function runAppServerTurn(cwd, options) {
+      writeFileSync(process.env.CODEX_REVIEW_CAPTURE, JSON.stringify({ cwd, model: options.model, effort: options.effort, sandbox: options.sandbox, hasSchema: Boolean(options.outputSchema) }))
+      return { status: 0, finalMessage: JSON.stringify({ verdict: 'approve', summary: 'ok', findings: [], next_steps: [] }), stderr: '' }
+    }
+  `)
+  try {
+    const out = spawnSync(process.execPath, [SCRIPT, '--cwd', process.cwd(), '--range', 'HEAD~1...HEAD', '--companion', companion, '--model', 'gpt-6.1-sol', '--effort', 'high'], {
+      encoding: 'utf8',
+      env: { ...process.env, CODEX_REVIEW_CAPTURE: capture },
+    })
+    assert.equal(out.status, 0, out.stderr)
+    assert.deepEqual(JSON.parse(readFileSync(capture, 'utf8')), {
+      cwd: process.cwd(),
+      model: 'gpt-6.1-sol',
+      effort: 'high',
+      sandbox: 'read-only',
+      hasSchema: true,
+    })
+    const vote = JSON.parse(out.stdout)
+    assert.equal(vote.reviewer.model, 'gpt-6.1-sol')
+    assert.equal(vote.reviewer.effort, 'high')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 })

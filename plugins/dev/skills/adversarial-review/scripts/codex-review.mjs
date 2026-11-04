@@ -2,18 +2,14 @@
 /**
  * Codex CLI reviewer for the adversarial-review workflow (DIFF ONLY).
  *
- * Drives the codex plugin's companion (read-only, structured output), adapts its
- * review-output schema into the workflow's REVIEW_SCHEMA, and prints one JSON
+ * Drives the codex plugin's read-only app-server adapter with structured output,
+ * adapts its review schema into the workflow's REVIEW_SCHEMA, and prints one JSON
  * object stamped `reviewer.kind: 'codex-review-script'` so the workflow can bind
  * this vote to the artifact and refuse to count a run that did not really happen.
  *
- * Binding is BY-DIGEST over an ENFORCED range form: the companion always reviews
- * merge-base(base, HEAD)...HEAD (lib/git.mjs buildBranchComparison), so the only
- * range this wrapper can honestly hash is `<ref>...HEAD`. Any other range is
- * refused (exit 1) rather than hashed: hashing `git diff main..HEAD` or
- * `main...feature-x` while Codex reviews something else would make the digest
- * gate pass on bytes Codex never saw. Base is derived internally from the range
- * (its left side); there is deliberately NO independent --base flag.
+ * Binding is BY-DIGEST over an ENFORCED `<ref>...HEAD` range. Any other range is
+ * refused rather than hashing bytes outside the review target. Base is derived
+ * from the range's left side; there is no independent --base flag.
  *
  * The digest is sha256 over the exact bytes of `git -C <cwd> diff <range>`
  * (node:crypto, no deps), emitted as TOP-LEVEL `artifactSha256`, the same
@@ -22,6 +18,7 @@
  *
  * Usage:
  *   node codex-review.mjs --cwd <repo> --range <ref>...HEAD \
+ *     [--model gpt-6.1-sol] [--effort high] \
  *     [--companion <path>] [--target "main...HEAD @ <sha>"]
  * Exit: 0 ok, 1 usage (including a refused range), 2 codex error or no
  *       usable companion, 3 unusable/non-conforming output
@@ -31,7 +28,8 @@ import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 // critical/high/medium/low (4) -> blocker/major/minor (3). medium and low both
 // map to minor DELIBERATELY: the panel's scale has no fourth slot, and skeptic
@@ -40,6 +38,38 @@ import { join } from 'node:path'
 const SEVERITY_MAP = { critical: 'blocker', high: 'major', medium: 'minor', low: 'minor' }
 // numeric confidence -> verified/speculative; >= 0.8 is "verified".
 const VERIFIED_AT = 0.8
+const DEFAULT_MODEL = 'gpt-6.1-sol'
+const DEFAULT_EFFORT = 'high'
+const EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+
+const CODEX_REVIEW_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict', 'summary', 'findings', 'next_steps'],
+  properties: {
+    verdict: { enum: ['approve', 'needs-attention'] },
+    summary: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['severity', 'title', 'body', 'file', 'line_start', 'line_end', 'confidence', 'recommendation'],
+        properties: {
+          severity: { enum: ['critical', 'high', 'medium', 'low'] },
+          title: { type: 'string' },
+          body: { type: 'string' },
+          file: { type: 'string' },
+          line_start: { type: 'integer' },
+          line_end: { type: 'integer' },
+          confidence: { type: 'number' },
+          recommendation: { type: 'string' },
+        },
+      },
+    },
+    next_steps: { type: 'array', items: { type: 'string' } },
+  },
+}
 
 export function sha256Hex(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
@@ -108,16 +138,47 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i]
     const value = argv[i + 1]
-    if (!['--companion', '--cwd', '--range', '--target'].includes(flag) || value === undefined) {
-      fail(1, `usage: codex-review.mjs --cwd <repo> --range <ref>...HEAD [--companion <path>] [--target <label>] (got "${flag}")`)
+    if (!['--companion', '--cwd', '--range', '--target', '--model', '--effort'].includes(flag) || value === undefined) {
+      fail(1, `usage: codex-review.mjs --cwd <repo> --range <ref>...HEAD [--model <model>] [--effort <effort>] [--companion <path>] [--target <label>] (got "${flag}")`)
     }
     opts[flag.slice(2)] = value
   }
-  if (!opts.cwd || !opts.range) fail(1, 'usage: codex-review.mjs --cwd <repo> --range <ref>...HEAD [--companion <path>] [--target <label>]')
+  if (!opts.cwd || !opts.range) fail(1, 'usage: codex-review.mjs --cwd <repo> --range <ref>...HEAD [--model <model>] [--effort <effort>] [--companion <path>] [--target <label>]')
+  opts.model ||= DEFAULT_MODEL
+  opts.effort ||= DEFAULT_EFFORT
+  if (!EFFORTS.has(opts.effort)) fail(1, `--effort must be one of ${[...EFFORTS].join(', ')}; got "${opts.effort}"`)
   return opts
 }
 
-function main() {
+function parseStructuredOutput(raw) {
+  const text = String(raw || '').trim()
+  try {
+    return JSON.parse(text)
+  } catch {
+    const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text)
+    if (fenced) return JSON.parse(fenced[1])
+    throw new Error(`Codex returned no parseable JSON: ${text.slice(0, 400)}`)
+  }
+}
+
+async function runStructuredReview(companion, opts) {
+  const library = join(dirname(companion), 'lib', 'codex.mjs')
+  if (!existsSync(library)) throw new Error(`Codex companion library not found: ${library}`)
+  const { runAppServerTurn } = await import(pathToFileURL(library).href)
+  if (typeof runAppServerTurn !== 'function') throw new Error(`Codex companion does not export runAppServerTurn: ${library}`)
+  const prompt = `Review the code changes in ${opts.range} as an independent adversarial reviewer. Use git and read-only filesystem tools to inspect the diff and any context needed to verify behavior. Find concrete correctness, security, reliability, compatibility, and test gaps. Ignore style preferences with no consequence. Return findings only for changed behavior or regressions caused by this range.\n\nReview target: ${opts.target || `${opts.range} @ HEAD`}`
+  const result = await runAppServerTurn(opts.cwd, {
+    prompt,
+    model: opts.model,
+    effort: opts.effort,
+    sandbox: 'read-only',
+    outputSchema: CODEX_REVIEW_SCHEMA,
+  })
+  if (result.status !== 0) throw new Error(result.error?.message || result.stderr || 'Codex review failed')
+  return parseStructuredOutput(result.finalMessage)
+}
+
+async function main() {
   const opts = parseArgs(process.argv.slice(2))
 
   let base
@@ -132,66 +193,33 @@ function main() {
     fail(2, `codex companion not found: no */scripts/codex-companion.mjs under ${process.env.CODEX_COMPANION_ROOT || join(homedir(), '.claude', 'plugins', 'cache', 'openai-codex', 'codex')} (is the openai-codex plugin installed?)`)
   }
 
-  // Foreground structured run: `adversarial-review --cwd <cwd> --base <base> --json`
-  // prints execution.payload as JSON on stdout (codex-companion.mjs 628-639,
-  // handleReviewCommand 682-723, dispatch 995-999); the parsed codex-schema
-  // object lands in payload.result (executeReviewRun 415-438).
-  let stdout
+  let codex
   try {
-    stdout = execFileSync(process.execPath, [companion, 'adversarial-review', '--cwd', opts.cwd, '--base', base, '--json'], {
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-    })
+    codex = await runStructuredReview(companion, opts)
   } catch (err) {
-    fail(2, `codex run failed: ${(err.stderr || '').toString().trim() || err.message}`)
-  }
-
-  let payload
-  try {
-    payload = JSON.parse(stdout)
-  } catch {
-    fail(3, `companion printed no parseable JSON: ${stdout.slice(0, 400)}`)
-  }
-  if (!payload.result) {
-    fail(3, `companion returned no structured review object: ${payload.parseError || payload.codex?.stderr || 'payload.result missing'}`)
+    fail(2, `codex run failed: ${err.message}`)
   }
 
   let review
   try {
-    review = adaptCodexReview(payload.result)
+    review = adaptCodexReview(codex)
   } catch (err) {
-    fail(3, `companion output does not conform to the review schema: ${err.message}`)
+    fail(3, `Codex output does not conform to the review schema: ${err.message}`)
   }
 
-  // Binding checkpoint (Task 2 Step 5): OUTCOME 3. The companion does not
-  // expose the exact context it reviewed (payload.context carries only
-  // repoRoot/branch/summary, codex-companion.mjs 423-427), and the reviewed
-  // content is NOT byte-identical to `git diff <range>`: it is markdown-wrapped
-  // `git diff --binary --no-ext-diff --submodule=diff <mergeBase>..HEAD`
-  // (lib/git.mjs collectBranchContext 261-289), or a stat-only summary with
-  // self-collection when the diff exceeds maxInlineDiffBytes (collectReviewContext
-  // 299-346, inputMode 'self-collect'). So we hash `git diff <range>` (the same
-  // commit span: a three-dot diff IS the diff from merge-base(base, HEAD), the
-  // range buildBranchComparison resolves, lib/git.mjs 68-75) and echo the
-  // companion's RESOLVED target below so the caller can assert the range
-  // identity; content-shape drift (flags, wrapping, truncation) is the
-  // documented residual in the plan's self-review risks.
+  // Pin the vote to the exact diff bytes the workflow supplied. Codex can read
+  // wider repository context, but findings must concern this range.
   const diffBytes = execFileSync('git', ['-C', opts.cwd, 'diff', opts.range], { maxBuffer: 64 * 1024 * 1024 })
   process.stdout.write(JSON.stringify({
-    reviewer: { kind: 'codex-review-script', family: 'openai', model: null },
+    reviewer: { kind: 'codex-review-script', family: 'openai', model: opts.model, effort: opts.effort },
     target: opts.target || `${opts.range} @ HEAD`,
     artifactType: 'diff',
     artifactSha256: sha256Hex(diffBytes),
-    // Audit metadata: the companion's own resolved review target, for the
-    // outcome-3 binding assertion (never part of the digest gate).
-    companionTarget: {
-      mode: payload.target?.mode ?? null,
-      baseRef: payload.target?.baseRef ?? null,
-      summary: payload.context?.summary ?? null,
-    },
+    // Audit metadata for the requested review range, never part of the digest gate.
+    companionTarget: { mode: 'range', baseRef: base, summary: opts.range },
     verdict: review.verdict,
     findings: review.findings,
   }, null, 2) + '\n')
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+if (import.meta.url === `file://${process.argv[1]}`) await main()

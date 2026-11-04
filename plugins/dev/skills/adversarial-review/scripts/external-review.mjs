@@ -23,7 +23,7 @@
  *
  * Config (env):
  *   EXTERNAL_REVIEWERS  JSON array; the complete list when set ("[]" = none):
- *     {"name":"codex","kind":"codex"}
+ *     {"name":"codex","kind":"codex","model":"gpt-6.1-sol","effort":"high"}
  *     {"name":"qwen","kind":"openai-compatible","model":"qwen3.8:27b",
  *      "baseUrl":"http://gpu-box:11434/v1","private":true}
  *     {"name":"gpt","kind":"openai-compatible","model":"gpt-5",
@@ -290,6 +290,11 @@ export function resolveReviewers(env, { allowSameFamily = false, codexAvailable 
     const r = { name, kind, model, family: typeof spec.family === 'string' ? spec.family : null, problem: null }
     if (kind === 'codex') {
       r.companion = typeof spec.companion === 'string' ? spec.companion : ''
+      r.model = model || 'gpt-6.1-sol'
+      r.effort = typeof spec.effort === 'string' ? spec.effort : 'high'
+      if (!['none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(r.effort)) {
+        r.problem = `EXTERNAL_REVIEWERS[${i}] has invalid Codex effort "${r.effort}"`
+      }
       return r
     }
     r.baseUrl = spec.baseUrl || 'https://api.openai.com/v1'
@@ -374,7 +379,8 @@ async function reviewOne(r, prompt, timeoutMs) {
 // `git diff <range>`; its vote passes through unchanged for the workflow's
 // digest gate.
 function runCodex(r, opts) {
-  const args = [CODEX_SCRIPT, '--cwd', opts.cwd, '--range', opts.range, '--target', opts.target]
+  if (r.problem) return Promise.resolve({ name: r.name, __error: r.problem })
+  const args = [CODEX_SCRIPT, '--cwd', opts.cwd, '--range', opts.range, '--target', opts.target, '--model', r.model, '--effort', r.effort]
   if (r.companion) args.push('--companion', r.companion)
   return new Promise((resolve) => {
     execFile(process.execPath, args, { maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {

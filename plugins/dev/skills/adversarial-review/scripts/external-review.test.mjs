@@ -115,7 +115,7 @@ test('EXTERNAL_REVIEWERS is the complete list; private is declared per entry', (
     EXTERNAL_REVIEW_MODEL: 'ignored',
     OPENAI_KEY: 'sk-x',
     EXTERNAL_REVIEWERS: JSON.stringify([
-      { name: 'codex', kind: 'codex' },
+      { name: 'codex', kind: 'codex', model: 'gpt-6.1-sol', effort: 'high' },
       { name: 'remote', model: 'qwen', baseUrl: 'http://gpu-box.example.ts.net:11434/v1', private: true, family: 'alibaba' },
       { model: 'tailnet-undeclared', baseUrl: 'http://gpu-box.example.ts.net:11434/v1' },
       { model: 'gpt', baseUrl: 'https://api.openai.com/v1', apiKeyEnv: 'OPENAI_KEY' },
@@ -123,6 +123,8 @@ test('EXTERNAL_REVIEWERS is the complete list; private is declared per entry', (
     ]),
   }, { codexAvailable: () => false })
   assert.deepEqual(rs.map((r) => r.name), ['codex', 'remote', 'tailnet-undeclared', 'gpt', 'claude-sonnet'])
+  assert.equal(rs[0].model, 'gpt-6.1-sol')
+  assert.equal(rs[0].effort, 'high')
   assert.equal(rs[1].problem, null)
   assert.equal(rs[1].family, 'alibaba')
   assert.match(rs[2].problem, /no API key .*"private": true/)

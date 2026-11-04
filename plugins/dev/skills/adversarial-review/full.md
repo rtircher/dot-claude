@@ -190,9 +190,14 @@ dotfiles) is a JSON array and the complete list:
 "EXTERNAL_REVIEWERS": "[{\"name\":\"codex\",\"kind\":\"codex\"},{\"name\":\"qwen\",\"model\":\"qwen3.8:27b-q8_0\",\"baseUrl\":\"http://gpu-box:11434/v1\",\"private\":true},{\"name\":\"gpt\",\"model\":\"gpt-5\",\"baseUrl\":\"https://api.openai.com/v1\",\"apiKeyEnv\":\"OPENAI_API_KEY\"}]"
 ```
 
-Entries are `{name?, kind?, model, baseUrl, apiKeyEnv?, private?, family?, serialize?}`.
+Entries are `{name?, kind?, model, effort?, baseUrl, apiKeyEnv?, private?, family?, serialize?}`.
 `kind` is `openai-compatible` (default: the script calls the endpoint) or `codex`
-(via `codex-review.mjs`; diffs of the form `<ref>...HEAD` only). Set
+(via `codex-review.mjs`; diffs of the form `<ref>...HEAD` only). Codex defaults
+to GPT-6.1 Sol at high effort for a full review; a Codex entry can set `model`
+and `effort` explicitly. Keep high effort for normal full reviews. Use the
+strongest available reasoning model at high effort for security boundaries,
+data loss, migrations, distributed state, or a repeated pass after Sol found
+cross-cutting uncertainty. Set
 `"private": true` only on an endpoint running on hardware the user controls: no
 API key, no consent stop. Loopback is always private; anything else is a hosted
 vendor, which needs `apiKeyEnv` and consent. `"[]"` means none. When unset, the
