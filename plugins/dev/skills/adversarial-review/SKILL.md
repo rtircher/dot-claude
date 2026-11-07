@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: Use for independent, adversarial review of a plan, spec/design doc, or PR/diff (including a bare PR URL or number) before committing to it; reviewers hunt for what is wrong instead of rubber-stamping. Full tier is the default; "quick pass" picks the cheap tier.
+description: Use for independent, adversarial review of a plan, spec/design doc, or PR/diff (including a bare PR URL or number) before committing to it; reviewers hunt for what is wrong instead of rubber-stamping. Triggers: "review this PR", "code review", "deep review", "adversarial review", "poke holes in this spec", a pasted PR URL. Full tier is the default; "quick pass" or "quick review" picks the cheap tier.
 ---
 
 # Adversarial Review

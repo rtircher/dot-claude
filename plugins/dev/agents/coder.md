@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Coding agent with worktree isolation for parallel-safe file edits and commits
+description: Coding agent in an isolated worktree that implements one well-scoped task and commits it. Use for any implementation, fix, or refactor dispatch, especially when several run in parallel or the main session should not edit files itself.
 model: sonnet
 effort: medium
 isolation: worktree

@@ -1,6 +1,6 @@
 ---
 name: researcher
-description: Read-only research and analysis agent — no file edits, no git mutations
+description: Read-only research and analysis agent (no file edits, no git mutations). Use to investigate a codebase, docs, or the web and return grounded findings, such as tracing how something works, comparing options, or gathering context for a brief.
 model: sonnet
 effort: medium
 tools:

@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Read-only adversarial review agent — hunts for what is wrong in a diff, plan, spec, or doc and returns structured findings; never edits, never fixes
+description: Read-only adversarial review agent that hunts for what is wrong in a diff, plan, spec, or doc and returns structured findings; never edits or fixes. Use as a reviewer or lens inside adversarial-review, or for any independent second read of an artifact.
 model: sonnet
 effort: high
 tools:
