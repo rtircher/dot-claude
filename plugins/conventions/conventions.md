@@ -33,18 +33,15 @@ Cross-cutting working-style conventions, injected into every session by the
       reasoning ceiling (a BLOCKED re-dispatch), or reasoning-grade work while
       the reasoning tier's cap is tight.
 - **Missing alias: fall back up, never down.** If your account lacks an alias,
-  the role takes the next tier up (reasoning without `fable` runs on `opus`);
-  a reasoning or escalation role never drops to `sonnet`. Set
-  `DOT_CLAUDE_MODEL_MAP` to a JSON remap (e.g. `{"fable":"opus"}`) and apply it
-  to every `model:` you pass; the review workflows take it as `modelMap`.
-- **Effort comes from the agent definition.** Omit `effort:` to take its
-  default; pass one only to deviate (`low` for a lookup or courier, `xhigh`
-  only for a measured gain, `max` by name) and with built-in types, which carry
-  none (`medium` for Explore). On a reasoning ceiling, retry one effort level up
-  before moving up a tier. Repo instructions that raise effort for named areas win.
-- **Usage is the binding constraint.** Every dispatch spends the same limits
-  the coordinator runs on, and the stronger tiers burn them fastest. The
-  escalation tier is opt-in by name, never reached by omission.
+  the role takes the next tier up (reasoning without `fable` runs on `opus`),
+  because a weaker model on judgment work costs more in rework than it saves.
+  Apply `DOT_CLAUDE_MODEL_MAP` when set (see the plugin's `docs/reference.md`).
+- **Effort comes from the agent definition.** Omit `effort:` unless deviating
+  (`low` for a lookup, `xhigh` only for a measured gain) or dispatching a
+  built-in type, which carries none (`medium` for Explore). On a reasoning
+  ceiling, retry one effort level up before moving up a tier.
+- **Usage is the binding constraint:** every dispatch spends the coordinator's
+  limits, and stronger tiers burn them fastest.
 
 ## Delegation
 
@@ -65,36 +62,24 @@ subagents.
   and every fix from review goes to a fix subagent. Small tasks stay delegated
   too: if a task is genuinely too small to brief, fold it into an adjacent
   task's brief rather than running it in the main loop.
-- **Return contract on every dispatch.** End each brief with an explicit bounded
-  output spec, e.g. "Return at most 10 lines: the decision-relevant facts with
-  `file:line` cites. Do not return file contents." Only the subagent's final
-  message enters main context; the contract is what keeps it both small and
-  sufficient. Specify what must come back, not just "be brief": an
-  under-specified summary forces blind decisions downstream, and that rework
-  costs more than the tokens saved.
-- **Detail-to-disk.** Subagents doing heavy analysis write full findings to a
-  scratchpad or docs file and return the path plus a short executive summary
-  (5 lines or so). The main session pulls the detail back in only when a later
-  decision actually needs it, and pulls it from the file: a Read with
-  offset+limit or a Grep of that path. Never resume the agent (SendMessage) to
-  re-emit what is already on disk: the re-emit lands in main context in full.
+- **Return contract on every dispatch.** End each brief with a bounded output
+  spec naming what must come back, e.g. "Return at most 10 lines: the
+  decision-relevant facts with `file:line` cites. Do not return file contents."
+  "Be brief" alone is not enough: an under-specified summary forces blind
+  decisions, and that rework costs more than the tokens saved.
+- **Detail-to-disk.** Heavy analysis goes to a scratchpad file; the subagent
+  returns the path and a ~5-line summary. Pull detail back with a targeted
+  Read or Grep of that file, never by resuming the agent to re-emit it (the
+  re-emit lands in main context in full).
 - **At most 3 concurrent agents that mutate a worktree or run builds/tests**
   (they contend for memory and CPU); queue the rest. Read-only research and
   review agents may exceed that, up to about 6.
-- **Long sessions are a cost bug.** Keep the orchestrator's working memory in a
-  maintained task list, not the transcript. When the `context-watch` hook warns,
-  finish the current step, then delegate the rest. Before respawning, estimate
-  the remaining cost from what the same kind of step cost earlier in the session;
-  if it fits, keep going. Respawn only when it clearly does not fit, at a natural
-  boundary, and prefer a handover over mid-task compaction.
-- **From 50% context the `delegation-gate` hook denies bulk Read/Grep in the
-  main loop after 3 round-trips per turn (1 past the last band).** Bulk means
-  Read without offset+limit (or a limit over 250 lines) and Grep content mode
-  without head_limit. Bash is not gated: Claude Code truncates its output. A
-  denial is not an error to retry: dispatch a researcher/Explore subagent, or
-  make the read targeted (Read with offset+limit, Grep with head_limit).
-  Subagents are never gated. Kill switch for a session that
-  legitimately needs deep inline reading: `DELEGATION_GATE=off`.
+- **Long sessions are a cost bug.** Keep working memory in a task list, not
+  the transcript. The `context-watch` hook says when to delegate or respawn;
+  prefer a handover at a natural boundary over mid-task compaction.
+- **The `delegation-gate` hook denies bulk Read/Grep in a deep main loop.** A
+  denial is not an error to retry: follow its message. Thresholds and the
+  `DELEGATION_GATE=off` kill switch are in the plugin's `docs/reference.md`.
 <!-- main-session-only: end -->
 
 ## Working preferences
@@ -151,13 +136,10 @@ subagents.
   `<default>`: `git fetch`, rebase the branch onto fresh `origin/<default>`, re-run the
   gate, then `git merge --ff-only`. Never create a merge commit. If `origin/<default>`
   moved in the meantime, rebase again instead of merging. Pushing is a separate go-ahead.
-- **Meaningful branch and worktree names.** When you create a branch or worktree
-  yourself (via `EnterWorktree` or `git worktree add`), name it from the task as a
-  descriptive `feat/…` / `fix/…` slug, never a random or auto-generated one. The
-  harness names the initial session branch/worktree for you (an auto-generated name
-  such as `claude/<slug>` or `agent-<id>`); you can't pick that at creation, so
-  rename the branch to a descriptive `feat/…` / `fix/…` before pushing, and never push
-  an auto-generated session branch.
+- **Meaningful branch and worktree names.** Name branches and worktrees you
+  create from the task as a `feat/…` / `fix/…` slug, so the branch list reads as
+  a work log. Rename an auto-generated session branch (`claude/<slug>`,
+  `agent-<id>`) the same way before pushing.
 <!-- git-workflow: end -->
 - **Commits are authored as the human, never the harness.** If the git identity
   resolves to the harness default (`Claude <noreply@anthropic.com>`), set a

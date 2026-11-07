@@ -41,3 +41,23 @@ sit after the end marker, so they load either way. A user whose own instructions
 those rules sets `DOT_CLAUDE_CONVENTIONS_SKIP_GIT=1` in the `env` block of their
 `settings.json`; `scripts/inject-conventions.sh` then drops the region from both the
 main-session and the subagent injection. Any other value, or unset, keeps it.
+
+## Model map override
+
+`DOT_CLAUDE_MODEL_MAP` holds a JSON remap for accounts missing an alias, e.g.
+`{"fable":"opus"}`. Apply it to every `model:` you pass; the review workflows
+take it as `modelMap`. A reasoning or escalation role never drops to `sonnet`.
+
+## Delegation hooks
+
+`context-watch` (PostToolUse) reports context use at fixed bands and says what
+to do at each: finish the step and delegate the rest, or estimate the remaining
+cost from what the same kind of step cost earlier and respawn only when it
+clearly does not fit.
+
+`delegation-gate` (PreToolUse on Read and Grep) applies from 50% context: after
+3 bulk round-trips in one main-loop turn (1 past the last band) it denies
+further bulk reads. Bulk means Read without offset+limit (or a limit over 250
+lines) and Grep content mode without head_limit. Bash is not gated, since
+Claude Code truncates its output, and subagents are never gated. Set
+`DELEGATION_GATE=off` for a session that legitimately needs deep inline reading.
