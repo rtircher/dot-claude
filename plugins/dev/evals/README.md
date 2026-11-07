@@ -13,5 +13,15 @@ Run it with:
 claude plugin eval plugins/dev --tag review-routing
 ```
 
+`skill-triggers/` checks that `design-doc` and `post-review-comments` load
+when they should (two should-trigger cases each) and stay unloaded on a
+near-miss (an approved design to break into steps; a PR review with no ask to
+post). The `tool_used: Skill` graders are with-arm only, a "plugin fired"
+indicator under the default with-without ablation.
+
+```
+claude plugin eval plugins/dev --tag skill-triggers
+```
+
 Each run spawns real, billed Claude agent runs (3 runs per case by default).
 Run on demand only, not on every push.
