@@ -35,11 +35,13 @@ Cross-cutting working-style conventions, injected into every session by the
 - **Missing alias: fall back up, never down.** If your account lacks an alias,
   the role takes the next tier up (reasoning without `fable` runs on `opus`),
   because a weaker model on judgment work costs more in rework than it saves.
-  Apply `DOT_CLAUDE_MODEL_MAP` when set (see the plugin's `docs/reference.md`).
+  When `DOT_CLAUDE_MODEL_MAP` is set (a JSON remap, e.g. `{"fable":"opus"}`),
+  apply it to every `model:` you pass; review workflows take it as `modelMap`.
 - **Effort comes from the agent definition.** Omit `effort:` unless deviating
-  (`low` for a lookup, `xhigh` only for a measured gain) or dispatching a
-  built-in type, which carries none (`medium` for Explore). On a reasoning
-  ceiling, retry one effort level up before moving up a tier.
+  (`low` for a lookup, `xhigh` only for a measured gain, `max` only by name) or
+  dispatching a built-in type, which carries none (`medium` for Explore). On a
+  reasoning ceiling, retry one effort level up before moving up a tier. Repo
+  instructions that raise effort for named areas win.
 - **Usage is the binding constraint:** every dispatch spends the coordinator's
   limits, and stronger tiers burn them fastest.
 
@@ -78,8 +80,8 @@ subagents.
   the transcript. The `context-watch` hook says when to delegate or respawn;
   prefer a handover at a natural boundary over mid-task compaction.
 - **The `delegation-gate` hook denies bulk Read/Grep in a deep main loop.** A
-  denial is not an error to retry: follow its message. Thresholds and the
-  `DELEGATION_GATE=off` kill switch are in the plugin's `docs/reference.md`.
+  denial is not an error to retry: follow its message. Kill switch for a session
+  that legitimately needs deep inline reading: `DELEGATION_GATE=off`.
 <!-- main-session-only: end -->
 
 ## Working preferences
@@ -139,7 +141,7 @@ subagents.
 - **Meaningful branch and worktree names.** Name branches and worktrees you
   create from the task as a `feat/…` / `fix/…` slug, so the branch list reads as
   a work log. Rename an auto-generated session branch (`claude/<slug>`,
-  `agent-<id>`) the same way before pushing.
+  `agent-<id>`) the same way before pushing; never push one unrenamed.
 <!-- git-workflow: end -->
 - **Commits are authored as the human, never the harness.** If the git identity
   resolves to the harness default (`Claude <noreply@anthropic.com>`), set a
