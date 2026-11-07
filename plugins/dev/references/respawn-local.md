@@ -1,6 +1,6 @@
 # Respawn: local flow detail
 
-Read by `/dev:respawn` during the local flow (and the manual fallback, which reuses steps 1 to 4).
+Read by `/dev:respawn` during the local flow (and the manual fallback, which reuses steps 1 to 4 and this file's Step 5 detail for the prompt's step 3).
 Each section below is the detail for the same-numbered step in the command.
 
 ## Step 2 detail: commit-first mechanics
@@ -138,8 +138,7 @@ tell the user: the handover is already written (at
 `~/.claude/state/handover/<repo-key>-<slug>-<ts>.md`), so they can open a fresh session
 manually, read the `Branch:` and `## Respawn` base commit from it, create the branch as
 in step 3 of the prompt above, then `/dev:takeover`. Nothing is lost. If the repo
-also has a pushable `origin`, additionally offer the cloud flow (the reference file
-named above) as the recovery
+also has a pushable `origin`, additionally offer the cloud flow (`respawn-cloud.md`) as the recovery
 path: it republishes the same handover as a branch-carried one and prints a paste-able
 resume prompt, which does not depend on this machine's filesystem at all.
 

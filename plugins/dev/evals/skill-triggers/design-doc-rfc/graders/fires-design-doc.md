@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: design-doc
+input_match: dev:design-doc
 min: 1
 arm: with
 weight: 1

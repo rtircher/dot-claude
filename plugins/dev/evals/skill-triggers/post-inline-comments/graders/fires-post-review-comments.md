@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: post-review-comments
+input_match: dev:post-review-comments
 min: 1
 arm: with
 weight: 1

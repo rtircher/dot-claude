@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: toolchain
+input_match: conventions:toolchain
 max: 0
 min: 0
 arm: with

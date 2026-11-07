@@ -204,8 +204,6 @@ confidence gate.
 
 ### Phase 5, Implement
 
-### Phase 5, Implement
-
 Execute the clean plan. Prefer your subagent-driven execution skill for plans with independent
 tasks; use a plan-execution skill or inline implementation when that fits better, and say which
 you chose and why. Follow the project's own conventions (TDD, verification) as those skills direct.

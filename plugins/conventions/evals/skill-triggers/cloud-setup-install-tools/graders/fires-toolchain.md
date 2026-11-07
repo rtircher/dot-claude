@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: toolchain
+input_match: conventions:toolchain
 min: 1
 arm: with
 weight: 1

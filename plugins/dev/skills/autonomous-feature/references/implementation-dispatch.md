@@ -20,14 +20,14 @@ before writing new code, reuse an existing helper, then stdlib, then a native
 platform feature, then an installed dependency, and only then the smallest
 working implementation; no new dependencies without reporting back; anything
 beyond the task is a report-back, not a bonus. An implementer building more
-than its brief describes is the scope-expansion ping firing one level down -
+than its brief describes is the scope-expansion ping firing one level down,
 surface it, don't merge it.
 
 ## Phase 6 detail
 
 Run the `adversarial-review` skill on the completed work (the branch diff). Its
 diff panel runs correctness, simplicity & YAGNI, testing, and duplication lenses,
-beside an advisory prose lens whose findings never gate. External reviewers run per *Third-party review* above. For a **multi-task** plan, also run the final cross-implementation
+beside an advisory prose lens whose findings never gate. External reviewers run per the *Third-party review* section of SKILL.md. For a **multi-task** plan, also run the final cross-implementation
 symmetry pass (`model: sonnet`, `opus` for a large or subtle diff) over the full branch diff to catch type asymmetry,
 parallel-structure drift, undocumented behavior, and cross-package coupling that
 per-task work misses.

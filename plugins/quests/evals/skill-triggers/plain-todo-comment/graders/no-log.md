@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: log
+input_match: quests:log
 max: 0
 min: 0
 arm: with

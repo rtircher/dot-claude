@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: design-doc
+input_match: dev:design-doc
 max: 0
 min: 0
 arm: with

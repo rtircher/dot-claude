@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: testing
+input_match: conventions:testing
 min: 1
 arm: with
 weight: 1

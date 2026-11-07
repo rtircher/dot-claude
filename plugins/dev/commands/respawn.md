@@ -107,11 +107,10 @@ Call `mcp__ccd_session__start_session` with `initiation` = `"user_asked"` (the u
 typed `/dev:respawn`), `context` = `"fresh"`, `title` = the session title from step 3
 (this becomes the new session's name), `background` = at least 80 characters of the
 goal and constraints (a one-line restatement of the handover's `Task & goal` plus the
-main constraint), and a `prompt` built from this template. Interpolate `<main repo root path>`, the full handover path from step 4
+main constraint), and a `prompt` built from the template in `respawn-local.md` (Step 5 detail). Interpolate `<main repo root path>`, the full handover path from step 4
 (`~/.claude/state/handover/<repo-key>-<slug>-<ts>.md`), and the `Task:` summary. Do **not**
 embed the branch name or base commit here: they live solely in the handover, so the prompt
 and handover cannot drift. The new session has no memory of this one.
-
 
 Read `${CLAUDE_PLUGIN_ROOT}/references/respawn-local.md` (Step 5 detail) for the prompt template to pass, and for what to tell the user if `start_session` fails
 (the handover is already written, so nothing is lost; offer the cloud flow if `origin` is pushable).
@@ -129,6 +128,6 @@ Run local steps 1 to 4 unchanged (gather, commit-first gate, names, write the
 timestamped handover file with its archive sweep; the sweep is a natural no-op in a
 fresh container). Skip the spawn. Print the manual-resume instructions (open a fresh
 session, read `Branch:` and the `## Respawn` base commit from the handover, create the
-branch as in step 3 of the local prompt, then `/dev:takeover`), and **also print
+branch as in step 3 of the local prompt (read `${CLAUDE_PLUGIN_ROOT}/references/respawn-local.md`, Step 5 detail), then `/dev:takeover`), and **also print
 the handover content itself in your reply**: in an ephemeral container the file dies
 with the session, and the transcript is what survives.

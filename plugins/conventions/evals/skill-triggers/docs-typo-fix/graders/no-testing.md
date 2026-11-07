@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: testing
+input_match: conventions:testing
 max: 0
 min: 0
 arm: with

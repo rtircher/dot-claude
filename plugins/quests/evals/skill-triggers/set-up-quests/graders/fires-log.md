@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: log
+input_match: quests:log
 min: 1
 arm: with
 weight: 1
