@@ -4,7 +4,7 @@ tool: Skill
 input_match: dev:design-doc
 max: 0
 min: 0
-arm: with
+arm: both
 weight: 1
 ---
 

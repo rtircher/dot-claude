@@ -3,7 +3,7 @@ type: tool_used
 tool: Skill
 input_match: conventions:toolchain
 min: 1
-arm: with
+arm: both
 weight: 1
 ---
 
