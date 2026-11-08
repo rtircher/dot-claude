@@ -63,6 +63,7 @@ is `jj root`). Write `Stale worktree: <jj root> (jj workspace <name>)`.
 # Session handover: <ISO 8601 UTC timestamp>
 Repo: <main repo root path>
 Branch: feat/<slug>
+Quest: <quest id and title, or none>
 
 ## Task & goal
 What this session is doing and why.

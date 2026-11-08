@@ -1,6 +1,6 @@
 ---
 description: Load this repo's latest handover into the session on demand (non-destructive read; finds branch-carried cloud handovers too)
-allowed-tools: Bash(git rev-parse:*), Bash(git branch:*), Bash(git fetch:*), Bash(git show:*), Bash(git merge-base:*), Bash(git switch:*), Bash(git log:*), Bash(jj root:*), Bash(jj new:*), Bash(jj git fetch:*), Bash(jj bookmark track:*), Bash(jj log:*), Read
+allowed-tools: Bash(git rev-parse:*), Bash(git branch:*), Bash(git fetch:*), Bash(git show:*), Bash(git merge-base:*), Bash(git switch:*), Bash(git log:*), Bash(jj root:*), Bash(jj new:*), Bash(jj git fetch:*), Bash(jj bookmark track:*), Bash(jj log:*), Bash(quest take:*), Read
 ---
 
 Pull the most recent handover for THIS repo (written by `/dev:handover` or
@@ -121,9 +121,16 @@ auto-execute the next step:
 Resuming from handover: <file>
 Task:     <one line>
 State:    <committed vs in-progress, what's verified>
+Quest:    <the handover's Quest: line; none if absent>
 Next:     <the immediate first action>
 Confirm to proceed, or redirect.
 ```
+
+When `Quest:` names a quest, say in the status that you will `quest take <id>` on
+the go-ahead, and run it first thing after the user confirms, before any other work.
+On exit 3, report the holder the CLI names and ask: the handing-over session may
+still hold it, or another session took it after a respawn dropped it. Skip this
+when the repo has no quest log.
 
 For a branch-carried handover, two extras belong in that status. If its `## Respawn`
 section names a fresh-clone bootstrap (e.g. `make deps`), run it before presenting

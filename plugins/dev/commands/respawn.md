@@ -1,6 +1,6 @@
 ---
 description: Respawn this session into a fresh, meaningfully named one. Writes a handover, then spawns a clean session that resumes the work (a started session, or a branch-carried resume prompt in cloud)
-allowed-tools: Bash(jj root:*), Bash(jj log:*), Bash(jj new:*), Bash(jj bookmark:*), Bash(jj status:*), Bash(jj diff:*), Bash(jj commit:*), Bash(jj describe:*), Bash(git status:*), Bash(git branch:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-remote:*), Bash(git push:*), Bash(git hash-object:*), Bash(git read-tree:*), Bash(git update-index:*), Bash(git write-tree:*), Bash(git commit-tree:*), Bash(mkdir -p:*), Bash(mktemp:*), Bash(rm -f:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write, ToolSearch, Read, mcp__ccd_session__start_session
+allowed-tools: Bash(jj root:*), Bash(jj log:*), Bash(jj new:*), Bash(jj bookmark:*), Bash(jj status:*), Bash(jj diff:*), Bash(jj commit:*), Bash(jj describe:*), Bash(git status:*), Bash(git branch:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-remote:*), Bash(git push:*), Bash(git hash-object:*), Bash(git read-tree:*), Bash(git update-index:*), Bash(git write-tree:*), Bash(git commit-tree:*), Bash(quest log:*), Bash(quest drop:*), Bash(mkdir -p:*), Bash(mktemp:*), Bash(rm -f:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write, ToolSearch, Read, mcp__ccd_session__start_session
 ---
 
 Collapse the `handover` then `clear` then `takeover` ritual into one step. This writes
@@ -96,6 +96,9 @@ session at its own file by exact path.
 Then archive already-consumed prior handovers with `bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover-archive-sweep.sh"`
 (never touches the shared `<repo-key>.md` slot), `mkdir -p ~/.claude/state/handover`, and write the file with a real UTC timestamp inside.
 Use `/dev:handover`'s sections, but **record `feat/<slug>` as the `Branch:` line, not the current branch**.
+Include the `Quest:` line as `/dev:handover` step 1 describes. When it names a quest, release it with
+`quest drop <id>` once the handover is written: this session stays open, so its claim stays live and
+the new session's `quest take` would be refused.
 The `Repo:` line must be the main repo root verbatim. Keyed lines `Repo:`, `Branch:`, and the `## Respawn`
 `Base commit:` are mandatory and parsed downstream. The handover is the **single source of truth** for the base
 commit, destination branch, and worktree to prune (`Stale worktree:`). Read `${CLAUDE_PLUGIN_ROOT}/references/respawn-local.md`

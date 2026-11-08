@@ -1,6 +1,6 @@
 ---
 description: Summarise this session and write a per-repo handover a fresh session can resume from
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(jj root:*), Bash(jj log:*), Bash(gh pr list:*), Bash(mkdir -p:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(jj root:*), Bash(jj log:*), Bash(gh pr list:*), Bash(quest log:*), Bash(mkdir -p:*), Bash(date:*), Bash(ls:*), Bash(mv:*), Write
 ---
 
 Write a handover that lets a fresh session resume this work with no other context.
@@ -22,6 +22,11 @@ repos never overwrite each other. A previous handover is archived rather than lo
   none): `` jj log --ignore-working-copy --no-graph -r 'heads((@ | @-) & bookmarks())' -T 'local_bookmarks.map(|b| b.name()).join(" ")' ``.
   Empty output means no bookmark: write `(no bookmark, @- <short commit id>)`. In
   plain git use `git branch --show-current`.
+- Quest: if the repo has a quest log (the session start summary said `Quests:`),
+  record the quest this session took with `quest take` and has not finished: its id
+  and title. To confirm, `quest log --json`: in the `sessions` entry whose `session`
+  is this session's id, the last `chain` item is the quest. Write `none` when there is
+  no quest log or this session holds no quest.
 
 ## 2. Preserve the previous handover (no data loss)
 
@@ -40,6 +45,7 @@ Write `~/.claude/state/handover/<repo-key>.md` (use a real UTC timestamp from
 # Session handover — <ISO 8601 UTC timestamp>
 Repo: <full repo root path>
 Branch: <current branch, or the bookmark at @/@- in a jj repo>
+Quest: <quest id and title, or none>
 
 ## Task & goal
 What this session is doing and why.
@@ -64,5 +70,6 @@ What's unresolved or waiting on input.
 ```
 
 Record the **main repo root** (the same one used for the key) and branch verbatim —
-`/dev:takeover` checks them before it resumes or switches branches. After writing,
+`/dev:takeover` checks them before it resumes or switches branches, and offers to
+`quest take` the `Quest:` id. After writing,
 report the path and a one-line summary.

@@ -84,6 +84,9 @@ cloud-specific keyed lines:
   cloud containers), so writer and reader both normalize; `/dev:takeover` applies the
   same rule when matching.
 - `Branch: feat/<slug>` (the work branch, as in the local respawn flow).
+- `Quest:` as in `/dev:handover` (quest id and title, or `none`). When it names a
+  quest, run `quest drop <id>` after both pushes in this step succeed, so the resumed
+  session can take it: a cloud claim only goes stale after 24 hours.
 - **No `Stale worktree:` line** (constraint 3).
 - A `## Respawn` section recording, as keyed lines plus short prose:
   `Base commit: <base-sha>`; `Handover branch: handover/<slug>`; that the work branch
@@ -157,9 +160,10 @@ performs this same procedure. Otherwise, do these in order:
    handover's "Next steps".
 4. If the handover's Respawn section names a fresh-clone bootstrap (e.g.
    make deps), run it.
-5. Present a short status from the handover and STOP for my go-ahead. Do not
-   start working on your own.
-6. After my go-ahead, attempt cleanup: git push origin --delete handover/<slug>.
+5. Present a short status from the handover, including its Quest: line, and
+   STOP for my go-ahead. Do not start working on your own.
+6. After my go-ahead, if the Quest: line names a quest, run quest take <id>.
+   Then attempt cleanup: git push origin --delete handover/<slug>.
    If the push is rejected (cloud git proxy, "the remote end hung up
    unexpectedly"), say so and ask me to delete the branch from the GitHub UI, or
    leave it (handover/ branches are disposable by convention).
