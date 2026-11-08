@@ -77,6 +77,7 @@ All commands accept `--json` and `--session <id>`. Session id falls back to `$QU
 | `quest main add <title> [--link L]` / `quest main list` | Manage main quests |
 | `quest move <id> --top\|--bottom\|--up\|--down\|--before ID\|--after ID` | Reorder a quest within its main quest |
 | `quest main move <id> (same flags)` | Reorder a main quest |
+| `quest retitle <id> <title>` / `quest main retitle <id> <title>` | Rename a quest or a main quest |
 | `quest sync` | Fetch and push now |
 | `quest html [--out PATH]` | Write the whole log as one HTML page |
 

@@ -48,6 +48,16 @@ test('one bar per goal with done/total and a fraction', () => {
   assert.equal(textBar(0.5, 10), '█'.repeat(5) + '░'.repeat(5))
 })
 
+test('finished goals get no bar, empty ones stay', () => {
+  const s = fixture()
+  s.goals.push(
+    { id: 'g3', title: 'Shipped', done: 1, total: 3, finished: true },
+    { id: 'g4', title: 'Older summary', done: 3, total: 3 },
+    { id: 'g5', title: 'Full but open', done: 2, total: 2, finished: false },
+  )
+  assert.deepEqual(renderGlance(s, {}).sections[0].bars.map((b) => b.id), ['g1', 'g2', 'g5'])
+})
+
 test('8 ready items show 5 and +3 more', () => {
   const s = fixture()
   s.next = next(5)

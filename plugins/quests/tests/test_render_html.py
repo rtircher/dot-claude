@@ -31,6 +31,15 @@ class RenderHtmlTest(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", out)
         self.assertNotIn('<b onclick', out)
 
+    def test_html_collapses_finished_main_quests_in_overview(self):
+        goals = [Goal("g1", "Shipped goal", 1, []), Goal("g2", "Open goal", 2, [])]
+        out = page(tk("a", goal="g1", status="done"), tk("b", goal="g2"), goals=goals)
+        overview = out[out.index("<h2>Main quests</h2>"):out.index("<h2>All main quests</h2>")]
+        self.assertLess(overview.index("Open goal"), overview.index("<summary>Finished (1)</summary>"))
+        self.assertLess(overview.index("<summary>Finished (1)</summary>"), overview.index("Shipped goal"))
+        self.assertIn("Shipped goal", out[out.index("<h2>All main quests</h2>"):])
+        self.assertNotIn("<summary>Finished", page(tk("b", goal="g2"), goals=goals))
+
     def test_html_lists_tickets_in_rank_order(self):
         out = page(tk("a", title="First made", created="2026-10-18T09:00:00Z"),
                    tk("b", title="Ranked top", created="2026-10-18T10:00:00Z", rank=1000))

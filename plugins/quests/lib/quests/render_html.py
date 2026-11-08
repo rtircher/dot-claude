@@ -109,11 +109,17 @@ def render_html(qlog: QuestLog, s: dict) -> str:
 
     progress = {g["id"]: g for g in s["goals"]}
     body.append("<section><h2>Main quests</h2><ul>")
+    rows = {False: [], True: []}
     for g in s["goals"]:
-        body.append(f'<li class="goal"><span class="title">{_e(g["title"])}</span>'
-                    f'<progress value="{g["done"]}" max="{max(g["total"], 1)}"></progress>'
-                    f'<span class="muted">{g["done"]}/{g["total"]}</span></li>')
-    body.append("</ul></section>")
+        rows[g["finished"]].append(
+            f'<li class="goal"><span class="title">{_e(g["title"])}</span>'
+            f'<progress value="{g["done"]}" max="{max(g["total"], 1)}"></progress>'
+            f'<span class="muted">{g["done"]}/{g["total"]}</span></li>')
+    body += rows[False]
+    body.append("</ul>")
+    if rows[True]:
+        body.append(f"<details><summary>Finished ({len(rows[True])})</summary><ul>{''.join(rows[True])}</ul></details>")
+    body.append("</section>")
 
     if s["sessions"]:
         body.append("<section><h2>In progress</h2><ul>")

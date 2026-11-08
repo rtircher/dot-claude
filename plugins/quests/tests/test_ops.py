@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from quests import ops, store
 
@@ -163,6 +164,7 @@ class OpsTest(unittest.TestCase):
             {"op": "claim", "at": "2026-10-18T11:00:00Z", "session": "s1", "id": "t-1", "owner": {"session": "s1"}},
             {"op": "create_ticket", "at": "2026-10-18T11:00:00Z", "session": "s1", "id": "t-9"},
             {"op": "set_status", "session": "s1", "id": "t-1", "status": "done"},
+            {"op": "retitle_ticket", "at": "2026-10-18T11:00:00Z", "session": "s1", "id": "t-1"},
         ):
             self.assertEqual(len(self.run_ops([bad])), 1, bad)
         self.assertEqual(self.ticket().status, "todo")
@@ -201,6 +203,38 @@ class OpsTest(unittest.TestCase):
         t = self.ticket()
         self.assertEqual(t.goal, "g-2")
         self.assertEqual(t.links, ["https://example.com/y"])
+
+    def rt(self, name, tid, title, at="2026-10-18T12:00:00Z"):
+        return {"op": name, "at": at, "session": "s2", "id": tid, "title": title}
+
+    def test_retitle_ticket_logs_old_title_and_replays_once(self):
+        self.run_ops(create_ops())
+        op = self.rt("retitle_ticket", "t-1", "Back up the NAS")
+        self.assertEqual(self.run_ops([op, op]), [])
+        t = self.ticket()
+        self.assertEqual((t.title, t.updated), ("Back up the NAS", "2026-10-18T12:00:00Z"))
+        self.assertEqual([e.text for e in t.log], ["created", 'retitled from "Set up backups"'])
+
+    def test_retitle_same_title_writes_nothing(self):
+        self.run_ops(create_ops())
+        before = self.ticket()
+        with mock.patch.object(store, "write_goal") as write_goal:
+            self.run_ops([self.rt("retitle_ticket", "t-1", "Set up backups"),
+                          self.rt("retitle_goal", "g-1", "Example goal")])
+        write_goal.assert_not_called()
+        self.assertEqual(self.ticket(), before)
+
+    def test_retitle_goal(self):
+        self.run_ops(create_ops())
+        self.assertEqual(self.run_ops([self.rt("retitle_goal", "g-1", "Renamed goal")]), [])
+        g = store.load_quests(self.root).goals["g-1"]
+        self.assertEqual((g.title, g.order), ("Renamed goal", 1))
+
+    def test_retitle_unknown_ids_warn(self):
+        self.assertEqual(self.run_ops([self.rt("retitle_ticket", "t-x", "A")]),
+                         ["retitle_ticket: unknown ticket t-x"])
+        self.assertEqual(self.run_ops([self.rt("retitle_goal", "g-x", "A")]),
+                         ["retitle_goal: unknown main quest g-x"])
 
 
 def mk(tid, minute, goal="g-1"):

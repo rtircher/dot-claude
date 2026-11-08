@@ -75,7 +75,9 @@ export function renderGlance(summary, opts = {}) {
       kind: 'project',
       title: `Project · ${summary.repo || ''}`,
       heading: heading(`Project · ${repoName(summary.repo)}`),
-      bars: goals.map((g) => ({
+      bars: goals
+        .filter((g) => !(g.finished ?? (g.total > 0 && g.done === g.total)))
+        .map((g) => ({
         id: g.id,
         title: g.title,
         done: g.done,

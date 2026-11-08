@@ -46,6 +46,18 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual((g["done"], g["total"]), (1, 2))
         self.assertEqual(self.summ(b)["repo"], "example/repo")
 
+    def test_finished_goals_flagged_and_hidden_from_text_only(self):
+        goals = [Goal("g1", "Finished one", 1, []), Goal("g2", "Open one", 2, []),
+                 Goal("g3", "Empty one", 3, [])]
+        b = qlog(tk("a", goal="g1", status="done"), tk("b", goal="g2", status="done"),
+                 tk("c", goal="g2"), goals=goals)
+        s = self.summ(b)
+        self.assertEqual([(g["id"], g["finished"]) for g in s["goals"]],
+                         [("g1", True), ("g2", False), ("g3", False)])
+        rows = [l for l in views.render_text(s).splitlines() if l.startswith("  ")
+                and ("one" in l)]
+        self.assertEqual(rows, ["  Open one: 1/2", "  Empty one: 0/0"])
+
     def test_next_skips_blocked_and_owned(self):
         b = qlog(
             tk("a", status="done"),

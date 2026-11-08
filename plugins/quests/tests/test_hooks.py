@@ -7,7 +7,7 @@ import time
 import unittest
 from pathlib import Path
 
-from quests import hooks, locate
+from quests import hooks, locate, sync
 from tests import gitfixture as gf
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,6 +95,29 @@ class HooksTest(unittest.TestCase):
         p = self.hook("session-start", {"session_id": "s1", "cwd": str(self.repo)})
         self.assertIn(store.too_new_message(store.FORMAT + 1), p.stdout.splitlines())
         self.assertIn("Set up backups", p.stdout)
+
+    def test_session_start_git_lock_falls_back_to_local_checkout(self):
+        self.init_quests()
+        self.hook("session-start", {"session_id": "s1", "cwd": str(self.repo)})
+        checkout = sync.checkout_dir(locate.resolve(self.repo))
+        (checkout / ".git" / "index.lock").write_text("", encoding="utf-8")
+        p = self.hook("session-start", {"session_id": "s2", "cwd": str(self.repo)})
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout.splitlines()[0], f"Quests: {locate.repo_key(self.repo)} "
+                         "(unsynced: quest checkout locked by another git process)")
+        self.assertIn("Set up backups", p.stdout)
+        self.assertNotIn("unreadable", p.stdout)
+        self.assertIn("session-start sync lock", (self.state / "hook-errors.log").read_text())
+
+    def test_session_start_non_lock_sync_error_is_unreadable(self):
+        from unittest import mock
+
+        self.init_quests()
+        with mock.patch.object(sync, "sync", side_effect=RuntimeError("git merge failed: boom")):
+            out = hooks.session_start({"session_id": "s1", "cwd": str(self.repo)})
+        self.assertIn("(unreadable; see hook-errors.log)", out[0])
+        log = (self.state / "hook-errors.log").read_text()
+        self.assertNotIn("session-start sync lock", log)
 
     def test_session_start_offline_within_timeout(self):
         self.init_quests()

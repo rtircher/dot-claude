@@ -23,6 +23,8 @@ _REQUIRED = {
     "note": ("id", "text"),
     "add_link": ("id", "link"),
     "set_goal": ("id", "goal"),
+    "retitle_ticket": ("id", "title"),
+    "retitle_goal": ("id", "title"),
     "move_goal": ("id", "to"),
     "move_ticket": ("id", "to"),
 }
@@ -174,6 +176,29 @@ def _add_link(t, op):
     return []
 
 
+def _retitle_ticket(root, qlog, op):
+    def apply(t, op):
+        _log(t, op, f'retitled from "{t.title}"')
+        t.title = op["title"]
+        t.updated = op["at"]
+        return []
+
+    t = qlog.tickets.get(op["id"])
+    if t is not None and t.title == op["title"]:
+        return []  # same title: nothing to write, nothing to log
+    return _with_ticket(apply)(root, qlog, op)
+
+
+def _retitle_goal(root, qlog, op):
+    g = qlog.goals.get(op["id"])
+    if g is None:
+        return [f"retitle_goal: unknown main quest {op['id']}"]
+    if g.title != op["title"]:
+        g.title = op["title"]
+        store.write_goal(root, g)
+    return []
+
+
 def _set_goal(root, qlog, op):
     t = qlog.tickets.get(op["id"])
     if t is None:
@@ -286,6 +311,8 @@ _HANDLERS = {
     "note": _note,
     "add_link": _add_link,
     "set_goal": _set_goal,
+    "retitle_ticket": _retitle_ticket,
+    "retitle_goal": _retitle_goal,
     "move_goal": _move_goal,
     "move_ticket": _move_ticket,
 }

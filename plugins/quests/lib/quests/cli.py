@@ -43,6 +43,11 @@ def _move_flags(p: argparse.ArgumentParser) -> None:
         g.add_argument(f"--{name}", metavar="ID", dest=name)
 
 
+def _retitle_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("id")
+    p.add_argument("title")
+
+
 def _parser() -> argparse.ArgumentParser:
     c = _common()
     p = _Parser(prog="quest", description="Shared per-repo quest log.")
@@ -79,6 +84,8 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("--link", action="append", default=[])
     gs.add_parser("list", parents=[c])
     _move_flags(gs.add_parser("move", parents=[c]))
+    _retitle_args(gs.add_parser("retitle", parents=[c]))
+    _retitle_args(sub.add_parser("retitle", parents=[c]))
     _move_flags(sub.add_parser("move", parents=[c]))
     sub.add_parser("html", parents=[c]).add_argument("--out")
     sub.add_parser("migrate", parents=[c])
@@ -315,6 +322,18 @@ def _need_quest(qlog, tid: str) -> None:
         raise _Fail(f"no such quest: {tid}", 2)
 
 
+def _is_goal_cmd(ctx: _Ctx, qlog, *ids) -> bool:
+    """Whether move/retitle targets a main quest; fails on a missing log or an unknown id."""
+    if qlog is None:
+        raise _Fail("quest log not fetched yet (remote unreachable); try again when online")
+    goal = ctx.args.cmd == "main"
+    items, what = (qlog.goals, "main quest") if goal else (qlog.tickets, "quest")
+    for tid in ids:
+        if tid is not None and tid not in items:
+            raise _Fail(f"no such {what}: {tid}", 2)
+    return goal
+
+
 def _cmd_status(ctx: _Ctx) -> int:
     qlog, _ = ctx.load()
     _need_quest(qlog, ctx.args.id)
@@ -366,14 +385,8 @@ def _move_to(a) -> str | dict:
 def _cmd_move(ctx: _Ctx) -> int:
     """Reorder a quest within its main quest, or (with `main move`) a main quest."""
     a = ctx.args
-    goal = a.cmd == "main"
     qlog, _ = ctx.load()
-    if qlog is None:
-        raise _Fail("quest log not fetched yet (remote unreachable); try again when online")
-    items, what = (qlog.goals, "main quest") if goal else (qlog.tickets, "quest")
-    for tid in (a.id, a.before or a.after):
-        if tid is not None and tid not in items:
-            raise _Fail(f"no such {what}: {tid}", 2)
+    goal = _is_goal_cmd(ctx, qlog, a.id, a.before or a.after)
     op = ctx.op("move_goal" if goal else "move_ticket", id=a.id, to=_move_to(a))
     code = ctx.submit(op)
     own = [w for w in ctx.warnings if isinstance(w, ops.Rejected) and w.op == op]
@@ -402,8 +415,24 @@ def _cmd_move(ctx: _Ctx) -> int:
     return code
 
 
+def _cmd_retitle(ctx: _Ctx) -> int:
+    """Rename a quest, or (with `main retitle`) a main quest."""
+    a = ctx.args
+    title = " ".join(a.title.split())
+    if not title:
+        raise _Fail("title is empty")
+    qlog, _ = ctx.load()
+    goal = _is_goal_cmd(ctx, qlog, a.id)
+    code = ctx.submit(ctx.op("retitle_goal" if goal else "retitle_ticket", id=a.id, title=title))
+    ctx.emit({"id": a.id, "title": title, "synced": ctx.synced}, f"Retitled {a.id}: {title}")
+    ctx.tail()
+    return code
+
+
 def _cmd_main(ctx: _Ctx) -> int:
     a = ctx.args
+    if a.main_cmd == "retitle":
+        return _cmd_retitle(ctx)
     if a.main_cmd == "move":
         return _cmd_move(ctx)
     if a.main_cmd == "list":
@@ -412,6 +441,7 @@ def _cmd_main(ctx: _Ctx) -> int:
             return _not_fetched(ctx)
         goals = ctx.summary(qlog)["goals"]
         ctx.emit(goals, "\n".join(f"{g['id']}  {g['title']}: {g['done']}/{g['total']}"
+                                  + (" (finished)" if g["finished"] else "")
                                   for g in goals) or "No main quests.")
         return 0
     qlog = ctx.load_local()
@@ -426,7 +456,7 @@ def _cmd_main(ctx: _Ctx) -> int:
 
 _COMMANDS = {
     "log": _cmd_log, "html": _cmd_html, "show": _cmd_show, "next": _cmd_next, "sync": _cmd_sync,
-    "add": _cmd_add, "take": _cmd_take, "note": _cmd_note, "main": _cmd_main, "move": _cmd_move, "side": _cmd_side, "done": _cmd_done,
+    "add": _cmd_add, "take": _cmd_take, "note": _cmd_note, "main": _cmd_main, "move": _cmd_move, "retitle": _cmd_retitle, "side": _cmd_side, "done": _cmd_done,
     "drop": _simple_write("release", "Dropped {id}"),
     "status": _cmd_status,
     "link": _simple_write("add_link", "Linked {id}", link="link"),

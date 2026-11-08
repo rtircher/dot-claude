@@ -95,8 +95,9 @@ def summary(qlog, sessions, now, current_session, synced, next_limit=5) -> dict:
     goals = []
     for g in goals_sorted:
         ts = [t for t in qlog.tickets.values() if t.goal == g.id and t.status != "dropped"]
+        done = sum(1 for t in ts if t.status == "done")
         goals.append({"id": g.id, "title": g.title,
-                      "done": sum(1 for t in ts if t.status == "done"), "total": len(ts)})
+                      "done": done, "total": len(ts), "finished": bool(ts) and done == len(ts)})
 
     by_session: dict[str, list[Ticket]] = {}
     for t in qlog.tickets.values():
@@ -166,7 +167,7 @@ def _section(header: str, rows: list[str], budget: int, more_label: str,
 
 def render_text(s: dict) -> str:
     head = f"Quests: {s['repo']}" + ("" if s["synced"] or s.get("format_error") else " (unsynced)")
-    goal_rows = [f"  {g['title']}: {g['done']}/{g['total']}" for g in s["goals"]]
+    goal_rows = [f"  {g['title']}: {g['done']}/{g['total']}" for g in s["goals"] if not g["finished"]]
     sess_rows = []
     for e in s["sessions"]:
         chain = " > ".join(c["title"] for c in e["chain"])

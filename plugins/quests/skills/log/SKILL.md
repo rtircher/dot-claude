@@ -17,7 +17,7 @@ A shared quest log per repo, kept on a git branch, visible to every session. Goa
 ## Exit codes
 
 - 0: ok.
-- 2: no quest log for this repo, no current quest (for `quest side`), or no such quest id (for `done` and `status`). Offer setup (see below), or use `quest add` for a side quest.
+- 2: no quest log for this repo, no current quest (for `quest side`), or no such quest id (for `done`, `status` and `retitle`). Offer setup (see below), or use `quest add` for a side quest.
 - 3: take refused, another session holds the quest. Tell the user who holds it. Do not start the work.
 - 4: setup refused, or the log is in a newer format than this plugin supports. Report the message verbatim. Change nothing.
 - 5: busy, another quest command is running. Retry once.
@@ -30,7 +30,8 @@ A shared quest log per repo, kept on a git branch, visible to every session. Goa
 3. Record findings worth keeping with `quest note <id> "<text>"`.
 4. Link docs instead of copying them: `quest link <id> <path-or-url>`.
 5. Finish with `quest done <id>`. If it prints `Back to: <id> <title>`, offer to return with the `quest take <id>` command it shows. `quest drop <id>` gives a quest back. Other statuses: `quest status <id> todo|in_progress|blocked|done|dropped`.
-6. If a write prints `(unsynced: will push on next sync)`, mention it to the user once. Do not repeat it.
+6. Rename only when the user asks: `quest retitle <id> "<title>"`, or `quest main retitle <id> "<title>"` for a main quest.
+7. If a write prints `(unsynced: will push on next sync)`, mention it to the user once. Do not repeat it.
 
 ## Priorities
 
@@ -62,4 +63,4 @@ When the user ranks work ("make X the top priority", "do X before Y", "push X do
 
 ## Command reference
 
-`quest log [--next-limit N] | next | sync | show <id> | add <title> [--main G] [--parent ID] [--link L] | side <title> [--link L] | take <id> | drop <id> | done <id> | status <id> <status> | note <id> <text> | link <id> <link> | move <id> <position flag> | main add <title> [--link L] | main list | main move <id> <position flag> | init --mode same|external [--url URL] | migrate`
+`quest log [--next-limit N] | next | sync | show <id> | add <title> [--main G] [--parent ID] [--link L] | side <title> [--link L] | take <id> | drop <id> | done <id> | status <id> <status> | note <id> <text> | link <id> <link> | move <id> <position flag> | retitle <id> <title> | main add <title> [--link L] | main list | main move <id> <position flag> | main retitle <id> <title> | init --mode same|external [--url URL] | migrate`

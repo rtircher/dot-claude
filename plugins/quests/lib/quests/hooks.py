@@ -28,6 +28,7 @@ HOOK_LOCK_WAIT = 2.0
 HOOK_SYNC_TIMEOUT = 4.0
 HOOK_PUSH_MIN = 6.0
 MAX_LINES = 25
+_GIT_LOCK_MARKERS = (".lock': File exists", "Another git process seems to be running")
 
 
 def plugin_root() -> Path:
@@ -90,10 +91,18 @@ def _write_env_file(session: str, cwd: Path) -> bool:
 
 def _summary_text(ref, session: str, push: bool = True) -> str:
     res = None
+    locked = False
     try:
         res = sync.sync(ref, timeout=HOOK_SYNC_TIMEOUT, lock_wait=HOOK_LOCK_WAIT, push_min=HOOK_PUSH_MIN, push=push)
     except sync.QuestsBusy:
         pass
+    except RuntimeError as e:
+        # A stale git lock in the checkout: read it as is. A network retry could overrun the
+        # hook timeout, and a hook killed mid-git is how stale locks appear.
+        if not any(m in str(e) for m in _GIT_LOCK_MARKERS):
+            raise
+        _log_error("session-start sync lock")
+        locked = True
     synced = bool(res and res.synced)
     d = sync.checkout_dir(ref)
     if not (d / "board.json").exists():
@@ -101,7 +110,10 @@ def _summary_text(ref, session: str, push: bool = True) -> str:
     qlog = store.load_quests(d)
     sessions = views.load_sessions(locate.state_dir(), ref.key)
     s = views.summary(qlog, sessions, datetime.now(timezone.utc), session, synced)
-    return views.render_text(s)
+    text = views.render_text(s)
+    if locked:
+        text = text.replace(" (unsynced)", " (unsynced: quest checkout locked by another git process)", 1)
+    return text
 
 
 def session_start(data: dict) -> list[str]:

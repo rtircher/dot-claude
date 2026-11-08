@@ -67,6 +67,19 @@ class SyncTest(unittest.TestCase):
         log = gf.git(view, "log", "--format=%s").stdout.splitlines()
         self.assertEqual(log[0], "quests: create_ticket t-1")
 
+    def test_stale_index_lock_is_removed_and_fresh_one_kept(self):
+        sync.submit(self.ref, ticket_op("t-1"))
+        lock = sync.checkout_dir(self.ref) / ".git" / "index.lock"
+        lock.write_text("")
+        self.assertRaisesRegex(RuntimeError, "index.lock", sync.submit, self.ref, ticket_op("t-2"))
+        self.assertTrue(lock.exists())
+        old = time.time() - sync.STALE_INDEX_LOCK - 5
+        os.utime(lock, (old, old))
+        res = sync.submit(self.ref, ticket_op("t-3"))
+        self.assertTrue(res.synced)
+        self.assertFalse(lock.exists())
+        self.assertTrue({"t-1", "t-2", "t-3"} <= set(self.remote_tickets()[0]))
+
     def test_noop_op_makes_no_commit(self):
         sync.submit(self.ref, ticket_op("t-1"))
         sync.submit(self.ref, ticket_op("t-1"))  # already exists: no file change

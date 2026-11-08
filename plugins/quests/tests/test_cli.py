@@ -295,6 +295,43 @@ class CliTest(unittest.TestCase):
         self.assertEqual(json.loads(out)[0]["title"], "Example goal")
         self.assertEqual(self.run_cli("sync")[0], 0)
 
+    def test_main_list_marks_finished_goals(self):
+        self.init_same()
+        self.run_cli("main", "add", "Shipped goal")
+        self.run_cli("main", "add", "Open goal")
+        goals = json.loads(self.run_cli("main", "list", "--json")[1])
+        tid = self.run_cli("add", "Only quest", "--main", goals[0]["id"], "--json")[1]
+        self.run_cli("done", json.loads(tid)["id"])
+        goals = json.loads(self.run_cli("main", "list", "--json")[1])
+        self.assertEqual([g["finished"] for g in goals], [True, False])
+        lines = self.run_cli("main", "list")[1].splitlines()
+        self.assertEqual([l.endswith("(finished)") for l in lines], [True, False])
+
+    def test_retitle_quest_and_main_quest(self):
+        self.init_same()
+        gid = json.loads(self.run_cli("main", "add", "Old goal", "--json")[1])["id"]
+        tid = json.loads(self.run_cli("add", "Old quest", "--json")[1])["id"]
+        code, out, _ = self.run_cli("retitle", tid, "  New\nquest  ", "--json")
+        self.assertEqual((code, json.loads(out)), (0, {"id": tid, "title": "New quest", "synced": True}))
+        self.assertEqual(json.loads(self.run_cli("show", tid, "--json")[1])["title"], "New quest")
+        code, out, _ = self.run_cli("main", "retitle", gid, "New goal")
+        self.assertEqual((code, out.strip()), (0, f"Retitled {gid}: New goal"))
+        self.assertEqual(json.loads(self.run_cli("main", "list", "--json")[1])[0]["title"], "New goal")
+
+    def test_retitle_refusals(self):
+        self.init_same()
+        gid = json.loads(self.run_cli("main", "add", "Goal", "--json")[1])["id"]
+        tid = json.loads(self.run_cli("add", "Quest", "--json")[1])["id"]
+        for argv, code, msg in (
+                (("retitle", "t-nope", "X"), 2, "no such quest: t-nope"),
+                (("main", "retitle", "g-nope", "X"), 2, "no such main quest: g-nope"),
+                (("retitle", tid, " \n "), 1, "empty"),
+                (("main", "retitle", gid, ""), 1, "empty")):
+            c, out, err = self.run_cli(*argv)
+            self.assertEqual(c, code, argv)
+            self.assertIn(msg, out + err)
+        self.assertEqual(json.loads(self.run_cli("show", tid, "--json")[1])["title"], "Quest")
+
     def test_side_files_under_current_quest(self):
         self.init_same()
         self.run_cli("main", "add", "Example main quest")

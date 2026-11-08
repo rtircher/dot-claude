@@ -17,6 +17,9 @@ MAX_ATTEMPTS = 5
 PUSH_MIN = 10.0
 # Outlasts the longest default hold: 5 s fetch, PUSH_MIN push, local git.
 LOCK_WAIT = 20.0
+# Git runs in the checkout only under the per-repo lock, so an older index.lock is a killed git's;
+# the age guard spares a git someone runs by hand there.
+STALE_INDEX_LOCK = 60.0
 _NO_HOOKS = ["-c", "core.hooksPath=/dev/null"]
 _FALLBACK_IDENTITY = ["-c", "user.name=quests", "-c", "user.email=quests@users.noreply.invalid"]
 _REJECTED = ("rejected", "non-fast-forward", "fetch first")
@@ -179,12 +182,22 @@ def _clear_journal(ref: QuestsRef) -> None:
     _journal_path(ref).write_text("", encoding="utf-8")
 
 
+def _drop_stale_index_lock(cwd: Path) -> None:
+    lock = cwd / ".git" / "index.lock"
+    try:
+        if time.time() - lock.stat().st_mtime > STALE_INDEX_LOCK:
+            lock.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def _sync(ref: QuestsRef, timeout: float, push_min: float, push: bool = True) -> SyncResult:
     dl = _Deadline(timeout)
     journal, jwarn = _read_journal(ref)
     cwd, ok = _ensure_checkout(ref, dl)
     if not ok:
         return SyncResult(False, ["quests remote unreachable"])
+    _drop_stale_index_lock(cwd)
     last_warnings: list[str] = []
     for _ in range(MAX_ATTEMPTS):
         warnings = list(jwarn)
