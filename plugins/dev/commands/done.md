@@ -48,11 +48,10 @@ the archive.
    the one thing that would clear each item.
 
    For every PR this session opened or pushed to, list its unresolved review
-   threads: `bash ~/.claude/skills/pr-comments/scripts/unresolved-threads.sh <pr>`
-   when it exists, else the `reviewThreads` GraphQL field via `gh api graphql`.
+   threads: `bash "${CLAUDE_PLUGIN_ROOT}/skills/pr-comments/scripts/unresolved-threads.sh" <pr-url>`.
    A thread the session addressed (fix pushed, or pushback given) but left open
-   is unfinished: reply if it has no reply yet, then resolve it (per the
-   `pr-comments` skill when installed). A thread nobody has addressed blocks as
+   is unfinished: reply if it has no reply yet, then resolve it, per the
+   `pr-comments` skill. A thread nobody has addressed blocks as
    an unresolved review comment. A human thread awaiting the user's own reply
    is listed, not resolved.
 

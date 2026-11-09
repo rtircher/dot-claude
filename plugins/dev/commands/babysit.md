@@ -1,7 +1,7 @@
 ---
 description: Shepherd my open PRs until merge-ready (address review comments, rebase, chase CI); loops by default, `once` for a single pass
 disable-model-invocation: true
-allowed-tools: Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr review:*), Bash(gh api:*), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git push:*), Bash(jj root:*), Bash(~/.claude/skills/pr-comments/scripts/unresolved-threads.sh:*), Skill, Read, Edit, Write, Grep, Glob
+allowed-tools: Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr review:*), Bash(gh api:*), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git push:*), Bash(jj root:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/pr-comments/scripts/unresolved-threads.sh:*), Skill, Read, Edit, Write, Grep, Glob
 ---
 
 Keep my open PRs moving toward merge: address new review comments, rebase what has
@@ -69,20 +69,10 @@ For each, pull state with the read-only `gh` views you need: `gh pr view <n>
 `gh pr checks <n>`, `gh pr diff <n>`. Do not guess a PR's state; observe it.
 
 Unresolved review threads are not a `gh pr view` field. Read them with
-`~/.claude/skills/pr-comments/scripts/unresolved-threads.sh [<n>]` when it exists (it
-covers Vinci4d/v4d only). Elsewhere, query GraphQL, which also returns the thread `id`
-that resolving needs:
-
-```
-gh api graphql --paginate -F owner=<owner> -F name=<repo> -F number=<n> -f query='
-query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
-  repository(owner:$owner,name:$name){pullRequest(number:$number){
-    reviewThreads(first:100,after:$endCursor){
-      pageInfo{hasNextPage endCursor}
-      nodes{id isResolved isOutdated path line
-        comments(first:1){nodes{author{login} body url}}}}}}}' \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved|not)'
-```
+`bash "${CLAUDE_PLUGIN_ROOT}/skills/pr-comments/scripts/unresolved-threads.sh" [<n>|<url>]`
+(the `pr-comments` skill's script, in this plugin): one row per thread with the
+thread `id` that resolving needs. With no argument it covers your open PRs in
+every repo; a bare number uses the current directory's repo.
 
 Detect a jj repo once per pass: `jj root` succeeds and `git rev-parse --show-toplevel` fails or prints the same path; a git worktree nested in a jj repo prints its own path, so it is plain git; it changes how threads and
 rebases are handled below.
@@ -99,8 +89,7 @@ Work a PR only when it shows one of these. Otherwise leave it untouched.
   PR's branch, verify it (below), push, then resolve the thread so it does not
   re-fire next pass. If you decline a suggestion, reply on the thread with the
   one-line reason and resolve it — do not leave it dangling. Ambiguous threads are a
-  ping, not a guess. In a jj repo, hand the fixing to the `pr-comments` skill when it
-  exists (jj repos block `git switch`, so branch handling belongs to it).
+  ping, not a guess. In a jj repo, hand the fixing to the `pr-comments` skill (jj repos block `git switch`, so branch handling belongs to it).
 - **Behind base / merge conflict.** Act only on a conflict, or when the base's
   branch protection requires an up-to-date branch (merge state `BEHIND`); merely
   trailing the base is not a signal. In a jj repo, delegate the rebase to the
