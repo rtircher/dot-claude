@@ -40,6 +40,7 @@ const SEVERITY_MAP = { critical: 'blocker', high: 'major', medium: 'minor', low:
 const VERIFIED_AT = 0.8
 const DEFAULT_MODEL = 'gpt-6.1-sol'
 const DEFAULT_EFFORT = 'high'
+const BROKER_SHUTDOWN_TIMEOUT_MS = 5000
 const EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
 
 const CODEX_REVIEW_SCHEMA = {
@@ -161,21 +162,57 @@ function parseStructuredOutput(raw) {
   }
 }
 
+// Broker helpers of the installed companion; null when it predates them.
+export async function loadBrokerControls(companion) {
+  const lifecycle = join(dirname(companion), 'lib', 'broker-lifecycle.mjs')
+  const processLib = join(dirname(companion), 'lib', 'process.mjs')
+  if (!existsSync(lifecycle) || !existsSync(processLib)) return null
+  const [controls, { terminateProcessTree }] = await Promise.all([
+    import(pathToFileURL(lifecycle).href),
+    import(pathToFileURL(processLib).href),
+  ])
+  return { ...controls, terminateProcessTree }
+}
+
+// The broker is detached with no idle timeout, and the companion's SessionEnd
+// hook only stops the broker for the session's own cwd: one started for a
+// review checkout runs until killed. Stop it if this run started it.
+export async function stopBrokerStartedByRun(controls, cwd, before) {
+  const session = controls.loadBrokerSession(cwd)
+  if (!session || session.endpoint === before?.endpoint) return
+  await Promise.race([
+    controls.sendBrokerShutdown(session.endpoint),
+    new Promise((resolve) => setTimeout(resolve, BROKER_SHUTDOWN_TIMEOUT_MS).unref()),
+  ])
+  controls.teardownBrokerSession({ ...session, killProcess: controls.terminateProcessTree })
+  controls.clearBrokerSession(cwd)
+}
+
 async function runStructuredReview(companion, opts) {
   const library = join(dirname(companion), 'lib', 'codex.mjs')
   if (!existsSync(library)) throw new Error(`Codex companion library not found: ${library}`)
   const { runAppServerTurn } = await import(pathToFileURL(library).href)
   if (typeof runAppServerTurn !== 'function') throw new Error(`Codex companion does not export runAppServerTurn: ${library}`)
+  const controls = await loadBrokerControls(companion)
+  const before = controls?.loadBrokerSession(opts.cwd)
   const prompt = `Review the code changes in ${opts.range} as an independent adversarial reviewer. Use git and read-only filesystem tools to inspect the diff and any context needed to verify behavior. Find concrete correctness, security, reliability, compatibility, and test gaps. Ignore style preferences with no consequence. Return findings only for changed behavior or regressions caused by this range.\n\nReview target: ${opts.target || `${opts.range} @ HEAD`}`
-  const result = await runAppServerTurn(opts.cwd, {
-    prompt,
-    model: opts.model,
-    effort: opts.effort,
-    sandbox: 'read-only',
-    outputSchema: CODEX_REVIEW_SCHEMA,
-  })
-  if (result.status !== 0) throw new Error(result.error?.message || result.stderr || 'Codex review failed')
-  return parseStructuredOutput(result.finalMessage)
+  try {
+    const result = await runAppServerTurn(opts.cwd, {
+      prompt,
+      model: opts.model,
+      effort: opts.effort,
+      sandbox: 'read-only',
+      outputSchema: CODEX_REVIEW_SCHEMA,
+    })
+    if (result.status !== 0) throw new Error(result.error?.message || result.stderr || 'Codex review failed')
+    return parseStructuredOutput(result.finalMessage)
+  } finally {
+    if (controls) {
+      await stopBrokerStartedByRun(controls, opts.cwd, before).catch((err) => {
+        process.stderr.write(`warning: could not stop the codex broker for ${opts.cwd}: ${err.message}\n`)
+      })
+    }
+  }
 }
 
 async function main() {

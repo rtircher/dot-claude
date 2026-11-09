@@ -114,3 +114,73 @@ test('CLI passes the configured model and effort to the structured turn', () => 
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+// The companion's broker is detached with no idle timeout, and its SessionEnd
+// hook only stops the broker for the session's own cwd, so a broker started
+// for a review checkout leaked until killed by hand.
+function brokerStub({ preexisting, spawns, turnFails }) {
+  const root = mkdtempSync(join(tmpdir(), 'codex-review-broker-'))
+  const lib = join(root, 'scripts', 'lib')
+  const companion = join(root, 'scripts', 'codex-companion.mjs')
+  const state = join(root, 'broker.json')
+  const log = join(root, 'calls.log')
+  mkdirSync(lib, { recursive: true })
+  writeFileSync(companion, '')
+  writeFileSync(log, '')
+  if (preexisting) writeFileSync(state, JSON.stringify({ endpoint: 'unix:/old.sock', pid: 111 }))
+  writeFileSync(join(lib, 'codex.mjs'), `
+    import { writeFileSync } from 'node:fs'
+    export async function runAppServerTurn() {
+      if (${spawns}) writeFileSync(${JSON.stringify(state)}, JSON.stringify({ endpoint: 'unix:/new.sock', pid: 222 }))
+      if (${turnFails}) return { status: 1, error: { message: 'turn exploded' } }
+      return { status: 0, finalMessage: JSON.stringify({ verdict: 'approve', summary: 'ok', findings: [], next_steps: [] }) }
+    }
+  `)
+  writeFileSync(join(lib, 'broker-lifecycle.mjs'), `
+    import { appendFileSync, existsSync, readFileSync, rmSync } from 'node:fs'
+    const state = ${JSON.stringify(state)}
+    const log = (line) => appendFileSync(${JSON.stringify(log)}, line + '\\n')
+    export function loadBrokerSession() { return existsSync(state) ? JSON.parse(readFileSync(state, 'utf8')) : null }
+    export async function sendBrokerShutdown(endpoint) { log('shutdown ' + endpoint) }
+    export function teardownBrokerSession(s) { log('teardown ' + s.endpoint + ' pid=' + s.pid + ' kill=' + typeof s.killProcess) }
+    export function clearBrokerSession() { rmSync(state); log('clear') }
+  `)
+  writeFileSync(join(lib, 'process.mjs'), 'export function terminateProcessTree() {}\n')
+  const run = () => spawnSync(process.execPath, [SCRIPT, '--cwd', process.cwd(), '--range', 'HEAD~1...HEAD', '--companion', companion], { encoding: 'utf8' })
+  const calls = () => readFileSync(log, 'utf8').trim().split('\n').filter(Boolean)
+  return { root, run, calls }
+}
+
+test('CLI stops the broker its own run started', () => {
+  const stub = brokerStub({ preexisting: false, spawns: true, turnFails: false })
+  try {
+    const out = stub.run()
+    assert.equal(out.status, 0, out.stderr)
+    assert.deepEqual(stub.calls(), ['shutdown unix:/new.sock', 'teardown unix:/new.sock pid=222 kill=function', 'clear'])
+  } finally {
+    rmSync(stub.root, { recursive: true, force: true })
+  }
+})
+
+test('CLI stops the broker it started even when the turn fails', () => {
+  const stub = brokerStub({ preexisting: false, spawns: true, turnFails: true })
+  try {
+    const out = stub.run()
+    assert.equal(out.status, 2)
+    assert.match(out.stderr, /turn exploded/)
+    assert.deepEqual(stub.calls(), ['shutdown unix:/new.sock', 'teardown unix:/new.sock pid=222 kill=function', 'clear'])
+  } finally {
+    rmSync(stub.root, { recursive: true, force: true })
+  }
+})
+
+test('CLI leaves alone a broker that was already running for the cwd', () => {
+  const stub = brokerStub({ preexisting: true, spawns: false, turnFails: false })
+  try {
+    const out = stub.run()
+    assert.equal(out.status, 0, out.stderr)
+    assert.deepEqual(stub.calls(), [])
+  } finally {
+    rmSync(stub.root, { recursive: true, force: true })
+  }
+})
