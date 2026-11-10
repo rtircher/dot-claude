@@ -37,6 +37,14 @@ RULES:
   of a jj repo: it walks up to the main checkout and moves its working copy. Do NOT
   push, and do NOT manage the branch stack: integration and stacking are the main
   session's job.
+- Before committing, check the misses reviewers most often catch:
+    - When you change a rule, filter, flag, or estimate, grep for every other place
+      that applies it and update them together, or report the ones you left.
+    - Shell, Helm, or CI changes: run a real render or dry run, and confirm that a
+      failing step fails the job (no `|| true` or `|| echo` swallowing it).
+    - UI data loading: handle out-of-order responses, a failed refresh, and
+      remounts without losing or resurrecting data.
+    - Access rules: add the test that refuses the caller who must not get through.
 - Stay in scope. If the task turns out to need a decision, a destructive action, or
   work beyond what you were given, stop and report back rather than guessing.
 
