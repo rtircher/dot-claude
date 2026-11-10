@@ -57,16 +57,22 @@ class DeepMainLoop(unittest.TestCase):
     def tearDown(self):
         os.unlink(self.path)
 
-    def run_gate(self, tool_name="Read", tool_input=None, **extra):
+    def run_gate(self, tool_name="Read", tool_input=None, window="250000", **extra):
         payload = {"tool_name": tool_name, "tool_input": tool_input or {"file_path": "f"},
                    "transcript_path": self.path, **extra}
         env = {k: v for k, v in os.environ.items() if not k.startswith(("DELEGATION_GATE", "CONTEXT_WATCH"))}
-        env["CONTEXT_WATCH_WINDOW"] = "250000"
+        env["CONTEXT_WATCH_WINDOW"] = window
         return subprocess.run([sys.executable, SCRIPT], input=json.dumps(payload),
                               capture_output=True, text=True, env=env, check=True).stdout
 
     def test_main_loop_is_denied(self):
         self.assertIn('"deny"', self.run_gate())
+
+    def test_arms_at_first_configured_band(self):
+        with open(os.path.join(HERE, "..", "context-budget.json")) as f:
+            first_band = min(json.load(f)["bands"])
+        just_below = str(228_010 * 100 // (first_band - 1))  # (first_band - 2)% context
+        self.assertEqual(self.run_gate(window=just_below), "")
 
     def test_subagent_is_exempt(self):
         self.assertEqual(self.run_gate(agent_id="a919ff86", agent_type="dev:coder"), "")

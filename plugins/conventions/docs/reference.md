@@ -55,7 +55,10 @@ to do at each: finish the step and delegate the rest, or estimate the remaining
 cost from what the same kind of step cost earlier and respawn only when it
 clearly does not fit.
 
-`delegation-gate` (PreToolUse on Read and Grep) applies from 50% context: after
+Both read the budget cap and bands from `context-budget.json` (300k, bands
+60/85/100); the dot-files status line reads the same file.
+
+`delegation-gate` (PreToolUse on Read and Grep) applies from the first band: after
 3 bulk round-trips in one main-loop turn (1 past the last band) it denies
 further bulk reads. Bulk means Read without offset+limit (or a limit over 250
 lines) and Grep content mode without head_limit. Bash is not gated, since

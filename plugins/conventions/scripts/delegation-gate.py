@@ -39,17 +39,20 @@ turn, a wrongly allowed read costs a few thousand tokens.
 
 Env overrides:
   DELEGATION_GATE            "off" disables the gate entirely
-  DELEGATION_GATE_ARM_PCT    context percent at which the gate arms (default 50,
-                             the first context-watch band; it started at 70 but a
-                             transcript audit showed the 50% nudge alone produced
-                             no dispatches, so advice and teeth now arrive together)
+  DELEGATION_GATE_ARM_PCT    context percent at which the gate arms (default: the
+                             first context-watch band; it once trailed the bands but
+                             a transcript audit showed the first nudge alone
+                             produced no dispatches, so advice and teeth now
+                             arrive together)
   DELEGATION_GATE_ROUNDTRIPS free bulk round-trips per turn when armed (default 3)
   CONTEXT_WATCH_WINDOW       shared with context-watch: when set, used verbatim;
-                             otherwise the budget is min(model window, 300k) via
-                             context-watch's effective_window() (200k fallback
-                             if the helper can't load — stricter, never laxer)
-  CONTEXT_WATCH_BANDS        shared with context-watch (default 50,70,85; only
-                             the last band is read here, for the harsh tier)
+                             otherwise the budget is min(model window, cap) via
+                             context-watch's helpers, which read the cap and
+                             bands from context-budget.json (200k budget and a
+                             50% arm if the helper can't load — stricter, never
+                             laxer)
+  CONTEXT_WATCH_BANDS        shared with context-watch (the first band arms the
+                             gate, the last sets the harsh tier)
 """
 import importlib.util
 import json
@@ -74,11 +77,8 @@ def is_bulk_read(tool_name, tool_input):
     return False
 
 
-def compute_budget(model):
-    """min(model window, 300k) via context-watch's helper; env override wins."""
-    override = os.environ.get("CONTEXT_WATCH_WINDOW")
-    if override:
-        return int(override)
+def load_context_watch():
+    """The context-watch module (budget helpers), or None if it can't load."""
     try:
         path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "context-watch.py"
@@ -86,9 +86,19 @@ def compute_budget(model):
         spec = importlib.util.spec_from_file_location("context_watch", path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        return min(mod.effective_window(model), mod.BUDGET_CAP)
+        return mod
     except Exception:
+        return None
+
+
+def compute_budget(model, watch):
+    """min(model window, cap) via context-watch's helper; env override wins."""
+    override = os.environ.get("CONTEXT_WATCH_WINDOW")
+    if override:
+        return int(override)
+    if watch is None:
         return 200_000
+    return min(watch.effective_window(model), watch.BUDGET_CAP)
 
 
 def read_tail(transcript_path):
@@ -203,11 +213,10 @@ def main():
     if usage is None:
         return
 
-    window = compute_budget(model)
-    bands = sorted(
-        int(b) for b in os.environ.get("CONTEXT_WATCH_BANDS", "50,70,85").split(",")
-    )
-    arm_pct = int(os.environ.get("DELEGATION_GATE_ARM_PCT", "50"))
+    watch = load_context_watch()
+    window = compute_budget(model, watch)
+    bands = watch.bands() if watch else [50]
+    arm_pct = int(os.environ.get("DELEGATION_GATE_ARM_PCT", bands[0]))
     pct = 100 * context // window
     if pct < arm_pct:
         return
