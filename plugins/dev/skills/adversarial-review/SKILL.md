@@ -17,7 +17,7 @@ Hard caps this skill states and enforces.
 |---|---|---|
 | Quick | main session | at most 3 area reviewers, one message, never more than 3 in parallel; +1 focus-declared extra lens as a second wave after they return = 4 max; 1 when the diff is small |
 | Quick | subagent | 0 (inline single pass) |
-| Full | Workflow path | 5 + N + 4 for a diff (4 lenses + prose), 6 + N + 4 for a spec, 5 + N + 4 for a plan (N = external names), +1 when the extra lens fires, +1 per lens retried after a failure |
+| Full | Workflow path | 5 + N + 4 for a diff (4 lenses + prose), 6 + N + 4 for a spec, 5 + N + 4 for a plan (N = external names), +1 grouping agent when the panel returns two or more findings, +1 when the extra lens fires, +1 per lens retried after a failure |
 | Full | manual / cloud path | 5 or 6 lens agents (a diff runs 4 plus the prose lens); externals run through Bash |
 | Gated | | at most 3 rounds, 32 + 3N total |
 

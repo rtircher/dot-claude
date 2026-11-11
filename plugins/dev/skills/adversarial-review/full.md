@@ -294,7 +294,10 @@ external vote.
    panel you dispatched — e.g. "5 of 6 reviewers returned; external:qwen queued
    past max wait and was dropped." A failed reviewer is a missing *vote*, not a
    missing finding; never imply a fuller panel than weighed in.
-2. **Dedup** overlapping objections into one entry, recording **how many
+2. **Dedup** overlapping objections into one entry, by meaning, not wording:
+   findings from different lenses that one fix would resolve are one defect
+   (the workflow does this with its grouping agent and lists the absorbed
+   findings under `merged`). Record **how many
    independent reviewers** raised it and **whether they span model families**
    (cross-family agreement is the strongest signal; agreement across lenses
    within one model is weaker).

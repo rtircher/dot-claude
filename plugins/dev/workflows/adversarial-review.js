@@ -79,7 +79,7 @@
  *       effort?: string,             // 'low'|'medium'|'high'|'xhigh'|'max'
  *     },                             // keys: a lens key (see LENS_PANELS; diffs have
  *   },                               // their own panel; 'prose' is the advisory diff lens)
- *                                    // or 'verify' (skeptics).
+ *                                    // 'group' (the grouping agent), or 'verify' (skeptics).
  *                                    // DEFAULT_TIERS names every slot: mechanical lenses
  *                                    // (scope-yagni, gaps, comprehension, code-grounding,
  *                                    // simplicity-yagni, duplication,
@@ -99,7 +99,7 @@ export const meta = {
     'Internal workflow the adversarial-review skill dispatches for its full tier: lens-panel fan-out, schema-validated findings, blind synthesis into one ranked objection list. Not a user entry point; invoke the skill.',
   phases: [
     { title: 'Review', detail: 'one reviewer per lens (specs, plans, and diffs each have a panel), in parallel' },
-    { title: 'Verify', detail: 'two skeptics adjudicate each uncorroborated blocker/major finding (confirm / reframe / refute)' },
+    { title: 'Verify', detail: 'one agent groups findings that name the same defect, then two skeptics adjudicate each uncorroborated blocker/major finding (confirm / reframe / refute)' },
     { title: 'Synthesize', detail: 'dedup + rank blind to model identity' },
   ],
 }
@@ -347,6 +347,7 @@ const DEFAULT_TIERS = {
   testing: { model: 'fable', effort: 'high' },
   duplication: { model: 'sonnet', effort: 'medium' },
   prose: { model: 'sonnet', effort: 'medium' },
+  group: { model: 'sonnet', effort: 'medium' },
   verify: { model: 'fable', effort: 'high' },
 }
 
@@ -594,6 +595,59 @@ function dedupe(findings) {
   })
 }
 
+// The fold above only catches near-identical wording, so lenses that describe
+// one defect in their own words stay separate. One agent, shown the findings
+// without their sources, groups those that name the same defect; each group
+// becomes one finding corroborated by every member's reviewers, so it counts as
+// corroboration exactly as the fold does. The absorbed findings stay visible
+// under `merged`. A failed or malformed answer leaves the fold's list as is.
+const GROUP_SCHEMA = {
+  type: 'object',
+  required: ['groups'],
+  additionalProperties: false,
+  properties: {
+    groups: {
+      type: 'array',
+      description: 'Each group lists the ids of findings that describe the same defect. Leave out findings with no duplicate.',
+      items: { type: 'array', items: { type: 'integer' } },
+    },
+  },
+}
+
+function groupPrompt(findings) {
+  const list = findings.map((f, i) => `[${i}] (${f.severity}) ${f.location}: ${f.objection}`).join('\n')
+  return `These findings come from independent reviewers of one artifact. Group the ones that describe the same defect: one fix would resolve every finding in the group. Different wording, locations, or severities do not make two findings different defects. Do not group findings that are only related, share a section, or share a theme but each need their own fix. Leave every finding with no duplicate out of the groups, and use only the ids shown. Judge from this list alone; read nothing else.\n\n${list}`
+}
+
+// Keeps ids that exist and are not already grouped; drops groups left with one.
+function validGroups(groups, n) {
+  const seen = new Set()
+  const out = []
+  for (const g of Array.isArray(groups) ? groups : []) {
+    const ids = [...new Set(Array.isArray(g) ? g : [])].filter((i) => Number.isInteger(i) && i >= 0 && i < n && !seen.has(i))
+    if (ids.length < 2) continue
+    ids.forEach((i) => seen.add(i))
+    out.push(ids)
+  }
+  return out
+}
+
+function mergeGroups(findings, groups, familyOf) {
+  const grouped = new Set(groups.flat())
+  const merged = groups.map((ids) => {
+    const members = ids.map((i) => findings[i])
+    const [lead, ...rest] = rank(members)
+    const sources = [...new Set(members.flatMap((m) => m.corroboration.sources))]
+    const families = new Set(sources.map(familyOf))
+    return {
+      ...lead,
+      corroboration: { reviewers: sources.length, crossFamily: families.size > 1, sources },
+      merged: rest.map((m) => ({ objection: m.objection, severity: m.severity, location: m.location, sources: m.corroboration.sources })),
+    }
+  })
+  return [...findings.filter((_, i) => !grouped.has(i)), ...merged]
+}
+
 function rank(findings) {
   return [...findings].sort((a, b) => {
     if (SEVERITY_RANK[a.severity] !== SEVERITY_RANK[b.severity]) return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]
@@ -767,9 +821,29 @@ const panelVotes = [...claudeVotes, ...realExternalVotes]
 
 // Dedup across the full panel BEFORE verifying, so a finding is never skeptic-checked
 // once per reviewer that raised it (a justified barrier: dedup needs all reviewers in).
-const deduped = dedupe(panelVotes.flatMap((r) => r.findings.map((f) => ({ ...f, source: r.handle, family: r.family }))))
+const folded = dedupe(panelVotes.flatMap((r) => r.findings.map((f) => ({ ...f, source: r.handle, family: r.family }))))
 
 phase('Verify')
+const familyByHandle = new Map(panelVotes.map((r) => [r.handle, r.family]))
+let deduped = folded
+if (folded.length > 1) {
+  try {
+    const answer = await agent(groupPrompt(folded), {
+      label: 'group',
+      phase: 'Verify',
+      schema: GROUP_SCHEMA,
+      ...tierOpts(art, 'group'),
+      agentType: 'dev:researcher',
+    })
+    const groups = validGroups(answer?.groups, folded.length)
+    if (groups.length) {
+      deduped = mergeGroups(folded, groups, (h) => familyByHandle.get(h))
+      log(`Grouped ${groups.flat().length} finding(s) into ${groups.length} defect(s)`)
+    }
+  } catch {
+    log('Grouping failed; keeping the folded findings as they are')
+  }
+}
 // Rank first so the cap (if it bites) drops the least severe findings; capped-out
 // findings are kept and adjudicated as contested (zero skeptics), so they still
 // gate ship — the cap bounds spend, never silently clears a finding.
