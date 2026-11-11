@@ -17,14 +17,18 @@ const speculative = { objection: 'wordy commit body', confidence: 'speculative',
 const diffArgs = { artifactType: 'diff', diffRange: 'main...HEAD', repoDir: '/tmp/x', externalReview: false }
 const DIFF_LENSES = ['correctness', 'simplicity-yagni', 'testing', 'duplication']
 
-// `answers` maps a dispatch label to what that agent returns; every other
+// `answers` maps a dispatch label to what that agent returns (a function is
+// called on each dispatch, for answers that change on retry); every other
 // `lens:*` returns a clean ship vote. parallel() mirrors the real one: a
 // rejected thunk becomes null.
 async function review(args, answers = {}) {
   const dispatched = []
   const agent = async (prompt, opts) => {
     dispatched.push({ prompt, opts })
-    if (opts.label in answers) return answers[opts.label]
+    if (opts.label in answers) {
+      const a = answers[opts.label]
+      return typeof a === 'function' ? a() : a
+    }
     if (opts.label.startsWith('lens:')) return OK_VOTE
     throw new Error(`unexpected dispatch ${opts.label}`)
   }
@@ -47,14 +51,14 @@ for (const [name, answer, expected] of diffCases) {
     assert.equal(result.hasBlockerOrMajor, false)
     assert.deepEqual(result.findings, [])
     assert.deepEqual(result.verdicts.map((v) => v.reviewer), DIFF_LENSES)
-    assert.deepEqual(result.panel, { dispatched: 4, returned: 4, dropped: 0 })
+    assert.deepEqual(result.panel, { dispatched: 4, returned: 4, dropped: 0, notRun: [] })
     assert.deepEqual(result.external.dropped, [])
   })
 }
 
 for (const [type, lenses] of [
-  ['spec', ['hidden-assumptions', 'gaps', 'contradiction-feasibility', 'scope-yagni']],
-  ['plan', ['sequencing', 'risk', 'scope-yagni']],
+  ['spec', ['hidden-assumptions', 'gaps', 'contradiction-feasibility', 'scope-yagni', 'comprehension', 'code-grounding']],
+  ['plan', ['sequencing', 'risk', 'scope-yagni', 'actionability', 'code-grounding']],
 ]) {
   test(`${type}: no prose agent runs and prose is null`, async () => {
     const { result, labels } = await review(
@@ -63,7 +67,7 @@ for (const [type, lenses] of [
     )
     assert.deepEqual(labels, lenses.map((k) => `lens:${k}`).sort())
     assert.equal(result.prose, null)
-    assert.deepEqual(result.panel, { dispatched: lenses.length, returned: lenses.length, dropped: 0 })
+    assert.deepEqual(result.panel, { dispatched: lenses.length, returned: lenses.length, dropped: 0, notRun: [] })
   })
 }
 
@@ -76,7 +80,7 @@ test('diff with a courier: prose is read from the tail slot, not folded as exter
     { ...diffArgs, externalReview: true, externalReviewers: ['qwen'], skillScriptsDir: '/tmp/scripts', expectedArtifactSha256: SHA },
     { 'external:qwen': { configured: true, artifactSha256: SHA, votes: [vote] }, 'lens:prose': { findings: [verified] } },
   )
-  assert.deepEqual(result.panel, { dispatched: 5, returned: 5, dropped: 0 })
+  assert.deepEqual(result.panel, { dispatched: 5, returned: 5, dropped: 0, notRun: [] })
   assert.deepEqual(result.external.ran.map((r) => r.handle), ['external:qwen'])
   assert.deepEqual(result.external.dropped, [])
   assert.equal(result.external.shortfall, false)
@@ -89,7 +93,53 @@ test('diff with a courier: prose is read from the tail slot, not folded as exter
 test('diff with a failed panel lens: prose is still read from its own slot', async () => {
   const { result } = await review(diffArgs, { 'lens:correctness': null, 'lens:prose': { findings: [verified] } })
   assert.deepEqual(result.prose, { ran: true, findings: [verified] })
-  assert.deepEqual(result.panel, { dispatched: 4, returned: 3, dropped: 1 })
+  assert.deepEqual(result.panel, { dispatched: 4, returned: 3, dropped: 1, notRun: ['correctness'] })
+})
+
+test('a lens that fails once is retried and its second answer counts', async () => {
+  let calls = 0
+  const flaky = () => {
+    calls += 1
+    if (calls === 1) throw new Error('agent died')
+    return OK_VOTE
+  }
+  const { result, dispatched } = await review(diffArgs, { 'lens:testing': flaky, 'lens:prose': { findings: [] } })
+  assert.equal(dispatched.filter((d) => d.opts.label === 'lens:testing').length, 2)
+  assert.deepEqual(result.panel, { dispatched: 4, returned: 4, dropped: 0, notRun: [] })
+})
+
+test('a lens that answers on the first try is dispatched once', async () => {
+  const { dispatched } = await review(diffArgs, { 'lens:prose': { findings: [] } })
+  assert.equal(dispatched.filter((d) => d.opts.label === 'lens:correctness').length, 1)
+})
+
+const specArgs = { artifactType: 'spec', artifactPath: '/tmp/spec.md', repoDir: '/tmp/repo', externalReview: false }
+const PARAPHRASE = { proposes: 'a cache in front of the solver', existingSystem: 'every request calls the solver' }
+
+test('spec: the comprehension lens asks for a paraphrase and the result carries it', async () => {
+  const { result, dispatched } = await review(specArgs, { 'lens:comprehension': { ...OK_VOTE, paraphrase: PARAPHRASE } })
+  const comp = dispatched.find((d) => d.opts.label === 'lens:comprehension')
+  assert.deepEqual(comp.opts.schema.required, ['paraphrase', 'findings', 'verdict'])
+  const other = dispatched.find((d) => d.opts.label === 'lens:gaps')
+  assert.ok(!('paraphrase' in other.opts.schema.properties))
+  assert.deepEqual(result.paraphrase, PARAPHRASE)
+})
+
+test('spec: a paraphrase from another lens is ignored', async () => {
+  const { result } = await review(specArgs, { 'lens:gaps': { ...OK_VOTE, paraphrase: PARAPHRASE } })
+  assert.equal(result.paraphrase, null)
+})
+
+test('spec with a failed comprehension lens: paraphrase is null and the lens is named', async () => {
+  const { result } = await review(specArgs, { 'lens:comprehension': null })
+  assert.equal(result.paraphrase, null)
+  assert.deepEqual(result.panel.notRun, ['comprehension'])
+})
+
+test('spec with repoDir: lens prompts point at the code', async () => {
+  const { dispatched } = await review(specArgs)
+  const grounding = dispatched.find((d) => d.opts.label === 'lens:code-grounding')
+  assert.ok(grounding.prompt.includes('The code it describes is under /tmp/repo.'))
 })
 
 test('diff: the prose agent gets the range, the commit log, the preamble, no severity or verdict', async () => {

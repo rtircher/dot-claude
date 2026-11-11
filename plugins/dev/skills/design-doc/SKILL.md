@@ -145,7 +145,8 @@ the answer into the relevant section and clear it.
 ## After the draft
 
 - Run the `adversarial-review` skill on the finalized doc (its spec panel:
-  hidden-assumptions, gaps, contradiction-feasibility, and scope-yagni lenses)
+  hidden-assumptions, gaps, contradiction-feasibility, scope-yagni,
+  comprehension, and code-grounding lenses)
   before it drives implementation. The doc review
   is the cheapest place to catch a wrong approach.
 - Once the design is agreed, use `writing-plans` to turn it into ordered

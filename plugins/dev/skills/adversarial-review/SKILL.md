@@ -17,8 +17,8 @@ Hard caps this skill states and enforces.
 |---|---|---|
 | Quick | main session | at most 3 area reviewers, one message, never more than 3 in parallel; +1 focus-declared extra lens as a second wave after they return = 4 max; 1 when the diff is small |
 | Quick | subagent | 0 (inline single pass) |
-| Full | Workflow path | 5 + N + 4 for a diff (4 lenses + prose), 4 + N + 4 for a spec, 3 + N + 4 for a plan (N = external names), +1 when the extra lens fires |
-| Full | manual / cloud path | 3 to 5 lens agents (a diff adds the prose lens); externals run through Bash |
+| Full | Workflow path | 5 + N + 4 for a diff (4 lenses + prose), 6 + N + 4 for a spec, 5 + N + 4 for a plan (N = external names), +1 when the extra lens fires, +1 per lens retried after a failure |
+| Full | manual / cloud path | 5 or 6 lens agents (a diff runs 4 plus the prose lens); externals run through Bash |
 | Gated | | at most 3 rounds, 32 + 3N total |
 
 Rounds exist only in gated review; the full tier's per-invocation budget is not multiplied by rounds.
@@ -92,10 +92,10 @@ Read `full.md` or `quick.md` (absolute path beside this file, in this skill's ba
 ## Output contract
 
 1. First line: `tier: quick|full · agents: N · <single-pass|areas: a, b, c> · externals: <who | none (quick) | shortfall (reason)> · focus: <file it came from | none | unavailable (no clone) | read from working tree>`. `N` includes the focus-declared extra lens when it fired.
-2. Full tier only: `panel: dispatched N lenses, returned M; missing: …`. A missing lens caps the verdict at don't-ship-yet. The advisory prose lens (item 7) is not a panel lens and is never counted here.
+2. Full tier only: `panel: dispatched N lenses, returned M; missing: …`, naming each lens in the workflow's `panel.notRun` (it already had its one retry) and each external in `external.dropped`. A missing lens caps the verdict at don't-ship-yet. The advisory prose lens (item 7) is not a panel lens and is never counted here.
 3. Whenever the focus declares an `Extra lens:`, a mandatory line: `extra lens: <name>: ran | not applicable (<reason>) | not_run (<reason>)`.
 4. A reviewer orientation list of 3 to 6 `file:line` spots, written by the main session from the PR metadata and diff it already fetched, emitted in the same message as the dispatch, before agents return.
-5. A punch list, blocker / major / minor. Within a severity, verified before speculative. Duplicates collapse into one entry marked `x2`. Full tier, Workflow path: after it, a `## Refuted` section listing each finding a skeptic refuted, with its original severity and the skeptic's reasoning, or `refuted: none`. One skeptic's ballot is enough to refute, so the user must see what was dropped to overrule it. Refuted entries never move the verdict and never join the post plan unless the user restores one.
+5. A punch list, blocker / major / minor. For a spec, a `## Paraphrase` section comes first, with the comprehension lens's two paraphrases (`result.paraphrase`: what the spec proposes, how the existing system works per the spec) verbatim, for the author to check against their intent; `paraphrase: not_run` when that lens failed. The paraphrase is not a finding: it is never numbered or posted. Within a severity, verified before speculative. Duplicates collapse into one entry marked `x2`. Full tier, Workflow path: after it, a `## Refuted` section listing each finding a skeptic refuted, with its original severity and the skeptic's reasoning, or `refuted: none`. One skeptic's ballot is enough to refute, so the user must see what was dropped to overrule it. Refuted entries never move the verdict and never join the post plan unless the user restores one.
 6. A `## Simplify` section with `cut now` or `follow-up` per item; these never move the verdict.
 7. Diff only: a `## Prose` section from the prose lens, one line per finding giving the quoted location, the problem, and the rewrite; these never move the verdict. A prose run that returned nothing prints `prose: not_run (<reason>)`, never a missing lens.
 8. For a PR, the post plan: number every entry of items 5 and 6, plus each Prose entry anchored on a diff line (a comment, docstring, or doc line), `#1..#n`, show each entry's post tag (`[required]`, `[optional]`, `[follow-up]`), and end with the one-line plan, all per the Tags and What gets posted sections of `<plugin>/skills/post-review-comments/SKILL.md`. A Simplify `cut now` item is `[optional]`, a `follow-up` item `[follow-up]`, a Prose entry `[optional]`, numbered after every entry of items 5 and 6 (it has no severity), so it fills an `[optional]` slot only once those have. A Prose entry on the PR description or a commit message has nothing to anchor: list it unnumbered, outside the plan line.

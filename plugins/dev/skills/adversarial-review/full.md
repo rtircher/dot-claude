@@ -136,7 +136,11 @@ The lenses live in one place: `LENS_PANELS` in
 `<plugin>/workflows/adversarial-review.js`, with each lens's model in
 `DEFAULT_TIERS` in the same file. Read the artifact type's panel there and use
 each lens's `key` and `brief`. Each lens is a distinct failure mode, not a
-redundant copy, and all of a type's lenses run.
+redundant copy, and all of a type's lenses run. A lens marked `paraphrase: true`
+(the spec's comprehension lens) also returns its two-part paraphrase (what the
+document proposes, how the existing system works per the document) ahead of its
+findings. Redispatch a lens that fails or returns nothing once; one that fails
+again is a missing lens, named in the panel line.
 
 Dispatch one `Agent` per lens, **all in a single message** so they run
 concurrently with fresh, independent context, each as a read-only `dev:reviewer`

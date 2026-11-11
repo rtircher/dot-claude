@@ -81,7 +81,8 @@
  *   },                               // their own panel; 'prose' is the advisory diff lens)
  *                                    // or 'verify' (skeptics).
  *                                    // DEFAULT_TIERS names every slot: mechanical lenses
- *                                    // (scope-yagni, gaps, simplicity-yagni, duplication,
+ *                                    // (scope-yagni, gaps, comprehension, code-grounding,
+ *                                    // simplicity-yagni, duplication,
  *                                    // and the advisory diff-only prose) on
  *                                    // sonnet, reasoning lenses and the verify skeptics on
  *                                    // fable. Effort is pinned too: medium on the mechanical
@@ -108,14 +109,18 @@ export const meta = {
 const LENS_PANELS = {
   spec: [
     { key: 'hidden-assumptions', brief: 'what is taken for granted that may not hold' },
-    { key: 'gaps', brief: "what's undefined, ambiguous, or missing" },
+    { key: 'gaps', brief: "requirements, behaviour, and decisions the build depends on that are missing or ambiguous. Undefined project terms and unexplained concepts belong to the comprehension lens, not this one" },
     { key: 'contradiction-feasibility', brief: 'internal conflicts; can it actually be built as described' },
-    { key: 'scope-yagni', brief: "speculative scope, over-generalization, extensibility/config/abstraction the requirements don't justify" },
+    { key: 'scope-yagni', brief: "speculative scope, over-generalization, extensibility/config/abstraction the requirements don't justify. Two checks besides: (1) reuse: for each new utility, module, service, table, or config the spec proposes, search the codebase for one that already does the job and name it when found; (2) altitude: pseudocode, helper names, or variable-level detail where the spec should state interfaces, components, and data flow, and a design that patches a symptom instead of the root problem the spec names" },
+    { key: 'comprehension', paraphrase: true, brief: "whether an engineer new to this project can follow it. You know software, not this project: flag a term, service, or system only when it is specific to this project or design and is neither defined in the document nor linked; never flag general engineering terms. Before any finding, write the paraphrase field in your own words: what the document proposes, and how the existing system works as the document describes it. A section you cannot paraphrase is a major finding: its terms may all be defined while its parts do not connect. Also flag assumed prerequisites (setup, ordering, or side effects the reader must already know) and hand-waving such as \"the system handles this automatically\" with no how" },
+    { key: 'code-grounding', brief: "every claim the document makes about the code as it exists now, checked against the repo: grep for each cited file, function, flag, endpoint, table, and enum value, and read the code behind each claim about current behaviour. A cited item that does not exist, or current behaviour the code does not have, is a blocker: every later reader inherits the false statement. Items the document proposes to add are not findings. Do not ask the document to cover code it does not discuss" },
   ],
   plan: [
     { key: 'sequencing', brief: 'wrong order, unstated prerequisites, hidden coupling' },
-    { key: 'risk', brief: 'what breaks, what is unrecoverable, what is untested or has no stated test strategy' },
+    { key: 'risk', brief: 'what breaks, what is unrecoverable, what is untested or has no stated test strategy. Check migration and rollback explicitly: schema or serialized-data compatibility with existing rows, payloads, and in-flight workflows; backfill; and what happens if the rollout stops or rolls back halfway' },
     { key: 'scope-yagni', brief: 'over-build, gold-plating, work serving no stated goal' },
+    { key: 'actionability', brief: "steps that leave a design decision to whoever implements them. For each step ask: do I know exactly what to change, in which file, and how? Flag a step that summarises (\"update the auth service\") where it should name the change (\"add field X to Y in file Z\"), and any undecided interface, data shape, storage choice, or error-handling strategy. Each such decision is a major finding: an implementer, often a subagent with no other context, makes it silently" },
+    { key: 'code-grounding', brief: "every claim the plan makes about the code as it exists now, checked against the repo: grep for each cited file, function, flag, endpoint, table, and enum value, and read the code behind each claim about current behaviour. A cited item that does not exist, or current behaviour the code does not have, is a blocker. Files the plan will create are not findings; a plan that lists files without marking each create, modify, or delete is one major finding, not one per path" },
   ],
   // Diffs get a panel too, not one omnibus reviewer: correctness, simplicity/
   // yagni, testing, and duplication are distinct failure modes a single pass
@@ -165,6 +170,25 @@ const REVIEW_SCHEMA = {
         reason: { type: 'string', description: 'One sentence.' },
       },
     },
+  },
+}
+
+// A lens with `paraphrase: true` (comprehension) also returns its reading of the
+// document, so the author can check it against what they meant to say.
+const PARAPHRASE_SCHEMA = {
+  ...REVIEW_SCHEMA,
+  required: ['paraphrase', ...REVIEW_SCHEMA.required],
+  properties: {
+    paraphrase: {
+      type: 'object',
+      required: ['proposes', 'existingSystem'],
+      additionalProperties: false,
+      properties: {
+        proposes: { type: 'string', description: 'What the document proposes, in your own words, 2-5 sentences.' },
+        existingSystem: { type: 'string', description: 'How the existing system works, as the document describes it, 2-5 sentences.' },
+      },
+    },
+    ...REVIEW_SCHEMA.properties,
   },
 }
 
@@ -270,7 +294,7 @@ function lensPrompt(lens, art) {
   const open =
     art.artifactType === 'diff'
       ? `Review the diff ${art.diffRange || 'of the current branch'} through ONE lens only: ${lens.key} (${lens.brief}). Run \`${gitPrefix(art)} diff ${art.diffRange || ''}\` to see the changes first, and read full files with absolute paths under ${art.repoDir || 'the repo'} when you need surrounding context.`
-      : `Review the ${art.artifactType} at ${art.artifactPath} through ONE lens only: ${lens.key} (${lens.brief}). Read the file first.`
+      : `Review the ${art.artifactType} at ${art.artifactPath} through ONE lens only: ${lens.key} (${lens.brief}). Read the file first.${art.repoDir ? ` The code it describes is under ${art.repoDir}.` : ''}`
   const preamble = adversarialPreamble(art)
   return `${preamble ? `${preamble}\n\n` : ''}${open} Report only findings that fall under this lens. End with a single verdict (ship / don't-ship) and one sentence why. Return everything via the structured output tool.`
 }
@@ -310,8 +334,11 @@ const DEFAULT_TIERS = {
   gaps: { model: 'sonnet', effort: 'medium' },
   'contradiction-feasibility': { model: 'fable', effort: 'high' },
   'scope-yagni': { model: 'sonnet', effort: 'medium' },
+  comprehension: { model: 'sonnet', effort: 'medium' },
+  'code-grounding': { model: 'sonnet', effort: 'medium' },
   sequencing: { model: 'fable', effort: 'high' },
   risk: { model: 'fable', effort: 'high' },
+  actionability: { model: 'fable', effort: 'high' },
   correctness: { model: 'fable', effort: 'high' },
   'simplicity-yagni': { model: 'sonnet', effort: 'medium' },
   testing: { model: 'fable', effort: 'high' },
@@ -478,18 +505,26 @@ function externalVoteProblem(art, r) {
   return null
 }
 
+// A lens that throws or returns nothing gets one retry; one that fails twice is
+// reported by name in panel.notRun, never counted as a clean vote.
 function buildReviewers(art) {
   const lenses = LENS_PANELS[art.artifactType]
   if (!lenses) throw new Error(`unknown artifactType "${art.artifactType}" (expected spec | plan | diff)`)
-  return lenses.map((lens) => () =>
-    agent(lensPrompt(lens, art), {
-      label: `lens:${lens.key}`,
-      phase: 'Review',
-      schema: REVIEW_SCHEMA,
-      ...tierOpts(art, lens.key),
-      agentType: 'dev:reviewer',
-    }).then(tag(lens.key, 'claude')),
-  )
+  return lenses.map((lens) => {
+    const dispatch = () =>
+      agent(lensPrompt(lens, art), {
+        label: `lens:${lens.key}`,
+        phase: 'Review',
+        schema: lens.paraphrase ? PARAPHRASE_SCHEMA : REVIEW_SCHEMA,
+        ...tierOpts(art, lens.key),
+        agentType: 'dev:reviewer',
+      })
+    return () =>
+      dispatch()
+        .catch(() => null)
+        .then((r) => r || dispatch())
+        .then(tag(lens.key, 'claude'))
+  })
 }
 
 // No tag(): prose never joins the panel fold, so it needs no handle or family.
@@ -701,7 +736,11 @@ log(`Dispatching ${dispatched} reviewer(s) on ${art.artifactType} ${art.artifact
 // deliberately KEPT: externalVoteProblem turns it into a visible
 // external.dropped entry instead of a silent absence.
 const returnedAll = await parallel([...panelThunks, ...proseThunks])
-const claudeVotes = returnedAll.slice(0, claudeThunks.length).filter(Boolean)
+const claudeSlots = returnedAll.slice(0, claudeThunks.length)
+const claudeVotes = claudeSlots.filter(Boolean)
+const lensesNotRun = LENS_PANELS[art.artifactType].filter((_, i) => !claudeSlots[i]).map((l) => l.key)
+const paraphraseLens = LENS_PANELS[art.artifactType].find((l) => l.paraphrase)
+const paraphrase = (paraphraseLens && claudeVotes.find((v) => v.handle === paraphraseLens.key)?.paraphrase) || null
 const externalRaw = returnedAll.slice(claudeThunks.length, claudeThunks.length + ext.thunks.length)
 const proseRaw = proseThunks.length ? returnedAll[claudeThunks.length + ext.thunks.length] : undefined
 const externalReturned = externalRaw.flatMap((r, i) => splitScriptVotes(r, ext.names[i]))
@@ -790,7 +829,11 @@ const proseFindings = proseRaw ? [...(proseRaw.findings || [])].sort((a, b) => (
 return {
   artifact: { path: art.artifactPath || null, type: art.artifactType, range: art.diffRange || null },
   // Counts cover votes that actually folded in: Claude panel + digest-verified external.
-  panel: { dispatched, returned: panelVotes.length, dropped: dispatched - panelVotes.length },
+  // notRun names each Claude lens that failed its retry; external failures are in external.dropped.
+  panel: { dispatched, returned: panelVotes.length, dropped: dispatched - panelVotes.length, notRun: lensesNotRun },
+  // Specs only: the comprehension lens's reading of the document, for the
+  // author to compare with their intent. Null when that lens did not run.
+  paraphrase,
   verdicts: panelVotes.map((r) => ({ reviewer: r.handle, ship: r.verdict.ship, reason: r.verdict.reason })),
   findings,
   // Confirmed AND contested blocker/major findings gate; only refuted ones drop out.
