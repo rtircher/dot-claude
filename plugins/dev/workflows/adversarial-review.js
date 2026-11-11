@@ -599,8 +599,10 @@ function dedupe(findings) {
 // one defect in their own words stay separate. One agent, shown the findings
 // without their sources, groups those that name the same defect; each group
 // becomes one finding corroborated by every member's reviewers, so it counts as
-// corroboration exactly as the fold does. The absorbed findings stay visible
-// under `merged`. A failed or malformed answer leaves the fold's list as is.
+// corroboration exactly as the fold does. The agent also picks the member whose
+// wording leads; the group still takes its members' highest severity and
+// strongest confidence. The absorbed findings stay visible under `merged`. A
+// failed or malformed answer leaves the fold's list as is.
 const GROUP_SCHEMA = {
   type: 'object',
   required: ['groups'],
@@ -608,39 +610,57 @@ const GROUP_SCHEMA = {
   properties: {
     groups: {
       type: 'array',
-      description: 'Each group lists the ids of findings that describe the same defect. Leave out findings with no duplicate.',
-      items: { type: 'array', items: { type: 'integer' } },
+      description: 'One entry per defect raised by two or more findings. Leave out findings with no duplicate.',
+      items: {
+        type: 'object',
+        required: ['ids', 'lead'],
+        additionalProperties: false,
+        properties: {
+          ids: { type: 'array', items: { type: 'integer' }, description: 'The findings that describe this defect.' },
+          lead: { type: 'integer', description: 'The id, from ids, whose objection and fix state the defect most clearly and completely.' },
+        },
+      },
     },
   },
 }
 
 function groupPrompt(findings) {
   const list = findings.map((f, i) => `[${i}] (${f.severity}) ${f.location}: ${f.objection}`).join('\n')
-  return `These findings come from independent reviewers of one artifact. Group the ones that describe the same defect: one fix would resolve every finding in the group. Different wording, locations, or severities do not make two findings different defects. Do not group findings that are only related, share a section, or share a theme but each need their own fix. Leave every finding with no duplicate out of the groups, and use only the ids shown. Judge from this list alone; read nothing else.\n\n${list}`
+  return `These findings come from independent reviewers of one artifact. Group the ones that describe the same defect: the same root cause, stated in different words. Different wording, locations, or severities do not make two findings different defects. Do not group findings that are only related, share a section, share a theme, or concern the same feature but each have their own cause. Removing a feature makes all its problems moot, but that does not make them one defect: judge them as if the feature stays. For each group, name as lead the finding whose objection and fix state the defect most clearly and completely. Leave every finding with no duplicate out of the groups, and use only the ids shown. Judge from this list alone; read nothing else.\n\n${list}`
 }
 
 // Keeps ids that exist and are not already grouped; drops groups left with one.
-function validGroups(groups, n) {
+// A minor finding never joins a group holding a blocker or major one: the agent
+// pulls a minor side issue into a big group's theme too readily, and a minor
+// left standing costs a line, while one absorbed is lost from view.
+// A lead outside its group's ids becomes null, and the merge picks one by rank.
+function validGroups(groups, findings) {
   const seen = new Set()
   const out = []
   for (const g of Array.isArray(groups) ? groups : []) {
-    const ids = [...new Set(Array.isArray(g) ? g : [])].filter((i) => Number.isInteger(i) && i >= 0 && i < n && !seen.has(i))
+    const valid = [...new Set(Array.isArray(g?.ids) ? g.ids : [])].filter((i) => Number.isInteger(i) && i >= 0 && i < findings.length && !seen.has(i))
+    const allMinor = valid.every((i) => findings[i].severity === 'minor')
+    const ids = allMinor ? valid : valid.filter((i) => findings[i].severity !== 'minor')
     if (ids.length < 2) continue
     ids.forEach((i) => seen.add(i))
-    out.push(ids)
+    out.push({ ids, lead: ids.includes(g.lead) ? g.lead : null })
   }
   return out
 }
 
 function mergeGroups(findings, groups, familyOf) {
-  const grouped = new Set(groups.flat())
-  const merged = groups.map((ids) => {
+  const grouped = new Set(groups.flatMap((g) => g.ids))
+  const merged = groups.map(({ ids, lead: leadId }) => {
     const members = ids.map((i) => findings[i])
-    const [lead, ...rest] = rank(members)
+    const lead = leadId === null ? rank(members)[0] : findings[leadId]
+    const rest = members.filter((m) => m !== lead)
     const sources = [...new Set(members.flatMap((m) => m.corroboration.sources))]
     const families = new Set(sources.map(familyOf))
+    const [top] = rank(members)
     return {
       ...lead,
+      severity: top.severity,
+      confidence: members.some((m) => m.confidence === 'verified') ? 'verified' : lead.confidence,
       corroboration: { reviewers: sources.length, crossFamily: families.size > 1, sources },
       merged: rest.map((m) => ({ objection: m.objection, severity: m.severity, location: m.location, sources: m.corroboration.sources })),
     }
@@ -835,10 +855,10 @@ if (folded.length > 1) {
       ...tierOpts(art, 'group'),
       agentType: 'dev:researcher',
     })
-    const groups = validGroups(answer?.groups, folded.length)
+    const groups = validGroups(answer?.groups, folded)
     if (groups.length) {
       deduped = mergeGroups(folded, groups, (h) => familyByHandle.get(h))
-      log(`Grouped ${groups.flat().length} finding(s) into ${groups.length} defect(s)`)
+      log(`Grouped ${groups.flatMap((g) => g.ids).length} finding(s) into ${groups.length} defect(s)`)
     }
   } catch {
     log('Grouping failed; keeping the folded findings as they are')
