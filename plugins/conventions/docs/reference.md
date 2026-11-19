@@ -33,6 +33,16 @@ snapshot sprawl outside languages with strong tooling for it), the shared
 small-scale design (our TDD-first rule is workflow discipline, not design
 methodology; the two coexist).
 
+## Injection size cap
+
+Claude Code keeps at most 10,000 characters of one hook's output in context; past
+that, the model gets a 2KB preview and a file path, so most rules silently never
+load. The main session therefore takes `conventions.md` through two SessionStart
+calls: `inject-conventions.sh` (everything outside the `main-session-only` region)
+and `inject-conventions.sh --orchestration` (only that region). A test fails when
+any injection comes within 1,000 characters of the cap; when it does, split
+another region out or move rules into a skill.
+
 ## Opting out of the git workflow rules
 
 The branch, push, history, and branch-naming bullets in `conventions.md` sit between

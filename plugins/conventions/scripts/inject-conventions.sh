@@ -2,15 +2,22 @@
 #
 # Prints conventions.md for Claude Code to inject as context.
 #
-# SessionStart (no args): the whole file as plain stdout, which Claude Code adds
-# to the main session's context. Marker lines are never printed.
+# Claude Code keeps at most 10,000 characters of one hook's output in context
+# (past that the model gets a 2KB preview and a file path), so the main session's
+# text is split across two SessionStart hook calls, each under the cap:
 #
-# SubagentStart (--subagent): the file minus the `main-session-only` region
-# (model routing, delegation), which only the orchestrator uses. Subagent hooks
-# only take context through the JSON hookSpecificOutput envelope, so the text is
-# wrapped in one. Which agents get it is decided in hooks.json: the SubagentStart
-# entry's `matcher` is a regex over `agent_type`, so this script never sees a
-# dispatch for an unmatched agent and emits the envelope unconditionally.
+# SessionStart (no args): the file minus the `main-session-only` region, as plain
+# stdout. Marker lines are never printed.
+#
+# SessionStart (--orchestration): only the `main-session-only` region (model
+# routing, delegation), under a heading of its own.
+#
+# SubagentStart (--subagent): the same text as no args, since subagents never get
+# the orchestration region. Subagent hooks only take context through the JSON
+# hookSpecificOutput envelope, so the text is wrapped in one. Which agents get it
+# is decided in hooks.json: the SubagentStart entry's `matcher` is a regex over
+# `agent_type`, so this script never sees a dispatch for an unmatched agent and
+# emits the envelope unconditionally.
 #
 # Per-user opt-out: with DOT_CLAUDE_CONVENTIONS_SKIP_GIT=1 (settings.json `env`
 # reaches hooks), the `git-workflow` region is dropped from both injections, for
@@ -28,25 +35,38 @@ if [ ! -f "$conventions" ]; then
   exit 0
 fi
 
-subagent=0
-[ "${1:-}" = "--subagent" ] && subagent=1
+mode="${1:-}"
+case "$mode" in
+  ""|--subagent|--orchestration) ;;
+  *) echo "usage: $0 [--subagent|--orchestration]" >&2; exit 2 ;;
+esac
+orchestration=0
+[ "$mode" = "--orchestration" ] && orchestration=1
 
 skip_git=0
 [ "${DOT_CLAUDE_CONVENTIONS_SKIP_GIT:-}" = "1" ] && skip_git=1
 
 filter() {
-  awk -v skip_region="$subagent" -v skip_git="$skip_git" '
+  awk -v orchestration="$orchestration" -v skip_git="$skip_git" '
+    BEGIN {
+      if (orchestration) {
+        print "# Working conventions: orchestration (main session only)"
+        print ""
+        print "## Model selection, continued"
+        print ""
+      }
+    }
     /^<!-- main-session-only: start -->$/ { in_region = 1; next }
     /^<!-- main-session-only: end -->$/   { in_region = 0; next }
     /^<!-- git-workflow: start -->$/      { in_git = 1; next }
     /^<!-- git-workflow: end -->$/        { in_git = 0; next }
-    in_region && skip_region              { next }
+    in_region != orchestration            { next }
     in_git && skip_git                    { next }
     { print }
   ' "$conventions"
 }
 
-if [ "$subagent" = 1 ]; then
+if [ "$mode" = "--subagent" ]; then
   filter | python3 -c 'import json, sys; print(json.dumps({"hookSpecificOutput": {"hookEventName": "SubagentStart", "additionalContext": sys.stdin.read()}}))'
 else
   filter
