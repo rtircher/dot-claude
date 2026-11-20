@@ -29,7 +29,7 @@ A shared quest log per repo, kept on a git branch, visible to every session. Goa
 2. A stale claim shown in the log may be taken over with `quest take <id>`. The CLI performs the takeover only when the claim is stale, otherwise it exits 3.
 3. Record findings worth keeping with `quest note <id> "<text>"`.
 4. Link docs instead of copying them: `quest link <id> <path-or-url>`.
-5. Finish with `quest done <id>`. If it prints `Back to: <id> <title>`, offer to return with the `quest take <id>` command it shows. `quest drop <id>` gives a quest back. Other statuses: `quest status <id> todo|in_progress|blocked|done|dropped`.
+5. A merged PR does not finish a quest: note the merge and the next step (`quest note <id> "merged <PR>; next: <step>"`) and keep it open. Finish with `quest done <id>` once nothing is left. If it prints `Back to: <id> <title>`, offer to return with the `quest take <id>` command it shows. `quest drop <id>` gives a quest back. Other statuses: `quest status <id> todo|in_progress|blocked|done|dropped`.
 6. Rename only when the user asks: `quest retitle <id> "<title>"`, or `quest main retitle <id> "<title>"` for a main quest.
 7. If a write prints `(unsynced: will push on next sync)`, mention it to the user once. Do not repeat it.
 

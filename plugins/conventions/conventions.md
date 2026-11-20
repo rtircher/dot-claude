@@ -152,6 +152,10 @@ subagents.
 - **Never cite commit short-hashes in docs or PR bodies** (rebases churn them).
 - **Before deleting branches/worktrees, verify merge status** (including
   squash-merges); never remove the worktree the session runs inside.
+- **A merged PR is a step, not the end.** After a merge, name what is left
+  (validate, release, move the ticket, a follow-up) and record it where the
+  work is tracked (its quest or ticket). Call the work done, and offer to
+  archive its session, only when nothing is left.
 
 ## Writing style
 
